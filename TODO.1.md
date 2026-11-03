@@ -1,5 +1,7 @@
 # TODO.1 — LMPU Development Plan
 
+> **Execution superseded by `TODO.2.md`.** Use this file for design detail, rationale, schemas, and original acceptance text. Use `TODO.2.md` for current order, scope, and progress.
+
 **Status:** Accepted baseline for implementation — 2026-11-03  
 **Supersedes:** `TODO.md` (proof-of-concept blueprint)  
 **Companions:** `README.md` (architecture specification), `compared.md` (positioning)  
