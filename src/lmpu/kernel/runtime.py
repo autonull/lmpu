@@ -1,0 +1,828 @@
+"""LMPU Kernel - Runtime facade and main entry point."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import signal
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Optional, Awaitable
+
+from ..protocol.messages import (
+    HelloParams,
+    HelloResult,
+    CapabilitiesParams,
+    CapabilitiesResult,
+    SubmitParams,
+    SubmitResult,
+    PollParams,
+    PollResult,
+    WaitParams,
+    WaitResult,
+    ReadParams,
+    BufferView,
+    WriteParams,
+    CancelParams,
+    CancelResult,
+    SleepParams,
+    SleepResult,
+    WakeParams,
+    WakeResult,
+    AckParams,
+    AckResult,
+    BufferCreateParams,
+    BufferImportParams,
+    BufferRef,
+    BufferStatParams,
+    BufferChecksumParams,
+    BufferDeleteParams,
+    JobsListParams,
+    ConfigureParams,
+    HealthResult,
+    CloseParams,
+    CloseResult,
+    Event,
+    EventKind,
+    ModelJobStatus,
+    SleepCondition,
+    ErrorCode,
+)
+from ..protocol.errors import (
+    LMPUError,
+    ValidationError,
+    QuotaExceededError,
+    BufferError,
+    JobError,
+    ProtocolError,
+    create_error,
+)
+from ..memory.buffers import BufferManager
+from ..memory.grants import GrantManager, GrantType
+from ..kernel.jobs import JobTable, JobRecord, JobStatus
+from ..kernel.events import EventLog, SessionEventLog
+from ..kernel.scheduler import Scheduler
+from ..kernel.quotas import QuotaManager, QuotaConfig
+from ..kernel.routing import CapabilityRegistry, ProcessorRegistration, route_job
+from ..kernel.reaper import Reaper
+from ..kernel.clock import get_clock, RealClock
+from ..kernel.trace import TraceSink, TraceConfig, init_trace_sink
+from ..kernel.worker_pool import WorkerPool
+from ..processors.base import Processor, ProcessorContext, JobContext, Manifest
+
+
+@dataclass
+class SessionState:
+    """Per-session state."""
+    session_id: str
+    config: QuotaConfig
+    sleep_registration: Optional[dict[str, Any]] = None
+    wake_event: Optional[asyncio.Event] = None
+    wake_result: Optional[dict[str, Any]] = None
+    event_cursor: int = 0
+    injection_policy: dict[str, Any] = field(default_factory=dict)
+
+
+class Runtime:
+    """LMPU Runtime - main kernel facade."""
+
+    def __init__(
+        self,
+        socket_path: str = "/tmp/lmpu/run.sock",
+        shm_dir: str = "/dev/shm/lmpu",
+        config: Optional[dict[str, Any]] = None,
+    ):
+        self.socket_path = socket_path
+        self.shm_dir = shm_dir
+        self.config = config or {}
+        
+        # Core components
+        self.grant_manager = GrantManager()
+        self.buffer_manager = BufferManager(
+            grant_manager=self.grant_manager,
+            default_ttl_ms=self.config.get("buffer_ttl_ms", 3600000),
+        )
+        self.job_table = JobTable(grant_manager=self.grant_manager)
+        self.event_log = EventLog(
+            max_events_per_session=self.config.get("event_ring", 10000),
+        )
+        self.scheduler = Scheduler(
+            job_table=self.job_table,
+            batch_window_ms=self.config.get("batch_window_ms", 2),
+            max_batch_size=self.config.get("max_batch", 64),
+        )
+        self.quota_manager = QuotaManager()
+        self.capability_registry = CapabilityRegistry()
+        self.reaper = Reaper(
+            job_table=self.job_table,
+            event_log=self.event_log,
+            buffer_manager=self.buffer_manager,
+            interval_ms=self.config.get("reaper_interval_ms", 1000),
+        )
+        self.worker_pool = WorkerPool(
+            job_table=self.job_table,
+            event_log=self.event_log,
+        )
+        self.trace_sink = init_trace_sink(TraceConfig(
+            trace_dir=self.config.get("trace_dir", "traces"),
+            trace_token_events=self.config.get("trace_token_events", "sampled"),
+        ))
+        
+        # Session management
+        self._sessions: dict[str, SessionState] = {}
+        self._server: Optional[asyncio.Server] = None
+        self._running = False
+        
+        # Register built-in processors
+        self._register_builtin_processors()
+
+    def _register_builtin_processors(self) -> None:
+        """Register built-in processors."""
+        from .builtin.pure_function import PureFunctionProcessor
+        from .builtin.python_vm import PythonVMProcessor
+        from .builtin.vector_engine import VectorEngineProcessor
+        from .builtin.symbolic_planner import SymbolicPlannerProcessor
+        from .builtin.neural_summary import NeuralSummaryProcessor
+        from .builtin.hardware_stub import HardwareStubProcessor
+        
+        processors = [
+            PureFunctionProcessor(),
+            PythonVMProcessor(),
+            VectorEngineProcessor(),
+            SymbolicPlannerProcessor(),
+            NeuralSummaryProcessor(),
+            HardwareStubProcessor(),
+        ]
+        
+        for proc in processors:
+            self.register_processor(proc)
+
+    def register_processor(self, processor: Processor) -> None:
+        """Register a processor with the runtime."""
+        manifest = processor.manifest
+        registration = ProcessorRegistration(
+            manifest=manifest,
+            executor=manifest.executor if hasattr(manifest, 'executor') else "process",
+            is_builtin=True,
+        )
+        self.capability_registry.register(registration)
+        self.scheduler.set_processor_limit(
+            manifest.name,
+            manifest.limits.get("max_concurrent", 4),
+        )
+        
+        # Pre-warm worker
+        asyncio.create_task(self.worker_pool.get_worker(manifest.name, JobRecord(
+            job_id="warmup",
+            session_id="system",
+            processor=manifest.name,
+            op="warmup",
+        )))
+
+    async def start(self) -> None:
+        """Start the runtime."""
+        self._running = True
+        
+        # Ensure socket directory exists
+        Path(self.socket_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Remove stale socket
+        try:
+            os.unlink(self.socket_path)
+        except FileNotFoundError:
+            pass
+        
+        # Start Unix domain socket server
+        self._server = await asyncio.start_unix_server(
+            self._handle_connection,
+            path=self.socket_path,
+        )
+        
+        # Start background tasks
+        await self.reaper.start()
+        await self.scheduler._flush_batch("")  # Initialize batch timers
+        
+        # Set socket permissions
+        os.chmod(self.socket_path, 0o600)
+
+    async def stop(self) -> None:
+        """Stop the runtime."""
+        self._running = False
+        
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+        
+        await self.reaper.stop()
+        await self.worker_pool.stop()
+        
+        # Clean up socket
+        try:
+            os.unlink(self.socket_path)
+        except FileNotFoundError:
+            pass
+
+    async def _handle_connection(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Handle incoming JSON-RPC connection."""
+        from ..protocol.codec import RPCStream, RPCCodec
+        from ..protocol.messages import RPCRequest, RPCResponse, RPCNotification
+        
+        stream = RPCStream(reader, writer)
+        session_id = None
+        
+        try:
+            async for msg in stream:
+                if isinstance(msg, RPCRequest):
+                    response = await self._handle_request(msg, session_id)
+                    if response:
+                        await stream.send_response(response)
+                    # Update session_id from hello
+                    if msg.method == "lmpu.hello" and response and response.result:
+                        session_id = response.result.get("session_id")
+                elif isinstance(msg, RPCNotification):
+                    await self._handle_notification(msg, session_id)
+        except Exception as e:
+            print(f"Connection error: {e}")
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async def _handle_request(
+        self,
+        request: RPCRequest,
+        session_id: Optional[str],
+    ) -> Optional[RPCResponse]:
+        """Handle JSON-RPC request."""
+        try:
+            if request.method == "lmpu.hello":
+                result = await self._hello(request.params)
+            elif request.method == "lmpu.capabilities":
+                result = await self._capabilities(request.params)
+            elif request.method == "lmpu.submit":
+                result = await self._submit(request.params, session_id)
+            elif request.method == "lmpu.poll":
+                result = await self._poll(request.params, session_id)
+            elif request.method == "lmpu.wait":
+                result = await self._wait(request.params, session_id)
+            elif request.method == "lmpu.read":
+                result = await self._read(request.params, session_id)
+            elif request.method == "lmpu.write":
+                result = await self._write(request.params, session_id)
+            elif request.method == "lmpu.cancel":
+                result = await self._cancel(request.params, session_id)
+            elif request.method == "lmpu.sleep":
+                result = await self._sleep(request.params, session_id)
+            elif request.method == "lmpu.wake":
+                result = await self._wake(request.params, session_id)
+            elif request.method == "lmpu.ack":
+                result = await self._ack(request.params, session_id)
+            elif request.method == "lmpu.buffer.create":
+                result = await self._buffer_create(request.params, session_id)
+            elif request.method == "lmpu.buffer.import":
+                result = await self._buffer_import(request.params, session_id)
+            elif request.method == "lmpu.buffer.stat":
+                result = await self._buffer_stat(request.params, session_id)
+            elif request.method == "lmpu.buffer.checksum":
+                result = await self._buffer_checksum(request.params, session_id)
+            elif request.method == "lmpu.buffer.delete":
+                result = await self._buffer_delete(request.params, session_id)
+            elif request.method == "lmpu.jobs.list":
+                result = await self._jobs_list(request.params, session_id)
+            elif request.method == "lmpu.configure":
+                result = await self._configure(request.params, session_id)
+            elif request.method == "lmpu.health":
+                result = await self._health(request.params)
+            elif request.method == "lmpu.close":
+                result = await self._close(request.params, session_id)
+            else:
+                raise LMPUError(
+                    message=f"Unknown method: {request.method}",
+                    code=ErrorCode.UNKNOWN_METHOD.value,
+                )
+            
+            return RPCResponse(id=request.id, result=result)
+            
+        except LMPUError as e:
+            return RPCResponse(
+                id=request.id,
+                error=e.to_rpc_error(),
+            )
+        except Exception as e:
+            return RPCResponse(
+                id=request.id,
+                error=RPCError(
+                    code=ErrorCode.INTERNAL.value,
+                    message=str(e),
+                    retriable=False,
+                ),
+            )
+
+    async def _handle_notification(
+        self,
+        notification: RPCNotification,
+        session_id: Optional[str],
+    ) -> None:
+        """Handle JSON-RPC notification."""
+        # Notifications don't expect responses
+        pass
+
+    # --- RPC Method Handlers ---
+
+    async def _hello(self, params: dict) -> HelloResult:
+        hello_params = HelloParams(**params)
+        session_id = f"s_{ULID()}"
+        
+        # Create session state
+        session_config = hello_params.session_config or {}
+        quotas = QuotaConfig(**session_config)
+        self.quota_manager.set_session_quotas(session_id, quotas)
+        
+        session_state = SessionState(
+            session_id=session_id,
+            config=quotas,
+        )
+        self._sessions[session_id] = session_state
+        
+        # Resume from sequence if requested
+        resume_status = "none"
+        if hello_params.resume_from is not None:
+            if self.event_log.has_gap(session_id, hello_params.resume_from):
+                resume_status = "gap"
+            else:
+                resume_status = "ok"
+        
+        return HelloResult(
+            session_id=session_id,
+            protocol=PROTOCOL_VERSION,
+            schema_hash="",  # TODO: compute schema hash
+            resume_status=resume_status,
+            server_time=get_clock().now(),
+        )
+
+    async def _capabilities(self, params: dict) -> CapabilitiesResult:
+        caps_params = CapabilitiesParams(**params)
+        processors = self.capability_registry.list_processors()
+        
+        matches = None
+        recommended = None
+        if caps_params.op:
+            candidates = self.capability_registry.find_by_op(caps_params.op)
+            matches = [c.manifest.name for c in candidates]
+            if candidates:
+                recommended = candidates[0].manifest.name
+        
+        return CapabilitiesResult(
+            processors=processors,
+            matches=matches,
+            recommended=recommended,
+        )
+
+    async def _submit(self, params: dict, session_id: str) -> SubmitResult:
+        if not session_id:
+            raise ProtocolError("No session", code=ErrorCode.PROTOCOL_VERSION.value)
+        
+        submit_params = SubmitParams(**params)
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
+        
+        # Validate processor/op
+        if submit_params.processor:
+            reg = self.capability_registry.get(submit_params.processor)
+            if not reg:
+                raise JobError("Unknown processor", code=ErrorCode.UNKNOWN_PROCESSOR.value)
+            # Check op support
+            op_supported = False
+            for op_def in reg.manifest.ops:
+                if op_def.get("name") == submit_params.op:
+                    op_supported = True
+                    break
+            if not op_supported:
+                raise JobError("Processor does not support op", code=ErrorCode.UNKNOWN_OP.value)
+        
+        # Check quotas
+        estimated_buffer_bytes = 0  # TODO: estimate from inputs/outputs
+        self.quota_manager.check_job_submit(session_id, estimated_buffer_bytes)
+        
+        # Create job
+        job, is_new = self.job_table.create_job(
+            session_id=session_id,
+            processor=submit_params.processor or "",
+            op=submit_params.op,
+            inputs=submit_params.inputs,
+            outputs=submit_params.outputs,
+            program=submit_params.program,
+            batch=submit_params.batch,
+            config=submit_params.config,
+            job_id=submit_params.job_id,
+        )
+        
+        if not is_new:
+            # Idempotent return
+            return SubmitResult(
+                job_id=job.job_id,
+                status=job.to_model_status(),
+                queue_position=job.queue_position,
+                seq=self.event_log.get_last_seq(session_id),
+            )
+        
+        # Grant buffer access
+        for name, spec in submit_params.inputs.items():
+            if isinstance(spec, dict) and spec.get("buffer"):
+                buffer_id = spec["buffer"]
+                self.buffer_manager.grant_read(job.job_id, buffer_id)
+        
+        for name, spec in submit_params.outputs.items():
+            if isinstance(spec, dict) and spec.get("buffer"):
+                buffer_id = spec["buffer"]
+                self.buffer_manager.grant_write(job.job_id, buffer_id)
+        
+        # Emit submitted event
+        self.event_log.append(session_id, Event(
+            event_id=str(ULID()),
+            seq=0,
+            session=session_id,
+            job_id=job.job_id,
+            type=EventKind.JOB_SUBMITTED,
+            ts_monotonic=get_clock().monotonic(),
+            data=JobSubmittedData(
+                job_id=job.job_id,
+                processor=job.processor,
+                queue_position=job.queue_position,
+            ),
+        ))
+        
+        # Enqueue for scheduling
+        await self.scheduler.enqueue(job)
+        self.quota_manager.on_job_submit(session_id, estimated_buffer_bytes)
+        
+        return SubmitResult(
+            job_id=job.job_id,
+            status=ModelJobStatus.PENDING,
+            queue_position=job.queue_position,
+            seq=self.event_log.get_last_seq(session_id),
+        )
+
+    async def _poll(self, params: dict, session_id: str) -> PollResult:
+        poll_params = PollParams(**params)
+        job = self.job_table.get(poll_params.job_id)
+        if not job:
+            raise JobError("Job not found", code=ErrorCode.UNKNOWN_PROCESSOR.value)
+        
+        if job.session_id != session_id:
+            raise JobError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
+        
+        return PollResult(
+            job_id=job.job_id,
+            status=job.to_model_status(),
+            progress=job.progress if job.status == JobStatus.RUNNING else None,
+            elapsed_ms=job.elapsed_ms(),
+            queue_position=job.queue_position if job.status == JobStatus.PENDING else None,
+        )
+
+    async def _wait(self, params: dict, session_id: str) -> WaitResult:
+        wait_params = WaitParams(**params)
+        job = self.job_table.get(wait_params.job_id)
+        if not job:
+            raise JobError("Job not found", code=ErrorCode.UNKNOWN_PROCESSOR.value)
+        
+        if job.session_id != session_id:
+            raise JobError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
+        
+        if job.is_terminal():
+            return WaitResult(
+                status=job.to_model_status(),
+                result=job.result,
+                error=job.error,
+            )
+        
+        # Wait for completion with timeout
+        start = get_clock().monotonic()
+        timeout = wait_params.timeout_ms / 1000 if wait_params.timeout_ms else None
+        
+        while not job.is_terminal():
+            if timeout and (get_clock().monotonic() - start) > timeout:
+                raise JobError("Wait timeout", code=ErrorCode.TIMEOUT.value)
+            await asyncio.sleep(0.01)
+        
+        return WaitResult(
+            status=job.to_model_status(),
+            result=job.result,
+            error=job.error,
+        )
+
+    async def _read(self, params: dict, session_id: str) -> BufferView:
+        read_params = ReadParams(**params)
+        # Check session owns buffer or has grant
+        meta = self.buffer_manager._metadata.get(read_params.buffer)
+        if not meta:
+            raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
+        
+        inline_data, derived_ref = self.buffer_manager.read_view(
+            read_params.buffer,
+            slices=read_params.slices,
+            max_inline_bytes=read_params.max_inline_bytes,
+        )
+        
+        if inline_data is not None:
+            return BufferView(
+                buffer=read_params.buffer,
+                dtype=meta.dtype,
+                data=inline_data.tolist(),
+            )
+        else:
+            return BufferView(
+                buffer=read_params.buffer,
+                dtype=meta.dtype,
+                derived_buffer=derived_ref.buffer_id if derived_ref else None,
+                note=derived_ref.note if derived_ref else "Result too large, use smaller slice",
+            )
+
+    async def _write(self, params: dict, session_id: str) -> BufferRef:
+        write_params = WriteParams(**params)
+        meta = self.buffer_manager._metadata.get(write_params.buffer)
+        if not meta:
+            raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
+        
+        # Convert data to numpy array
+        import numpy as np
+        data = np.array(write_params.data)
+        
+        ref = self.buffer_manager.write_view(
+            write_params.buffer,
+            write_params.slices,
+            data,
+            session_id,  # Use session as job_id for admin writes
+        )
+        return ref
+
+    async def _cancel(self, params: dict, session_id: str) -> CancelResult:
+        cancel_params = CancelParams(**params)
+        job = self.job_table.get(cancel_params.job_id)
+        if not job:
+            raise JobError("Job not found", code=ErrorCode.UNKNOWN_PROCESSOR.value)
+        
+        if job.session_id != session_id:
+            raise JobError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
+        
+        if job.is_terminal():
+            return CancelResult(
+                job_id=job.job_id,
+                status="already_terminal",
+            )
+        
+        # Transition to cancel requested
+        self.job_table.transition(job.job_id, JobStatus.CANCEL_REQUESTED)
+        
+        # Send cancel to worker
+        await self.worker_pool.cancel_job(job.job_id)
+        
+        return CancelResult(
+            job_id=job.job_id,
+            status="cancel_requested",
+        )
+
+    async def _sleep(self, params: dict, session_id: str) -> SleepResult:
+        sleep_params = SleepParams(**params)
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
+        
+        self.quota_manager.check_sleep_register(session_id)
+        
+        # Check if already satisfied
+        condition = sleep_params.until
+        already_satisfied = False
+        satisfied_jobs = []
+        statuses = {}
+        
+        if condition.all:
+            all_done = True
+            for job_id in condition.all:
+                job = self.job_table.get(job_id)
+                if job and not job.is_terminal():
+                    all_done = False
+                    break
+                if job:
+                    satisfied_jobs.append(job_id)
+                    statuses[job_id] = job.to_model_status()
+            if all_done:
+                already_satisfied = True
+        
+        if not already_satisfied and condition.any:
+            for job_id in condition.any:
+                job = self.job_table.get(job_id)
+                if job and job.is_terminal():
+                    already_satisfied = True
+                    satisfied_jobs.append(job_id)
+                    statuses[job_id] = job.to_model_status()
+                    break
+        
+        if already_satisfied:
+            return SleepResult(
+                sleep_id="",
+                status="already_satisfied",
+                woken={
+                    "reason": "condition_met",
+                    "satisfied_jobs": satisfied_jobs,
+                    "statuses": statuses,
+                    "already_satisfied": True,
+                },
+            )
+        
+        # Register sleep
+        sleep_id = f"sleep_{ULID()}"
+        session.sleep_registration = {
+            "sleep_id": sleep_id,
+            "condition": condition,
+            "level": sleep_params.level,
+            "registered_at": get_clock().monotonic(),
+        }
+        session.wake_event = asyncio.Event()
+        session.wake_result = None
+        self.quota_manager.on_sleep_register(session_id)
+        
+        return SleepResult(
+            sleep_id=sleep_id,
+            status="registered",
+        )
+
+    async def _wake(self, params: dict, session_id: str) -> WakeResult:
+        wake_params = WakeParams(**params)
+        session = self._sessions.get(session_id or "")
+        if not session:
+            return WakeResult(status="no_active_sleep")
+        
+        if session.wake_event:
+            session.wake_event.set()
+            session.wake_result = {"reason": "forced_wake"}
+            return WakeResult(status="woken")
+        
+        return WakeResult(status="no_active_sleep")
+
+    async def _ack(self, params: dict, session_id: str) -> AckResult:
+        ack_params = AckParams(**params)
+        acked = self.event_log.ack(session_id, ack_params.seq)
+        return AckResult(acked=acked)
+
+    async def _buffer_create(self, params: dict, session_id: str) -> BufferRef:
+        create_params = BufferCreateParams(**params)
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
+        
+        self.quota_manager.check_buffer_create(session_id, 0)  # TODO: calculate size
+        
+        ref = self.buffer_manager.create(
+            session_id=session_id,
+            name=create_params.name,
+            dtype=create_params.dtype,
+            shape=tuple(create_params.shape),
+            persist=create_params.persist,
+        )
+        self.quota_manager.on_buffer_create(session_id, ref.bytes)
+        return ref
+
+    async def _buffer_import(self, params: dict, session_id: str) -> BufferRef:
+        import_params = BufferImportParams(**params)
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
+        
+        self.quota_manager.check_buffer_create(session_id, 0)
+        
+        if import_params.data is not None:
+            ref = self.buffer_manager.import_bytes(
+                session_id=session_id,
+                name=import_params.name,
+                data=import_params.data,
+                dtype=import_params.dtype,
+                shape=tuple(import_params.shape),
+            )
+        elif import_params.path is not None:
+            ref = self.buffer_manager.import_file(
+                session_id=session_id,
+                name=import_params.name,
+                path=import_params.path,
+                dtype=import_params.dtype,
+                shape=tuple(import_params.shape),
+            )
+        else:
+            raise ValidationError("Either data or path required", code=ErrorCode.INVALID_SCHEMA.value)
+        
+        self.quota_manager.on_buffer_create(session_id, ref.bytes)
+        return ref
+
+    async def _buffer_stat(self, params: dict, session_id: str) -> BufferRef:
+        stat_params = BufferStatParams(**params)
+        return self.buffer_manager.stat(stat_params.buffer)
+
+    async def _buffer_checksum(self, params: dict, session_id: str) -> str:
+        checksum_params = BufferChecksumParams(**params)
+        from ..memory.checksum import ChecksumAlgorithm
+        return self.buffer_manager.checksum(
+            checksum_params.buffer,
+            ChecksumAlgorithm(checksum_params.algorithm),
+        )
+
+    async def _buffer_delete(self, params: dict, session_id: str) -> None:
+        delete_params = BufferDeleteParams(**params)
+        meta = self.buffer_manager._metadata.get(delete_params.buffer)
+        if meta:
+            self.quota_manager.on_buffer_delete(session_id, meta.bytes)
+        self.buffer_manager.delete(delete_params.buffer)
+
+    async def _jobs_list(self, params: dict, session_id: str) -> list[dict]:
+        list_params = JobsListParams(**params)
+        jobs = self.job_table.list_jobs(
+            session_id=list_params.session_id or session_id,
+            status=list_params.status,
+            limit=list_params.limit,
+        )
+        return [
+            {
+                "job_id": j.job_id,
+                "processor": j.processor,
+                "op": j.op,
+                "status": j.to_model_status().value,
+                "progress": j.progress,
+                "elapsed_ms": j.elapsed_ms(),
+            }
+            for j in jobs
+        ]
+
+    async def _configure(self, params: dict, session_id: str) -> dict:
+        config_params = ConfigureParams(**params)
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
+        
+        # Update quotas
+        new_quotas = QuotaConfig()
+        if config_params.max_outstanding_jobs is not None:
+            new_quotas.max_outstanding_jobs = config_params.max_outstanding_jobs
+        if config_params.max_buffer_bytes is not None:
+            new_quotas.max_buffer_bytes = config_params.max_buffer_bytes
+        if config_params.max_sleep_seconds is not None:
+            new_quotas.max_sleep_seconds = config_params.max_sleep_seconds
+        if config_params.sleep_level is not None:
+            new_quotas.sleep_level = config_params.sleep_level
+        
+        self.quota_manager.set_session_quotas(session_id, new_quotas)
+        
+        # Update injection policy
+        if config_params.injection:
+            session.injection_policy = config_params.injection
+        
+        return {"status": "ok"}
+
+    async def _health(self, params: dict) -> HealthResult:
+        return HealthResult(
+            status="healthy",
+            queue_depth=sum(self.scheduler.get_all_queue_depths().values()),
+            worker_health=self.worker_pool.get_stats(),
+            uptime_seconds=get_clock().monotonic(),
+        )
+
+    async def _close(self, params: dict, session_id: str) -> CloseResult:
+        close_params = CloseParams(**params)
+        session = self._sessions.get(session_id)
+        if not session:
+            return CloseResult(cancelled_jobs=[], detached_jobs=[])
+        
+        cancelled = []
+        detached = []
+        
+        jobs = self.job_table.get_by_session(session_id)
+        for job in jobs:
+            if not job.is_terminal():
+                if close_params.detach:
+                    detached.append(job.job_id)
+                else:
+                    self.job_table.transition(job.job_id, JobStatus.CANCEL_REQUESTED)
+                    await self.worker_pool.cancel_job(job.job_id)
+                    cancelled.append(job.job_id)
+        
+        # Clean up buffers
+        if not close_params.detach:
+            self.buffer_manager.cleanup_session(session_id)
+        
+        # Remove session
+        self._sessions.pop(session_id, None)
+        self.quota_manager.remove_session(session_id)
+        self.event_log.remove_session(session_id)
+        
+        return CloseResult(
+            cancelled_jobs=cancelled,
+            detached_jobs=detached,
+        )
+
+
+# Import ULID for session IDs
+from ulid import ULID
+from ..protocol.messages import PROTOCOL_VERSION
