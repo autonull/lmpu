@@ -1,6 +1,4 @@
-**Ideal Architecture Specification: Abstract Computational Co-Processor for Language Models**
-
-**Version 1.0 — Self-contained design**
+# Abstract Computational Co-Processor for Language Models
 
 ### 1. Goals
 
