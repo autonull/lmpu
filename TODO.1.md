@@ -1479,13 +1479,13 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [x] P1-04 EventLog: seq, ULID, ring buffer, ack, replay (M)
 - [x] P1-05 BufferManager + shm backend + NumPy views + BLAKE3 (L)
 - [~] P1-06 Grants, refcounts, TTL, reaper (M)
-- [~] P1-07 CapabilityRegistry + routing + `query_capabilities` (M)
+- [~] P1-07 CapabilityRegistry + routing + `query_capabilities`; advertisement is separate from session authorization (M)
 - [~] P1-08 `pure.func` processor and contract tests (M)
 - [~] P1-09 Scripted host + minimal session loop (M)
 - [~] P1-10 Demos 1 and 2, headless assertion mode (S)
 - [ ] P1-11 Property tests: buffer slices, protocol round-trip (M)
-- [x] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close (M)
-- [~] P1-13 TraceSink implementation and trace/replay schema tests (M)
+- [x] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close; health reports liveness, readiness, and backend availability (M)
+- [~] P1-13 TraceSink implementation and trace/replay schema tests; redact sensitive payloads by default (M)
 - [~] P1-14 Buffer import from bytes/files plus provenance metadata (M)
 
 **Exit gate:** `pytest -m "unit or property or integration"` green; all RPC methods are covered; trace replay works; buffer round-trip, checksum, import, and provenance verified; demo 1/2 pass CPU-only; a 16 MiB buffer can be created and read as a 4×4 slice without copying the whole payload into the process that reads it.
@@ -1496,13 +1496,13 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [~] P2-02 Worker pool, health, restart, crash quarantine (M)
 - [~] P2-03 Subprocess sandbox: rlimits, temp cwd, env scrubbing, no-network wrapper (M)
 - [~] P2-04 `python.vm` processor + `lmpu` helper module (L)
-- [~] P2-05 `vector.engine` processor + buffer zero-copy + summaries (L)
+- [~] P2-05 `vector.engine` processor + summaries; portable copy fallback; zero-copy only with `copy_count` evidence (L)
 - [x] P2-06 Timeouts, cooperative cancel, hard kill, terminal race tests (M)
-- [~] P2-07 Quotas and admission control (M)
+- [~] P2-07 Quotas, admission control, bounded queues, and backpressure (M)
 - [x] P2-08 Batching coalescer + batch API (M)
-- [~] P2-09 Progress events, throttling, observe-only injection (S)
+- [~] P2-09 Progress events, throttling, observe-only injection, bounded event injection (S)
 - [~] P2-10 Demos 3, 4 (scripted), 6, 9, 10 (L)
-- [~] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate (M)
+- [~] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate, deterministic fake-worker cases (M)
 - [ ] P2-12 Sandbox profiles: nsjail and Docker templates, public-mode guard, profile tests (M)
 
 **Exit gate:** cancellation and timeout tests pass under race injection; a 16 MiB matmul completes with `copy_count == 0` on the data path; 1,000 batched adds complete in one control round-trip; nsjail/Docker profile tests pass; no orphan workers or shm after tests.
@@ -1535,7 +1535,7 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [ ] P4-05 Composition: child jobs, depth/budget/cycle limits (M)
 - [ ] P4-06 Capability routing heuristics + explicit override (S)
 - [ ] P4-07 Demos 7 and 8 (M)
-- [ ] P4-08 Contract suite expanded to all processors (M)
+- [ ] P4-08 Contract suite expanded to all processors; required for any advertised accelerator backend (M)
 
 **Exit gate:** six processor types work through one interface; interactive input resumes correctly; composition depth limits are enforced; all processors pass the same contract suite.
 
@@ -1608,6 +1608,8 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [ ] P8-10 Speculative jobs with cancel-on-stale results
 - [ ] P8-11 Multimodal buffer adapter for image/audio tensors
 - [ ] P8-12 Real accelerator backend (CUDA kernel or FPGA endpoint)
+- [ ] P8-13 Redundant execution and independent result verification (operation-specific)
+- [ ] P8-14 Persistent processor state and cross-job result cache
 
 ---
 
@@ -1868,6 +1870,14 @@ These are additions to existing tasks, not new parallel tasks:
 8. **Sensitive payloads are not logged by default.** Add to P1-13 and P6-08.
 9. **CI must contain a model-free end-to-end example.** Satisfied by `tests/integration/test_runtime_execution.py`; keep it model-free.
 10. **The plan must not promise exactly-once execution or cross-device determinism.** Already in §5.6 and §6.5; restated in §20.6 guardrails.
+11. **Health and readiness are distinct.** `lmpu.health` must report process liveness, admission readiness, and per-backend availability separately. Add to P1-12 and P5-02.
+12. **Limits are configurable and inspectable.** Defaults for queues, payloads, timeouts, workers, retention, and quotas must be readable at runtime. Add to P1-12 (`lmpu.configure`, `lmpu.health`) and Appendix B.
+13. **Deterministic fake-worker tests are required**, not only real workers: delayed results, duplicate delivery, malformed output, crash, and disconnect. Add to P2-11 and §10.4.
+14. **Cost-aware dispatch is deferred, not dropped.** 0.1 keeps deterministic rules. P4-06 gains a cost model only if P5.5 workload data shows a benefit.
+15. **Accelerator backends must pass the same contract suite** before they are advertised. Add to P4-08 and P8-12.
+16. **Zero-copy is gated by measurement**, not claimed by default. P2-05 must record `copy_count` and retain the portable copy path.
+17. **Redundant execution and independent result verification are deferred** to P8 as an optional, operation-specific capability.
+18. **Persistent processor state and result caching are deferred**; 0.1 keeps the result cache in §5.5 only. Add to P8.
 
 ### 20.3 Additional decisions recorded
 
@@ -1940,6 +1950,85 @@ These restate and tighten §0.2. They are not new promises.
 5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`.
 6. Verify P0-08 on the reference GPU and start P3.
 7. Keep P5.5 benchmarks behind a working P3 sleep/wake proof.
+
+### 20.8 Proposal item disposition
+
+Every bullet in the revision proposal is listed here exactly once. `Covered` means the
+accepted plan already handled it; `Added` means this reconciliation added it to an
+existing task or gate; `Deferred` means it is explicitly out of 0.1 scope.
+
+| ID | Proposal item | Disposition | Plan location / task |
+|---|---|---|---|
+| R-01 | Versioned protocol specification with compatibility rules | Covered, open | §3, P0-04, D-01/D-03 |
+| R-02 | Job lifecycle and legal transitions | Covered | §3.4, P1-02 |
+| R-03 | Submission, retries, idempotency, duplicate behavior | Covered | §5.5, P1-03 |
+| R-04 | Timeout, cancellation, cleanup semantics | Covered | §5.4, P2-06 |
+| R-05 | Structured errors with retryability and origin | Covered | §3.7 |
+| R-06 | Minimal CPU reference backend | Done | §0.3, integration suite |
+| R-07 | Separate control plane and execution plane | Covered | §2, §6.3, P2-01/P2-02 |
+| R-08 | Bounded queues and backpressure | Added | §20.2(3), P2-07/P2-09 |
+| R-09 | Graceful shutdown and recovery | Covered | §5.6, P6-05 |
+| R-10 | Resource ownership model | Added | §20.5 |
+| R-11 | Registered operations as the default path | Covered | D-13, §3.3 |
+| R-12 | Arbitrary code execution isolated and opt-in | Covered | D-09, §6.5 (`python.vm`), §20.6 |
+| R-13 | Capability-based authorization, not only advertisement | Added | §20.2(5), P1-07/P2-07 |
+| R-14 | Validate all input/output boundaries | Covered | §10.5, §10.7, P2-03/P6-08 |
+| R-15 | Buffer semantics before zero-copy | Covered | §4.1–§4.4 |
+| R-16 | Capability-scoped buffer access | Covered | §4.4, P1-06 |
+| R-17 | Portable copy/serialization fallback | Added | §20.2(6), P2-05 |
+| R-18 | Streaming and chunking semantics | Covered | §4.5 |
+| R-19 | Persistence separated from volatile memory | Covered | §4.4, §5.6 |
+| R-20 | Separate job waiting from host suspension | Covered | §3.4, §8.1, §20.3 |
+| R-21 | Notification semantics: order, duplicates, reconnect, query fallback | Covered | §3.6, §20.2(7) |
+| R-22 | Host suspension/resumption adapter requirements | Covered | §7.1, §7.3, §7.6 |
+| R-23 | KV retention is an optimization, not a protocol guarantee | Added as explicit rule | §8.1, §20.6 |
+| R-24 | Prototype an adapter only after the runtime contract is stable | Covered | §20.7 order, P3 after §20.4 |
+| R-25 | Capability discovery fields and authorization distinction | Covered | §6.2, P1-07 |
+| R-26 | Admission control and fair scheduling | Covered | §5.2, P2-07 |
+| R-27 | Simple cost-aware dispatch | Deferred | P4-06, conditional on P5.5 data |
+| R-28 | Pluggable policy, deterministic first | Covered | §5.2, §6.2 |
+| R-29 | Correlated structured logs and tracing | Covered | §9.1, P1-13 |
+| R-30 | Operational metrics | Covered | §9.2, P3-11 |
+| R-31 | Health and readiness signals | Added | §20.2(11), P1-12/P5-02 |
+| R-32 | Configurable and inspectable limits | Covered, added inspect | Appendix B, §20.2(12) |
+| R-33 | Protocol conformance tests for independent clients/backends | Covered, open | §10.2, P1-11, P7-01 |
+| R-34 | Deterministic fake-worker tests | Added | §20.2(13), P2-11 |
+| R-35 | Concurrency and stress tests | Covered | §10.5 |
+| R-36 | Fault injection and recovery tests | Covered | §10.5, P2-11 |
+| R-37 | Security tests in CI | Covered | §10.7, P6-08 |
+| R-38 | Model-free end-to-end CI example | Done | integration suite, §20.2(9) |
+| R-39 | Accelerator backends behind the same conformance suite | Added | §20.2(15), P4-08/P8-12 |
+| R-40 | Shared memory / zero-copy only after profiling | Added | §20.2(16), P2-05 |
+| R-41 | Checkpointing and resumable jobs | Deferred | P8-01 |
+| R-42 | Redundant execution or independent verification | Deferred | P8-13 |
+| R-43 | Persistent processor state and caching | Deferred | P8-14 |
+| R-44 | Multi-host / distributed execution | Deferred | P8-04, P8-05 |
+
+**Audit result:** all 44 proposal items are dispositioned. No item is silently dropped.
+The active-scope additions are limited to §20.2. Items R-27 and R-41…R-44 are deferred
+with a named future task, not forgotten.
+
+### 20.9 Ownership of active additions
+
+| Addition | Responsible module | Test location | Done when |
+|---|---|---|---|
+| First usable milestone gate | `kernel/`, `tests/integration/` | `tests/integration/` | §20.4 green before P3 |
+| Resource ownership matrix | `kernel/runtime.py`, `memory/` | `tests/failure/`, leak checks | every terminal path releases resources |
+| Bounded queues/backpressure | `kernel/scheduler.py`, `kernel/quotas.py` | `tests/failure/`, `tests/perf/` | overload rejects predictably, memory bounded |
+| Shutdown/restart promise | `kernel/runtime.py`, `kernel/jobs.py` | `tests/failure/` | documented behavior matches test |
+| Capability authorization | `kernel/routing.py`, `memory/grants.py` | `tests/security/` | unauthorized op/buffer rejected |
+| Portable copy fallback | `processors/builtin/vector_engine.py` | `tests/contract/` | works without shm fast path |
+| Notification recovery | `kernel/events.py`, `host/session.py` | `tests/scenario/` | `poll`/`wait` recovers a missed event |
+| Sensitive-payload redaction | `kernel/trace.py` | `tests/security/` | payloads absent by default |
+| Model-free CI example | `tests/integration/` | CI `core` lane | passes without GPU or model |
+| Health/readiness distinction | `kernel/runtime.py` | `tests/integration/` | fields reported separately |
+| Inspectable limits | `kernel/runtime.py`, `configs/` | `tests/integration/` | defaults readable at runtime |
+| Deterministic fake-worker tests | `kernel/worker_pool.py` | `tests/failure/` | delayed/duplicate/malformed/crash covered |
+| Cost-aware dispatch (deferred) | `kernel/routing.py` | `tests/perf/` | only after P5.5 data justifies it |
+| Accelerator contract gate | `processors/`, `tests/contract/` | `tests/contract/` | backend advertised only after suite |
+| Zero-copy measurement gate | `processors/builtin/vector_engine.py` | `tests/contract/` | `copy_count` recorded per result |
+| Redundant verification (deferred) | P8 | P8 | operation-specific design exists |
+| Persistent state/cache (deferred) | P8 | P8 | isolation, keys, invalidation defined |
 
 ---
 
