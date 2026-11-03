@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
-import time
 from typing import Any
 
 import numpy as np
 
-from ..base import Manifest, Processor, ProcessorContext, JobContext, Result
+from ...memory.checksum import compute_checksum
+from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
 class VectorEngineProcessor(Processor):
     """Vector engine for matrix operations, FFT, etc."""
-    
+
     manifest = Manifest(
         name="vector.engine",
         version="0.1.0",
@@ -55,13 +54,13 @@ class VectorEngineProcessor(Processor):
         op = job.get("op")
         inputs = job.get("inputs", {})
         config = job.get("config", {})
-        
+
         determinism = config.get("determinism", "best_effort")
         if determinism == "strict":
             # Force single-threaded BLAS for reproducibility
             os.environ["OMP_NUM_THREADS"] = "1"
             os.environ["MKL_NUM_THREADS"] = "1"
-        
+
         try:
             if op == "matmul":
                 return await self._matmul(inputs, ctx)
@@ -106,14 +105,16 @@ class VectorEngineProcessor(Processor):
         # Get input buffers
         A = self._get_buffer(ctx, "A")
         B = self._get_buffer(ctx, "B")
-        
+
+        ctx.progress(0.0, "matmul started")
         if A.size == 0 or B.size == 0:
-            # Placeholder for testing
+            # Placeholder for testing: deterministic values so strict mode holds.
             shape = (64, 64)
-            C = np.random.randn(*shape).astype(np.float32)
+            C = np.arange(shape[0] * shape[1], dtype=np.float32).reshape(shape) / 4096.0
         else:
             C = A @ B
-        
+        ctx.progress(1.0, "matmul complete")
+
         # Compute summary statistics
         summary = {
             "shape": list(C.shape),
@@ -123,9 +124,9 @@ class VectorEngineProcessor(Processor):
             "min": float(C.min()),
             "max": float(C.max()),
         }
-        
-        checksum = hashlib.blake3(C.tobytes()).hexdigest()
-        
+
+        checksum = compute_checksum(C.tobytes())
+
         return Result(
             success=True,
             data={"summary": summary},
@@ -136,14 +137,14 @@ class VectorEngineProcessor(Processor):
     async def _dot(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         a = self._get_buffer(ctx, "a")
         b = self._get_buffer(ctx, "b")
-        
+
         if a.size == 0 or b.size == 0:
             result = np.float32(0.0)
         else:
             result = np.dot(a, b)
-        
-        checksum = hashlib.blake3(np.array([result]).tobytes()).hexdigest()
-        
+
+        checksum = compute_checksum(np.array([result]).tobytes())
+
         return Result(
             success=True,
             data={"result": float(result)},
@@ -152,21 +153,21 @@ class VectorEngineProcessor(Processor):
 
     async def _fft(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         x = self._get_buffer(ctx, "x")
-        
+
         if x.size == 0:
             result = np.zeros(64, dtype=np.complex64)
         else:
             result = np.fft.fft(x)
-        
+
         summary = {
             "shape": list(result.shape),
             "dtype": str(result.dtype),
             "mean_mag": float(np.abs(result).mean()),
             "max_mag": float(np.abs(result).max()),
         }
-        
-        checksum = hashlib.blake3(result.tobytes()).hexdigest()
-        
+
+        checksum = compute_checksum(result.tobytes())
+
         return Result(
             success=True,
             data={"summary": summary},
@@ -177,22 +178,22 @@ class VectorEngineProcessor(Processor):
     async def _conv1d(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         input_arr = self._get_buffer(ctx, "input")
         kernel = self._get_buffer(ctx, "kernel")
-        
+
         if input_arr.size == 0 or kernel.size == 0:
             result = np.zeros(64, dtype=np.float32)
         else:
             from scipy.signal import convolve
             result = convolve(input_arr, kernel, mode='same')
-        
+
         summary = {
             "shape": list(result.shape),
             "dtype": str(result.dtype),
             "mean": float(result.mean()),
             "std": float(result.std()),
         }
-        
-        checksum = hashlib.blake3(result.tobytes()).hexdigest()
-        
+
+        checksum = compute_checksum(result.tobytes())
+
         return Result(
             success=True,
             data={"summary": summary},
@@ -202,7 +203,7 @@ class VectorEngineProcessor(Processor):
 
     async def _softmax(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         x = self._get_buffer(ctx, "x")
-        
+
         if x.size == 0:
             result = np.ones(64, dtype=np.float32) / 64
         else:
@@ -210,15 +211,15 @@ class VectorEngineProcessor(Processor):
             x_max = np.max(x, axis=-1, keepdims=True)
             exp_x = np.exp(x - x_max)
             result = exp_x / np.sum(exp_x, axis=-1, keepdims=True)
-        
+
         summary = {
             "shape": list(result.shape),
             "dtype": str(result.dtype),
             "sum": float(result.sum()),
         }
-        
-        checksum = hashlib.blake3(result.tobytes()).hexdigest()
-        
+
+        checksum = compute_checksum(result.tobytes())
+
         return Result(
             success=True,
             data={"summary": summary},
@@ -230,7 +231,7 @@ class VectorEngineProcessor(Processor):
         x = self._get_buffer(ctx, "x")
         weight = self._get_buffer(ctx, "weight")
         bias = self._get_buffer(ctx, "bias")
-        
+
         if x.size == 0:
             result = np.zeros(64, dtype=np.float32)
         else:
@@ -239,23 +240,23 @@ class VectorEngineProcessor(Processor):
             var = np.var(x, axis=-1, keepdims=True)
             eps = 1e-5
             normalized = (x - mean) / np.sqrt(var + eps)
-            
+
             if weight.size > 0:
                 normalized = normalized * weight
             if bias.size > 0:
                 normalized = normalized + bias
-            
+
             result = normalized
-        
+
         summary = {
             "shape": list(result.shape),
             "dtype": str(result.dtype),
             "mean": float(result.mean()),
             "std": float(result.std()),
         }
-        
-        checksum = hashlib.blake3(result.tobytes()).hexdigest()
-        
+
+        checksum = compute_checksum(result.tobytes())
+
         return Result(
             success=True,
             data={"summary": summary},

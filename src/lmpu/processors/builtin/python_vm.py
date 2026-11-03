@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import tempfile
 import textwrap
-import uuid
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from ..base import Manifest, Processor, ProcessorContext, JobContext, Result
+from ...memory.checksum import compute_checksum
+from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
 class PythonVMProcessor(Processor):
     """Python VM processor for executing Python programs."""
-    
+
     manifest = Manifest(
         name="python.vm",
         version="0.1.0",
@@ -105,9 +106,9 @@ class PythonVMProcessor(Processor):
         op = job.get("op")
         inputs = job.get("inputs", {})
         config = job.get("config", {})
-        
+
         timeout = config.get("timeout_ms", 30000) / 1000
-        
+
         try:
             if op == "run_program":
                 return await self._run_program(inputs, ctx, timeout)
@@ -119,7 +120,7 @@ class PythonVMProcessor(Processor):
                     error_code="unknown_op",
                     error_message=f"Unknown operation: {op}",
                 )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return Result(
                 success=False,
                 error_code="timeout",
@@ -142,18 +143,20 @@ class PythonVMProcessor(Processor):
     ) -> Result:
         program = inputs.get("program", "")
         state_buffer = inputs.get("state")
-        
+
+        ctx.progress(0.05, "preparing sandbox")
+
         # Prepare execution environment
         with tempfile.TemporaryDirectory() as tmpdir:
             # Write program to file
             program_path = os.path.join(tmpdir, "program.py")
             with open(program_path, "w") as f:
                 f.write(self._helper_code + "\n\n" + program)
-            
+
             # Prepare buffer data
             buffer_data = {}
             # This would be populated from ctx._buffers
-            
+
             # Execute in subprocess
             result = await self._execute_in_sandbox(
                 program_path,
@@ -161,7 +164,8 @@ class PythonVMProcessor(Processor):
                 ctx,
                 timeout,
             )
-        
+
+        ctx.progress(1.0, "finished")
         return result
 
     async def _run_file(
@@ -172,26 +176,26 @@ class PythonVMProcessor(Processor):
     ) -> Result:
         path = inputs.get("path", "")
         state_buffer = inputs.get("state")
-        
+
         if not os.path.exists(path):
             return Result(
                 success=False,
                 error_code="file_not_found",
                 error_message=f"File not found: {path}",
             )
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy file to temp dir
             import shutil
             dest = os.path.join(tmpdir, "program.py")
             shutil.copy2(path, dest)
-            
+
             # Prepend helper
-            with open(dest, "r") as f:
+            with open(dest) as f:
                 content = f.read()
             with open(dest, "w") as f:
                 f.write(self._helper_code + "\n\n" + content)
-            
+
             buffer_data = {}
             result = await self._execute_in_sandbox(
                 dest,
@@ -199,7 +203,7 @@ class PythonVMProcessor(Processor):
                 ctx,
                 timeout,
             )
-        
+
         return result
 
     async def _execute_in_sandbox(
@@ -210,7 +214,7 @@ class PythonVMProcessor(Processor):
         timeout: float,
     ) -> Result:
         """Execute program in sandboxed subprocess."""
-        
+
         # Build command with resource limits
         cmd = [
             sys.executable,
@@ -222,13 +226,13 @@ sys.path.insert(0, '{os.path.dirname(program_path)}')
 exec(open('{program_path}').read())
 """,
         ]
-        
+
         # Set up environment
         env = os.environ.copy()
         env["PYTHONPATH"] = ""
         env["LMPU_JOB_ID"] = ctx.job_id
         env["LMPU_SESSION_ID"] = ctx.session_id
-        
+
         # Create process
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -240,17 +244,17 @@ exec(open('{program_path}').read())
             start_new_session=True,
             # Resource limits would be set via preexec_fn
         )
-        
+
         try:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             raise
-        
+
         if proc.returncode != 0:
             return Result(
                 success=False,
@@ -258,18 +262,20 @@ exec(open('{program_path}').read())
                 error_message=stderr.decode()[:1000],
                 retriable=False,
             )
-        
+
         # Parse result from stdout (last line should be JSON)
         output = stdout.decode().strip()
         try:
             result_data = json.loads(output.split('\n')[-1])
         except json.JSONDecodeError:
             result_data = {"output": output}
-        
+
         return Result(
             success=True,
             data=result_data,
-            checksum="",
+            checksum=compute_checksum(
+                json.dumps(result_data, sort_keys=True).encode()
+            ),
         )
 
     async def cancel(self, job_id: str) -> None:
@@ -277,6 +283,3 @@ exec(open('{program_path}').read())
 
     async def shutdown(self) -> None:
         pass
-
-
-import json

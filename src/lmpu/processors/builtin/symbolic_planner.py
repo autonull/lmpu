@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
 import heapq
 import json
 from collections import deque
 from typing import Any
 
-import numpy as np
-
-from ..base import Manifest, Processor, ProcessorContext, JobContext, Result
+from ...memory.checksum import compute_checksum
+from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
 class SymbolicPlannerProcessor(Processor):
     """Symbolic planner for graph algorithms and constraint solving."""
-    
+
     manifest = Manifest(
         name="symbolic.planner",
         version="0.1.0",
@@ -48,7 +46,8 @@ class SymbolicPlannerProcessor(Processor):
     async def execute(self, job: dict[str, Any], ctx: JobContext) -> Result:
         op = job.get("op")
         inputs = job.get("inputs", {})
-        
+        ctx.progress(0.0, f"{op} started")
+
         try:
             if op == "shortest_path":
                 return await self._shortest_path(inputs, ctx)
@@ -71,16 +70,18 @@ class SymbolicPlannerProcessor(Processor):
                 error_message=str(e),
                 retriable=False,
             )
+        finally:
+            ctx.progress(1.0, f"{op} finished")
 
     async def _shortest_path(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         """Dijkstra's algorithm for shortest path."""
         graph = inputs.get("graph", {})
         source = inputs.get("source")
         target = inputs.get("target")
-        
+
         # Graph format: {"nodes": [...], "edges": [{"from": u, "to": v, "weight": w}, ...]}
         # Or adjacency: {u: {v: weight, ...}, ...}
-        
+
         if isinstance(graph, dict) and "edges" in graph:
             # Convert to adjacency
             adj = {}
@@ -91,29 +92,29 @@ class SymbolicPlannerProcessor(Processor):
                 adj[u][v] = w
         else:
             adj = graph
-        
+
         # Dijkstra
         dist = {source: 0}
         prev = {}
         pq = [(0, source)]
         visited = set()
-        
+
         while pq:
             d, u = heapq.heappop(pq)
             if u in visited:
                 continue
             visited.add(u)
-            
+
             if u == target:
                 break
-            
+
             for v, w in adj.get(u, {}).items():
                 alt = d + w
                 if alt < dist.get(v, float('inf')):
                     dist[v] = alt
                     prev[v] = u
                     heapq.heappush(pq, (alt, v))
-        
+
         # Reconstruct path
         if target not in dist:
             return Result(
@@ -121,7 +122,7 @@ class SymbolicPlannerProcessor(Processor):
                 data={"path": [], "distance": None, "found": False},
                 checksum="",
             )
-        
+
         path = []
         curr = target
         while curr in prev:
@@ -129,15 +130,15 @@ class SymbolicPlannerProcessor(Processor):
             curr = prev[curr]
         path.append(source)
         path.reverse()
-        
+
         result_data = {
             "path": path,
             "distance": dist[target],
             "found": True,
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
@@ -149,7 +150,7 @@ class SymbolicPlannerProcessor(Processor):
         graph = inputs.get("graph", {})
         start = inputs.get("start")
         goals = inputs.get("goals", [])
-        
+
         if isinstance(graph, dict) and "edges" in graph:
             adj = {}
             for edge in graph["edges"]:
@@ -159,30 +160,30 @@ class SymbolicPlannerProcessor(Processor):
                 adj[u].append(v)
         else:
             adj = graph
-        
+
         # Multi-goal BFS
         queue = deque([(start, [start])])
         visited = {start}
         found_goals = {}
-        
+
         while queue and len(found_goals) < len(goals):
             node, path = queue.popleft()
-            
+
             if node in goals and node not in found_goals:
                 found_goals[node] = path
-            
+
             for neighbor in adj.get(node, []):
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append((neighbor, path + [neighbor]))
-        
+
         result_data = {
             "plans": {goal: found_goals.get(goal) for goal in goals},
             "found": list(found_goals.keys()),
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
@@ -193,15 +194,15 @@ class SymbolicPlannerProcessor(Processor):
         """Simple constraint satisfaction (placeholder)."""
         variables = inputs.get("variables", {})
         constraints = inputs.get("constraints", [])
-        
+
         # Placeholder: return variables as-is
         result_data = {
             "solution": variables,
             "satisfied": True,
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
@@ -213,17 +214,17 @@ class SymbolicPlannerProcessor(Processor):
         tasks = inputs.get("tasks", [])
         resources = inputs.get("resources", {})
         constraints = inputs.get("constraints", [])
-        
+
         # Placeholder: return tasks in order
         schedule = [{"task": t, "start": i, "end": i+1} for i, t in enumerate(tasks)]
-        
+
         result_data = {
             "schedule": schedule,
             "makespan": len(tasks),
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,

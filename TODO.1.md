@@ -78,20 +78,34 @@ not merely "a file exists".
 | RPC surface (`hello` … `close`) | Done | `src/lmpu/kernel/runtime.py` |
 | Worker execution path (dispatch, sync submit, wait, timeout, cancel) | Done | `tests/integration/test_runtime_execution.py` (6 tests) |
 | Explicit batch API and async batch coalescing with per-job fanout | Done | integration test; manual 100-item batch run |
-| `pure.func`, `python.vm`, `vector.engine`, `symbolic.planner`, `neural.summary`, `hardware.stub` | Partial | all register and return results; contract suite missing |
+| `pure.func`, `python.vm`, `vector.engine`, `symbolic.planner`, `neural.summary`, `hardware.stub` | Partial | all register and return results; all six pass the representative contract suite (`tests/contract/test_processor_contract.py`); per-op coverage is incomplete |
 | `python.vm` timeout and cancellation enforcement | Partial | parent-side hard cancel verified; child-side sandbox limits incomplete |
 | Host engine ABC, scripted engine, parser, grammar, session controller | Partial | modules exist; session loop and injection rendering incomplete |
 | HF engine and GPU path | Not verified | code exists; model/toolchain gate P0-08 is open |
-| Trace sink and metrics | Partial | JSONL sink exists; replay tests and host token/energy metrics missing |
+| Trace sink and metrics | Partial | JSONL sink, redaction, and replay tests exist (`tests/unit/test_trace.py`); host token/energy metrics missing |
 | Benchmarks, Mission Control, RFC/SDK/docs | Not started | directories exist only |
 
 **Immediate next work (in order).**
 
-1. Close the P1 exit gate: add processor contract tests; add property tests for buffer slices and protocol round-trip; add trace/replay tests.
-2. Make the scripted-host session loop real: event injection, context budget, `ResultTooLarge`, parser failure, forced wake.
-3. Add `SCM_RIGHTS` fd passing for buffers and an end-to-end `vector.engine` matmul with `copy_count == 0`.
-4. Add the failure-injection suite (worker crash, OOM, duplicate delivery, event-before-sleep, disconnect).
-5. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
+1. Make the scripted-host session loop real: event injection, context budget, `ResultTooLarge`, parser failure, forced wake.
+2. Add `SCM_RIGHTS` fd passing for buffers and an end-to-end `vector.engine` matmul with `copy_count == 0`.
+3. Add the failure-injection suite (worker crash, OOM, duplicate delivery, event-before-sleep, disconnect).
+4. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
+
+**Completed in this pass (2026-11-03).**
+
+- Processor contract suite for all six built-ins: manifest truth, representative op success plus checksum, progress-claim backing, unknown-op errors, strict determinism.
+- Property tests for JSON-RPC framing round-trip and typed buffer import/slice/write without NumPy divergence.
+- Trace replay helper (`read_trace`, `replay_trace`, contiguous-gap detection) and sensitive-payload redaction by default.
+- Processor checksums now use the shared BLAKE3 helper instead of `hashlib.blake3`, which does not exist on Python 3.14.
+
+**P1 exit gate — still open.**
+
+- Grants/refcount release audit and negative authorization tests (P1-06).
+- Routing contract test and advertisement/authorization separation (P1-07).
+- Scripted session-loop scenarios: injection, `ResultTooLarge`, parser failure, forced wake (P1-09, P3-06/P3-07).
+- Demos 1 and 2 in headless assertion mode (P1-10).
+- End-to-end 16 MiB buffer slice read and buffer-import provenance checks (P1-14).
 
 **Known red items.**
 
@@ -1480,12 +1494,12 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [x] P1-05 BufferManager + shm backend + NumPy views + BLAKE3 (L)
 - [~] P1-06 Grants, refcounts, TTL, reaper (M)
 - [~] P1-07 CapabilityRegistry + routing + `query_capabilities`; advertisement is separate from session authorization (M)
-- [~] P1-08 `pure.func` processor and contract tests (M)
+- [x] P1-08 `pure.func` processor and contract tests (M)
 - [~] P1-09 Scripted host + minimal session loop (M)
 - [~] P1-10 Demos 1 and 2, headless assertion mode (S)
-- [ ] P1-11 Property tests: buffer slices, protocol round-trip (M)
+- [x] P1-11 Property tests: buffer slices, protocol round-trip (M)
 - [x] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close; health reports liveness, readiness, and backend availability (M)
-- [~] P1-13 TraceSink implementation and trace/replay schema tests; redact sensitive payloads by default (M)
+- [x] P1-13 TraceSink implementation and trace/replay schema tests; redact sensitive payloads by default (M)
 - [~] P1-14 Buffer import from bytes/files plus provenance metadata (M)
 
 **Exit gate:** `pytest -m "unit or property or integration"` green; all RPC methods are covered; trace replay works; buffer round-trip, checksum, import, and provenance verified; demo 1/2 pass CPU-only; a 16 MiB buffer can be created and read as a 4×4 slice without copying the whole payload into the process that reads it.
@@ -1788,7 +1802,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (Unit + integration pass; property/contract/scenario suites are not written yet.)
+- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (Unit, property, contract, and integration pass: 92 tests, 2 skipped; the scenario suite is not written yet.)
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.

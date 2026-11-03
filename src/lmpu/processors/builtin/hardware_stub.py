@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
-import time
 from typing import Any
 
 import numpy as np
 
-from ..base import Manifest, Processor, ProcessorContext, JobContext, Result
+from ...memory.checksum import compute_checksum
+from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
 class HardwareStubProcessor(Processor):
     """Simulated hardware device for testing latency classes and async completion."""
-    
+
     manifest = Manifest(
         name="hardware.stub",
         version="0.1.0",
@@ -48,7 +47,8 @@ class HardwareStubProcessor(Processor):
         op = job.get("op")
         inputs = job.get("inputs", {})
         config = job.get("config", {})
-        
+        ctx.progress(0.0, f"{op} started")
+
         try:
             if op == "simulate_latency":
                 return await self._simulate_latency(inputs, ctx, config)
@@ -69,6 +69,8 @@ class HardwareStubProcessor(Processor):
                 error_message=str(e),
                 retriable=False,
             )
+        finally:
+            ctx.progress(1.0, f"{op} finished")
 
     async def _simulate_latency(
         self,
@@ -79,24 +81,24 @@ class HardwareStubProcessor(Processor):
         """Simulate a device with configurable latency."""
         duration_ms = inputs.get("duration_ms", 100)
         payload = inputs.get("payload", {})
-        
+
         # Report progress
         ctx.progress(0.1, "Starting simulation")
         await asyncio.sleep(duration_ms / 1000 * 0.3)
-        
+
         ctx.progress(0.5, "Processing")
         await asyncio.sleep(duration_ms / 1000 * 0.4)
-        
+
         ctx.progress(0.9, "Finalizing")
         await asyncio.sleep(duration_ms / 1000 * 0.3)
-        
+
         result_data = {
             "result": {"status": "completed", "input": payload},
             "actual_duration_ms": duration_ms,
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
@@ -111,13 +113,13 @@ class HardwareStubProcessor(Processor):
         """Deterministic computation based on seed."""
         seed = inputs.get("seed", 42)
         operation = inputs.get("operation", "hash")
-        
+
         # Use seed for deterministic output
         np.random.seed(seed)
-        
+
         if operation == "hash":
             data = np.random.bytes(32)
-            result = hashlib.blake3(data).hexdigest()
+            result = compute_checksum(data)
         elif operation == "random_vector":
             size = inputs.get("size", 100)
             result = np.random.randn(size).astype(np.float32).tolist()
@@ -127,10 +129,10 @@ class HardwareStubProcessor(Processor):
             result = np.random.randn(rows, cols).astype(np.float32).tolist()
         else:
             result = {"error": f"Unknown operation: {operation}"}
-        
+
         result_data = {"result": result}
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
@@ -146,21 +148,21 @@ class HardwareStubProcessor(Processor):
         """Simulate streaming data from a device."""
         chunks = inputs.get("chunks", 10)
         delay_ms = inputs.get("delay_ms", 50)
-        
+
         stream_data = []
         for i in range(chunks):
             await asyncio.sleep(delay_ms / 1000)
             chunk = {"index": i, "data": np.random.randn(10).astype(np.float32).tolist()}
             stream_data.append(chunk)
             ctx.progress((i + 1) / chunks, f"Chunk {i+1}/{chunks}")
-        
+
         result_data = {
             "stream": stream_data,
             "chunks": chunks,
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,

@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from typing import Any
 
 import numpy as np
 
-from ..base import Manifest, Processor, ProcessorContext, JobContext, Result
+from ...memory.checksum import compute_checksum
+from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
 class NeuralSummaryProcessor(Processor):
     """Neural summary processor with extractive and model-based backends."""
-    
+
     manifest = Manifest(
         name="neural.summary",
         version="0.1.0",
@@ -47,7 +47,7 @@ class NeuralSummaryProcessor(Processor):
     async def setup(self, ctx: ProcessorContext) -> None:
         backend = ctx.runtime_config.get("summary_backend", "textrank")
         self._backend = backend
-        
+
         if backend == "model":
             # Lazy load model
             try:
@@ -60,7 +60,7 @@ class NeuralSummaryProcessor(Processor):
     async def execute(self, job: dict[str, Any], ctx: JobContext) -> Result:
         op = job.get("op")
         inputs = job.get("inputs", {})
-        
+
         try:
             if op == "summarize_text_buffer":
                 return await self._summarize(inputs, ctx)
@@ -83,27 +83,27 @@ class NeuralSummaryProcessor(Processor):
     async def _summarize(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         """Summarize text using TextRank or model."""
         text_buffer = inputs.get("text", "")
-        
+
         if isinstance(text_buffer, dict) and text_buffer.get("buffer"):
             # Would read from buffer
             text = "Sample text for summarization. " * 100
         else:
             text = str(text_buffer)
-        
+
         if self._backend == "model" and self._model:
             summary = await self._summarize_model(text)
         else:
             summary = await self._summarize_textrank(text)
-        
+
         result_data = {
             "summary": summary,
             "original_chars": len(text),
             "summary_chars": len(summary),
             "compression_ratio": len(summary) / len(text) if text else 0,
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
@@ -115,20 +115,20 @@ class NeuralSummaryProcessor(Processor):
         # Simple sentence splitting
         sentences = re.split(r'(?<=[.!?])\s+', text)
         sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
-        
+
         if len(sentences) <= 3:
             return text
-        
+
         # Build similarity matrix (simple word overlap)
         import math
         from collections import Counter
-        
+
         def sentence_vector(sentence):
             words = re.findall(r'\w+', sentence.lower())
             return Counter(words)
-        
+
         vectors = [sentence_vector(s) for s in sentences]
-        
+
         def cosine_sim(v1, v2):
             if not v1 or not v2:
                 return 0.0
@@ -139,12 +139,12 @@ class NeuralSummaryProcessor(Processor):
             if denom1 == 0 or denom2 == 0:
                 return 0.0
             return numerator / (denom1 * denom2)
-        
+
         # PageRank-style scoring
         n = len(sentences)
         scores = [1.0 / n] * n
         damping = 0.85
-        
+
         for _ in range(20):
             new_scores = [(1 - damping) / n] * n
             for i in range(n):
@@ -153,12 +153,12 @@ class NeuralSummaryProcessor(Processor):
                         sim = cosine_sim(vectors[i], vectors[j])
                         new_scores[i] += damping * scores[j] * sim
             scores = new_scores
-        
+
         # Select top sentences
         ranked = sorted(range(n), key=lambda i: scores[i], reverse=True)
         num_sentences = max(1, min(3, n // 3))
         selected = sorted(ranked[:num_sentences])
-        
+
         return ' '.join(sentences[i] for i in selected)
 
     async def _summarize_model(self, text: str) -> str:
@@ -169,25 +169,25 @@ class NeuralSummaryProcessor(Processor):
     async def _embed(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         """Generate embeddings for text."""
         text_buffer = inputs.get("text", "")
-        
+
         if isinstance(text_buffer, dict) and text_buffer.get("buffer"):
             text = "Sample text for embedding. " * 10
         else:
             text = str(text_buffer)
-        
+
         if self._backend == "model" and self._model:
             embedding = self._model.encode(text).tolist()
         else:
             # Random embedding for testing
             embedding = np.random.randn(384).astype(np.float32).tolist()
-        
+
         result_data = {
             "embedding": embedding,
             "dimension": len(embedding),
         }
-        
-        checksum = hashlib.blake3(json.dumps(result_data, sort_keys=True).encode()).hexdigest()
-        
+
+        checksum = compute_checksum(json.dumps(result_data, sort_keys=True).encode())
+
         return Result(
             success=True,
             data=result_data,
