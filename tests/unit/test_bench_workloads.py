@@ -13,14 +13,15 @@ pytestmark = pytest.mark.unit
 
 def test_initial_workload_set_is_registered() -> None:
     assert set(list_workloads()) == {"bigint_mul", "matmul", "large_context", "sleep"}
-    assert get_workload("matmul").inputs == {"size": 2048, "seed": 7}
-    assert get_workload("sleep").inputs["program"].count("sleep(12)") == 1
+    assert get_workload("matmul").inputs == {"size": 512, "seed": 7}
+    assert get_workload("large_context").baselines == ("lmpu.sync", "trace_token")
+    assert get_workload("sleep").inputs["program"].count("sleep(3)") == 1
 
 
 def test_large_context_and_matmul_helpers_are_deterministic() -> None:
     document = _large_document()
-    assert len(document) >= 40_000
-    assert "SECRET: LMPU-2048-ALPHA" in document
+    assert len(document) >= 10_000
+    assert "SECRET: LMPU-BENCH-ALPHA" in document
     assert _matmul_expected(32, 1) == _matmul_expected(32, 1)
 
 

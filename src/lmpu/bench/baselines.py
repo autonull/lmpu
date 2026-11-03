@@ -66,6 +66,22 @@ class HFHost:
     """Reference HF engine adapter with a fresh decoder state per trial."""
 
     def __init__(self, config: BenchmarkConfig):
+        import os
+
+        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+        os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+        os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+        for noisy in (
+            "huggingface_hub",
+            "transformers",
+            "httpx",
+            "httpx2",
+            "httpcore",
+            "urllib3",
+            "filelock",
+        ):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
+
         from lmpu.host.hf import HFDecoder, HFEngine
 
         self.config = config
@@ -141,7 +157,8 @@ def _request(
     else:
         inputs = raw_inputs
 
-    config: dict[str, Any] = {"timeout_ms": 60_000} | workload.config
+    config: dict[str, Any] = {"timeout_ms": 60_000, "bench_nonce": job_id}
+    config.update(workload.config)
     if mode is not None:
         config["mode"] = mode
     return {
@@ -307,7 +324,12 @@ class BaselineRunner:
             "processor": context.workload.processor,
             "op": context.workload.op,
             "inputs": context.workload.inputs,
-            "config": {"mode": "sync", "timeout_ms": 60_000} | context.workload.config,
+            "config": {
+                "mode": "sync",
+                "timeout_ms": 60_000,
+                "bench_nonce": job_id,
+            }
+            | context.workload.config,
         }
         metrics.record_control_tokens(estimate_tokens(request))
         started = time.perf_counter()

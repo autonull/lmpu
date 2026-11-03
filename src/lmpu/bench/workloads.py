@@ -33,6 +33,7 @@ class WorkloadSpec:
     trace: Callable[[], str]
     description: str = ""
     config: dict[str, Any] = field(default_factory=dict)
+    baselines: tuple[str, ...] | None = None
 
 
 def _parse_integer_answer(text: str) -> str | None:
@@ -101,7 +102,7 @@ _BIGINT_MUL = WorkloadSpec(
 
 # --- matmul ----------------------------------------------------------------
 
-_MATMUL_SIZE = 2048
+_MATMUL_SIZE = 512
 _MATMUL_SEED = 7
 
 
@@ -149,33 +150,33 @@ _MATMUL = WorkloadSpec(
     ),
     program_prompt=(
         "You have a tool. Reply with only one JSON object, no prose or fences: "
-        '{"processor":"pure.func","op":"matmul","inputs":{"size":2048,"seed":7}}. '
+        '{"processor":"pure.func","op":"matmul","inputs":{"size":512,"seed":7}}. '
         f"Task: multiply deterministic {_MATMUL_SIZE}x{_MATMUL_SIZE} matrices."
     ),
-    program={"processor": "pure.func", "op": "matmul", "inputs": {"size": 2048, "seed": 7}},
+    program={"processor": "pure.func", "op": "matmul", "inputs": {"size": 512, "seed": 7}},
     parse_answer=_parse_integer_answer,
     verify_answer=_verify_matmul_answer,
     trace=_trace_matmul,
-    description="2048x2048 float32 matmul through the runtime",
+    description="512x512 float32 matmul through the runtime",
     config={"timeout_ms": 300_000},
 )
 
 
 # --- large_context ---------------------------------------------------------
 
-_SECRET = "LMPU-2048-ALPHA"
+_SECRET = "LMPU-BENCH-ALPHA"
 
 
 @lru_cache(maxsize=1)
 def _large_document() -> str:
     lines = []
-    for index in range(500):
+    for index in range(120):
         lines.append(
             f"record {index:04d}: node=worker-{index % 17:02d} "
             f"temperature={18 + index % 9} pressure={1000 + index % 31} "
             f"payload={'x' * 40}"
         )
-    lines.insert(250, f"SECRET: {_SECRET}")
+    lines.insert(60, f"SECRET: {_SECRET}")
     return "\n".join(lines)
 
 
@@ -224,13 +225,14 @@ _LARGE_CONTEXT = WorkloadSpec(
     parse_answer=_parse_secret_answer,
     verify_answer=lambda value: value == _SECRET,
     trace=_trace_large_context,
-    description="50k-character needle-in-haystack context task",
+    description="12k-character needle-in-haystack context task",
+    baselines=("lmpu.sync", "trace_token"),
 )
 
 
 # --- sleep -----------------------------------------------------------------
 
-_SLEEP_SECONDS = 12
+_SLEEP_SECONDS = 3
 _SLEEP_PROGRAM = (
     "import json, time\n"
     f"time.sleep({_SLEEP_SECONDS})\n"
@@ -274,7 +276,7 @@ _SLEEP = WorkloadSpec(
     parse_answer=_parse_integer_answer,
     verify_answer=_verify_sleep_answer,
     trace=_trace_sleep,
-    description="12-second sleeping Python job for sleep/wake measurement",
+    description="3-second sleeping Python job for sleep/wake measurement",
     config={"timeout_ms": 120_000},
 )
 

@@ -190,6 +190,8 @@ def summarize(
         by_baseline: dict[str, Any] = {}
         for baseline in baselines:
             trials = grouped.get((workload.name, baseline), [])
+            if not trials:
+                continue
             walls = [float(record["wall_time_seconds"]) for record in trials]
             correctness = [bool(record["correct"]) for record in trials]
             metric_medians = {}
@@ -303,7 +305,12 @@ class BenchmarkHarness:
             for record in records
             if "workload" in record and "trial" in record
         }
-        pairs = [(workload, baseline) for workload in workloads for baseline in baselines]
+        pairs = [
+            (workload, baseline)
+            for workload in workloads
+            for baseline in baselines
+            if workload.baselines is None or baseline in workload.baselines
+        ]
 
         await self.runner.setup(run_dir)
         try:

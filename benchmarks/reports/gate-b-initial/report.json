@@ -1,0 +1,1545 @@
+{
+  "claims": {
+    "C1_token_reduction": {
+      "by_workload": {
+        "bigint_mul": {
+          "async_poll": {
+            "baseline_total_tokens": 0.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": null
+          },
+          "direct_cot": {
+            "baseline_total_tokens": 116.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": 1.3488372093023255
+          },
+          "sync_tool": {
+            "baseline_total_tokens": 0.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": null
+          },
+          "trace_token": {
+            "baseline_total_tokens": 3473.0,
+            "correctness": {
+              "passes": 2,
+              "rate": 1.0,
+              "total": 2
+            },
+            "reduction": 40.383720930232556
+          }
+        },
+        "large_context": {
+          "trace_token": {
+            "baseline_total_tokens": 3196.0,
+            "correctness": {
+              "passes": 2,
+              "rate": 1.0,
+              "total": 2
+            },
+            "reduction": 0.9711333941051352
+          }
+        },
+        "matmul": {
+          "async_poll": {
+            "baseline_total_tokens": 213.0,
+            "correctness": {
+              "passes": 2,
+              "rate": 1.0,
+              "total": 2
+            },
+            "reduction": 3.0428571428571427
+          },
+          "direct_cot": {
+            "baseline_total_tokens": 72.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": 1.0285714285714285
+          },
+          "sync_tool": {
+            "baseline_total_tokens": 238.0,
+            "correctness": {
+              "passes": 2,
+              "rate": 1.0,
+              "total": 2
+            },
+            "reduction": 3.4
+          },
+          "trace_token": {
+            "baseline_total_tokens": 1519.0,
+            "correctness": {
+              "passes": 2,
+              "rate": 1.0,
+              "total": 2
+            },
+            "reduction": 21.7
+          }
+        },
+        "sleep": {
+          "async_poll": {
+            "baseline_total_tokens": 0.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": null
+          },
+          "direct_cot": {
+            "baseline_total_tokens": 55.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": 0.7971014492753623
+          },
+          "sync_tool": {
+            "baseline_total_tokens": 0.0,
+            "correctness": {
+              "passes": 0,
+              "rate": 0.0,
+              "total": 2
+            },
+            "reduction": null
+          },
+          "trace_token": {
+            "baseline_total_tokens": 6.0,
+            "correctness": {
+              "passes": 2,
+              "rate": 1.0,
+              "total": 2
+            },
+            "reduction": 0.08695652173913043
+          }
+        }
+      },
+      "status": "partial"
+    },
+    "C2_sleep_proof": {
+      "limitation": "No lmpu.sleep/S1 treatment is wired; synchronous and polling baselines are shown for context only.",
+      "measured": {
+        "async_poll": {
+          "forward_passes": 0.0,
+          "generated_tokens": 0.0,
+          "gpu_energy_joules": 0.0,
+          "wall_time_seconds": 1.6803356740856543
+        },
+        "direct_cot": {
+          "forward_passes": 33.0,
+          "generated_tokens": 32.0,
+          "gpu_energy_joules": 180.9046961681219,
+          "wall_time_seconds": 1.525360279600136
+        },
+        "lmpu.sync": {
+          "forward_passes": 0.0,
+          "generated_tokens": 0.0,
+          "gpu_energy_joules": 0.0,
+          "wall_time_seconds": 3.1684111384674907
+        },
+        "sync_tool": {
+          "forward_passes": 0.0,
+          "generated_tokens": 0.0,
+          "gpu_energy_joules": 0.0,
+          "wall_time_seconds": 1.5731834510806948
+        },
+        "trace_token": {
+          "forward_passes": 6.0,
+          "generated_tokens": 6.0,
+          "gpu_energy_joules": 0.0,
+          "wall_time_seconds": 8.920091204345226e-06
+        }
+      },
+      "status": "partial"
+    },
+    "C3_context_protection": {
+      "limitation": "The workload demonstrates bounded injection on a 12k-character context, not a 16 MiB result buffer.",
+      "measured": {
+        "lmpu.sync": {
+          "control_tokens": 3270.0,
+          "injected_tokens": 21.0,
+          "peak_context_tokens": 3291.0
+        },
+        "trace_token": {
+          "control_tokens": 0.0,
+          "injected_tokens": 0.0,
+          "peak_context_tokens": 3196.0
+        }
+      },
+      "status": "partial"
+    },
+    "C4_batching": {
+      "limitation": "No batched-vs-individual submission probe is wired.",
+      "status": "not_measured"
+    },
+    "C5_wall_time": {
+      "by_workload": {
+        "bigint_mul": {
+          "async_poll": 1.4537163834320381,
+          "direct_cot": 1.5789077074732631,
+          "lmpu.sync": 0.0008557710098102689,
+          "sync_tool": 1.9101745234802365,
+          "trace_token": 0.0016292569926008582
+        },
+        "large_context": {
+          "lmpu.sync": 0.0010926764225587249,
+          "trace_token": 0.002594223478808999
+        },
+        "matmul": {
+          "async_poll": 1.6628558279480785,
+          "direct_cot": 1.7060812544077635,
+          "lmpu.sync": 0.03333127440419048,
+          "sync_tool": 3.1636411583749577,
+          "trace_token": 0.0007085399702191353
+        },
+        "sleep": {
+          "async_poll": 1.6803356740856543,
+          "direct_cot": 1.525360279600136,
+          "lmpu.sync": 3.1684111384674907,
+          "sync_tool": 1.5731834510806948,
+          "trace_token": 8.920091204345226e-06
+        }
+      },
+      "limitation": "Native-only timings are not recorded; LMPU includes worker and control-plane overhead.",
+      "status": "partial"
+    }
+  },
+  "limitations": [
+    "Trace-token is a labelled simulation and is not a wall-time or energy result.",
+    "C2 uses synchronous/polling baselines because lmpu.sleep is not yet wired.",
+    "C3 uses a 12k-character context task, not a 16 MiB result.",
+    "C4 batching has no probe in this report.",
+    "C5 lacks a separately measured native baseline.",
+    "Incorrect or failed baselines are retained; token reductions require equal task correctness.",
+    "Failures and incorrect answers are retained in the table."
+  ],
+  "manifest": {
+    "commit": "a48d0bcccb16",
+    "config": {
+      "baselines": [
+        "lmpu.sync",
+        "direct_cot",
+        "trace_token",
+        "sync_tool",
+        "async_poll"
+      ],
+      "device": "cuda",
+      "idle_seconds": 1.0,
+      "max_tokens": 32,
+      "model": "Qwen/Qwen3.5-0.8B",
+      "name": "gate-b",
+      "poll_interval_ms": 50,
+      "results_root": "benchmarks/results",
+      "resume": true,
+      "seed": 20261103,
+      "trials": 2,
+      "warmups": 1,
+      "workloads": [
+        "bigint_mul",
+        "matmul",
+        "large_context",
+        "sleep"
+      ]
+    },
+    "dirty": true,
+    "full_commit": "a48d0bcccb1626b59b917146071ee3c1140d9194",
+    "hardware": {
+      "cpu_count": 16,
+      "device": "cuda",
+      "gpu": {
+        "cuda": "13.0",
+        "name": "NVIDIA GeForce RTX 3080",
+        "torch": "2.14.0+cu130",
+        "total_memory_bytes": 10409017344
+      },
+      "machine": "x86_64",
+      "platform": "Linux-7.2.11-1-cachyos-x86_64-with-glibc2.44",
+      "processor": "",
+      "python": "3.14.7"
+    },
+    "run_dir": "benchmarks/results/2026-11-03/NVIDIA-GeForce-RTX-3080/a48d0bcccb16",
+    "schema": "lmpu.bench.manifest.v1",
+    "started_at": "2026-11-03T19:20:25.820979+00:00"
+  },
+  "run_dir": "benchmarks/reports/gate-b-initial",
+  "schema": "lmpu.bench.report.v1",
+  "table": {
+    "bigint_mul": {
+      "async_poll": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 1
+          },
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 2
+          }
+        ],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 0.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            0.0,
+            0.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 0.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.3030529250390828,
+          1.6043798418249935
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.3030529250390828,
+            1.6043798418249935
+          ],
+          "median": 1.4537163834320381
+        }
+      },
+      "direct_cot": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 179.65482518446888,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": null,
+            "trial": 1
+          },
+          {
+            "error": null,
+            "trial": 2
+          }
+        ],
+        "forward_passes": 33.0,
+        "peak_context_tokens": 116.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            32.0,
+            32.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            84.0,
+            84.0
+          ],
+          "total_tokens": [
+            116.0,
+            116.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 32.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 84.0,
+          "total_tokens": 116.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.4498860579915345,
+          1.7079293569549918
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.4498860579915345,
+            1.7079293569549918
+          ],
+          "median": 1.5789077074732631
+        }
+      },
+      "lmpu.sync": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 86.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            68.0,
+            68.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            18.0,
+            18.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            86.0,
+            86.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 68.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 18.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 86.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          0.000844201073050499,
+          0.0008673409465700388
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            0.000844201073050499,
+            0.0008673409465700388
+          ],
+          "median": 0.0008557710098102689
+        }
+      },
+      "sync_tool": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 1
+          },
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 2
+          }
+        ],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 0.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            0.0,
+            0.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 0.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.7871664920821786,
+          2.0331825548782945
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.7871664920821786,
+            2.0331825548782945
+          ],
+          "median": 1.9101745234802365
+        }
+      },
+      "trace_token": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 3473.0,
+        "peak_context_tokens": 3473.0,
+        "simulated": true,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            3473.0,
+            3473.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            3473.0,
+            3473.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 3473.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 3473.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          0.0015654419548809528,
+          0.0016930720303207636
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            0.0015654419548809528,
+            0.0016930720303207636
+          ],
+          "median": 0.0016292569926008582
+        }
+      }
+    },
+    "large_context": {
+      "lmpu.sync": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 3291.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            3270.0,
+            3270.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            21.0,
+            21.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            3291.0,
+            3291.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 3270.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 21.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 3291.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          0.0010655808728188276,
+          0.0011197719722986221
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            0.0010655808728188276,
+            0.0011197719722986221
+          ],
+          "median": 0.0010926764225587249
+        }
+      },
+      "trace_token": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 3196.0,
+        "peak_context_tokens": 3196.0,
+        "simulated": true,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            3196.0,
+            3196.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            3196.0,
+            3196.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 3196.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 3196.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          0.001347091980278492,
+          0.003841354977339506
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            0.001347091980278492,
+            0.003841354977339506
+          ],
+          "median": 0.002594223478808999
+        }
+      }
+    },
+    "matmul": {
+      "async_poll": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 220.05779027467116,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 32.0,
+        "peak_context_tokens": 213.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            78.0,
+            78.0
+          ],
+          "generated_tokens": [
+            30.0,
+            30.0
+          ],
+          "injected_tokens": [
+            50.0,
+            50.0
+          ],
+          "prefill_tokens": [
+            55.0,
+            55.0
+          ],
+          "total_tokens": [
+            213.0,
+            213.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 78.0,
+          "generated_tokens": 30.0,
+          "injected_tokens": 50.0,
+          "prefill_tokens": 55.0,
+          "total_tokens": 213.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.5949729718267918,
+          1.7307386840693653
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.5949729718267918,
+            1.7307386840693653
+          ],
+          "median": 1.6628558279480785
+        }
+      },
+      "direct_cot": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 234.06798869386466,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": null,
+            "trial": 1
+          },
+          {
+            "error": null,
+            "trial": 2
+          }
+        ],
+        "forward_passes": 33.0,
+        "peak_context_tokens": 72.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            32.0,
+            32.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            40.0,
+            40.0
+          ],
+          "total_tokens": [
+            72.0,
+            72.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 32.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 40.0,
+          "total_tokens": 72.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.6029336608480662,
+          1.8092288479674608
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.6029336608480662,
+            1.8092288479674608
+          ],
+          "median": 1.7060812544077635
+        }
+      },
+      "lmpu.sync": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 70.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            52.0,
+            52.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            18.0,
+            18.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            70.0,
+            70.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 52.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 18.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 70.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          0.025472069857642055,
+          0.04119047895073891
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            0.025472069857642055,
+            0.04119047895073891
+          ],
+          "median": 0.03333127440419048
+        }
+      },
+      "sync_tool": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 373.38946560090886,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 64.0,
+        "peak_context_tokens": 238.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            52.0,
+            52.0
+          ],
+          "generated_tokens": [
+            62.0,
+            62.0
+          ],
+          "injected_tokens": [
+            69.0,
+            69.0
+          ],
+          "prefill_tokens": [
+            55.0,
+            55.0
+          ],
+          "total_tokens": [
+            238.0,
+            238.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 52.0,
+          "generated_tokens": 62.0,
+          "injected_tokens": 69.0,
+          "prefill_tokens": 55.0,
+          "total_tokens": 238.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          2.734846542822197,
+          3.5924357739277184
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            2.734846542822197,
+            3.5924357739277184
+          ],
+          "median": 3.1636411583749577
+        }
+      },
+      "trace_token": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 1519.0,
+        "peak_context_tokens": 1519.0,
+        "simulated": true,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            1519.0,
+            1519.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            1519.0,
+            1519.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 1519.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 1519.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          0.0006721599493175745,
+          0.0007449199911206961
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            0.0006721599493175745,
+            0.0007449199911206961
+          ],
+          "median": 0.0007085399702191353
+        }
+      }
+    },
+    "sleep": {
+      "async_poll": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 1
+          },
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 2
+          }
+        ],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 0.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            0.0,
+            0.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 0.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.5709735630080104,
+          1.7896977851632982
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.5709735630080104,
+            1.7896977851632982
+          ],
+          "median": 1.6803356740856543
+        }
+      },
+      "direct_cot": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 180.9046961681219,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": null,
+            "trial": 1
+          },
+          {
+            "error": null,
+            "trial": 2
+          }
+        ],
+        "forward_passes": 33.0,
+        "peak_context_tokens": 55.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            32.0,
+            32.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            23.0,
+            23.0
+          ],
+          "total_tokens": [
+            55.0,
+            55.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 32.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 23.0,
+          "total_tokens": 55.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.3338495320640504,
+          1.7168710271362215
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.3338495320640504,
+            1.7168710271362215
+          ],
+          "median": 1.525360279600136
+        }
+      },
+      "lmpu.sync": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 69.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            67.0,
+            67.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            2.0,
+            2.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            69.0,
+            69.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 67.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 2.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 69.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          3.1664764049928635,
+          3.170345871942118
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            3.1664764049928635,
+            3.170345871942118
+          ],
+          "median": 3.1684111384674907
+        }
+      },
+      "sync_tool": {
+        "correctness": {
+          "passes": 0,
+          "rate": 0.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 1
+          },
+          {
+            "error": "model did not emit a valid tool program",
+            "trial": 2
+          }
+        ],
+        "forward_passes": 0.0,
+        "peak_context_tokens": 0.0,
+        "simulated": false,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            0.0,
+            0.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            0.0,
+            0.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 0.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 0.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          1.444964304100722,
+          1.7014025980606675
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            1.444964304100722,
+            1.7014025980606675
+          ],
+          "median": 1.5731834510806948
+        }
+      },
+      "trace_token": {
+        "correctness": {
+          "passes": 2,
+          "rate": 1.0,
+          "total": 2
+        },
+        "energy": {
+          "gpu_energy_joules": 0.0,
+          "vram_peak_mb": 0.0
+        },
+        "failures": [],
+        "forward_passes": 6.0,
+        "peak_context_tokens": 6.0,
+        "simulated": true,
+        "token_cdf": {
+          "control_tokens": [
+            0.0,
+            0.0
+          ],
+          "generated_tokens": [
+            6.0,
+            6.0
+          ],
+          "injected_tokens": [
+            0.0,
+            0.0
+          ],
+          "prefill_tokens": [
+            0.0,
+            0.0
+          ],
+          "total_tokens": [
+            6.0,
+            6.0
+          ]
+        },
+        "tokens": {
+          "control_tokens": 0.0,
+          "generated_tokens": 6.0,
+          "injected_tokens": 0.0,
+          "prefill_tokens": 0.0,
+          "total_tokens": 6.0
+        },
+        "trials": 2,
+        "wall_time_cdf": [
+          8.2401093095541e-06,
+          9.600073099136353e-06
+        ],
+        "wall_time_seconds": {
+          "ci95": [
+            8.2401093095541e-06,
+            9.600073099136353e-06
+          ],
+          "median": 8.920091204345226e-06
+        }
+      }
+    }
+  },
+  "timeline": [
+    {
+      "baseline": "direct_cot",
+      "started_at": 1793733670.164804,
+      "trial": 1,
+      "wall_time_seconds": 1.3338495320640504,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "async_poll",
+      "started_at": 1793733672.610574,
+      "trial": 1,
+      "wall_time_seconds": 1.3030529250390828,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733674.9868948,
+      "trial": 1,
+      "wall_time_seconds": 0.0015654419548809528,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733676.0607867,
+      "trial": 1,
+      "wall_time_seconds": 9.600073099136353e-06,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "sync_tool",
+      "started_at": 1793733677.1405444,
+      "trial": 1,
+      "wall_time_seconds": 2.734846542822197,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733680.9522877,
+      "trial": 1,
+      "wall_time_seconds": 3.170345871942118,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "sync_tool",
+      "started_at": 1793733685.1738951,
+      "trial": 1,
+      "wall_time_seconds": 1.444964304100722,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "direct_cot",
+      "started_at": 1793733687.667907,
+      "trial": 1,
+      "wall_time_seconds": 1.7079293569549918,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733690.4326527,
+      "trial": 1,
+      "wall_time_seconds": 0.003841354977339506,
+      "workload": "large_context"
+    },
+    {
+      "baseline": "async_poll",
+      "started_at": 1793733691.4822998,
+      "trial": 1,
+      "wall_time_seconds": 1.7896977851632982,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "sync_tool",
+      "started_at": 1793733694.3199444,
+      "trial": 1,
+      "wall_time_seconds": 1.7871664920821786,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733697.180281,
+      "trial": 1,
+      "wall_time_seconds": 0.0008673409465700388,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "async_poll",
+      "started_at": 1793733698.2582946,
+      "trial": 1,
+      "wall_time_seconds": 1.7307386840693653,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733701.066289,
+      "trial": 1,
+      "wall_time_seconds": 0.0007449199911206961,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733702.2099264,
+      "trial": 1,
+      "wall_time_seconds": 0.025472069857642055,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733703.3098297,
+      "trial": 1,
+      "wall_time_seconds": 0.0010655808728188276,
+      "workload": "large_context"
+    },
+    {
+      "baseline": "direct_cot",
+      "started_at": 1793733704.3938835,
+      "trial": 1,
+      "wall_time_seconds": 1.8092288479674608,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "sync_tool",
+      "started_at": 1793733707.247881,
+      "trial": 2,
+      "wall_time_seconds": 3.5924357739277184,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733711.9157338,
+      "trial": 2,
+      "wall_time_seconds": 0.0006721599493175745,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733712.9887445,
+      "trial": 2,
+      "wall_time_seconds": 0.000844201073050499,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733714.0655272,
+      "trial": 2,
+      "wall_time_seconds": 0.0011197719722986221,
+      "workload": "large_context"
+    },
+    {
+      "baseline": "sync_tool",
+      "started_at": 1793733715.1289513,
+      "trial": 2,
+      "wall_time_seconds": 2.0331825548782945,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733718.2246444,
+      "trial": 2,
+      "wall_time_seconds": 0.04119047895073891,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "lmpu.sync",
+      "started_at": 1793733719.3399231,
+      "trial": 2,
+      "wall_time_seconds": 3.1664764049928635,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "sync_tool",
+      "started_at": 1793733723.555291,
+      "trial": 2,
+      "wall_time_seconds": 1.7014025980606675,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733726.3102877,
+      "trial": 2,
+      "wall_time_seconds": 0.001347091980278492,
+      "workload": "large_context"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733727.3568935,
+      "trial": 2,
+      "wall_time_seconds": 0.0016930720303207636,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "trace_token",
+      "started_at": 1793733728.4025626,
+      "trial": 2,
+      "wall_time_seconds": 8.2401093095541e-06,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "direct_cot",
+      "started_at": 1793733729.480468,
+      "trial": 2,
+      "wall_time_seconds": 1.6029336608480662,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "direct_cot",
+      "started_at": 1793733732.1586094,
+      "trial": 2,
+      "wall_time_seconds": 1.4498860579915345,
+      "workload": "bigint_mul"
+    },
+    {
+      "baseline": "async_poll",
+      "started_at": 1793733734.667896,
+      "trial": 2,
+      "wall_time_seconds": 1.5949729718267918,
+      "workload": "matmul"
+    },
+    {
+      "baseline": "direct_cot",
+      "started_at": 1793733737.324284,
+      "trial": 2,
+      "wall_time_seconds": 1.7168710271362215,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "async_poll",
+      "started_at": 1793733740.1239505,
+      "trial": 2,
+      "wall_time_seconds": 1.5709735630080104,
+      "workload": "sleep"
+    },
+    {
+      "baseline": "async_poll",
+      "started_at": 1793733742.7392864,
+      "trial": 2,
+      "wall_time_seconds": 1.6043798418249935,
+      "workload": "bigint_mul"
+    }
+  ]
+}

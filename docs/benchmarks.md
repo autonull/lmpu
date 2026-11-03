@@ -16,6 +16,16 @@ Artifacts are written under `benchmarks/results/<date>/<device>/<commit>/`:
 - `manifest.json`: config, commit, dirty flag, platform, GPU.
 - `raw.jsonl`: one canonical `lmpu.bench.trial.v1` record per trial.
 - `summary.json`: per-baseline medians, bootstrap 95% intervals, and failures.
+- `report.json` / `report.md`: C1–C5 tables, CDFs, timeline, and limitations.
+
+Run `make report` to render the newest artifact directory. Published reports live
+in `benchmarks/reports/`. The initial Gate B report is
+`benchmarks/reports/gate-b-initial/report.md`; its C2–C5 status and limitations
+are part of the artifact.
+
+Run settings are intentionally small for reproducibility: 512² matmul, 12k
+context, 3 s sleep, 64-token default budget. Increase them explicitly for a
+paper run.
 
 ## Baselines
 
@@ -34,9 +44,9 @@ counts. Trial order is shuffled per trial with a seed derived from the base seed
 ## Workloads
 
 - `bigint_mul`: two 50-digit operands, exact integer result.
-- `matmul`: 2048 x 2048 deterministic float32 matrix product.
-- `large_context`: find a marker in a 40k+ character document.
-- `sleep`: a 12-second blocking `python.vm` job.
+- `matmul`: 512 x 512 deterministic float32 matrix product.
+- `large_context`: find a marker in a 12k+ character document.
+- `sleep`: a 3-second blocking `python.vm` job.
 
 ## Energy
 

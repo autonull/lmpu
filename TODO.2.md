@@ -27,14 +27,15 @@
 - Benchmark harness: TOML/JSON config, explicit seeds, warmups, measured trials, resume-safe `raw.jsonl`, hardware/commit manifest, summary medians and bootstrap CIs, and a real-runtime sync trial runner.
 - Fair baselines: direct CoT, labelled trace-token emulation, PAL-style sync tool, and summary-only async polling, plus `lmpu.sync`; randomized per-trial order, baseline-aware resume keys, and per-baseline summaries. Model baselines use the shared HF host and decoding budget.
 - Energy: NVML idle probe before every trial, per-model-trial GPU joules, idle-rate correction metadata, and a documented methodology in `docs/benchmarks.md`.
-- Initial workloads: `bigint_mul`, `matmul` (2048²), `large_context` (50k-char secret lookup), and `sleep` (12 s); all verified through `lmpu.sync` one-trial artifacts.
-- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1–B4 add 13 targeted tests (8 unit, 5 integration).
+- Initial workloads: `bigint_mul`, `matmul` (512²), `large_context` (12k-char secret lookup), and `sleep` (3 s); all verified through `lmpu.sync` one-trial artifacts.
+- C1–C5 report generator: `src/lmpu/bench/report.py`; first published artifacts in `benchmarks/reports/gate-b-initial/` with raw data, medians, CIs, CDFs, timeline, and explicit claim limitations.
+- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1–B5 add 15 targeted tests (10 unit, 5 integration).
 
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
 - P1 exit gate is not closed: canonical demo assertions and the 16 MiB dashboard proof (Gate C).
-- The C1–C5 report (B5) remains open.
-- Trace-token baseline is a labelled simulation; a small real-model trace run remains for B5.
+- Report claims are partial: C1/C3/C5 are bounded by current workloads and failed strong baselines; C2 lacks `lmpu.sleep`; C4 lacks a batching probe.
+- Trace-token baseline is a labelled simulation; a small real-model trace run remains.
 - CPU RAPL energy is not measured; NVML GPU energy is the only energy path.
 - Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified (Gate E).
 - Legacy `mypy`/`ruff` findings remain outside the changed-file policy.
@@ -163,7 +164,7 @@ These items do not block A–D. Each has a kill criterion.
 - [x] B2 Baselines — `src/lmpu/bench/baselines.py`, baseline-aware harness records/summary/resume, `--baseline` CLI, `tests/integration/test_bench_baselines.py`; direct CoT, trace-token, sync tool, async polling, and LMPU sync
 - [x] B3 Energy sampling — `src/lmpu/bench/energy.py`, per-trial idle metadata and corrected GPU joules, `docs/benchmarks.md`
 - [x] B4 Initial workloads — `matmul` and `text_stats` ops, `matmul` / `large_context` / `sleep` workload specs, `tests/unit/test_bench_workloads.py`, `tests/integration/test_bench_processor_ops.py`
-- [ ] B5 C1–C5 report
+- [x] B5 C1–C5 report — `src/lmpu/bench/report.py`, `make report`, first artifacts in `benchmarks/reports/gate-b-initial/`; C2–C5 limitations recorded
 
 ### Gate C
 - [ ] C1 Three canonical demos
@@ -186,12 +187,14 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gate A is closed and B4 is closed. Continue Gate B:
+Gate A is closed and the first B5 report is published. Continue Gate B evidence work:
 
-1. **B5:** run the full baseline matrix on the reference GPU, then emit the first C1–C5 report with medians, CIs, CDFs, artifacts, and limitations. Include a small real-model trace-token run.
-2. Keep Gate C closed until B5 produces the report.
+1. Close C2 by wiring an `lmpu.sleep` S1 treatment and measuring zero forwards.
+2. Close C4 with a batched-vs-individual submission probe.
+3. Replace C3's 12k context probe with a 16 MiB result probe.
+4. Add a separately measured native baseline for C5.
 
-The raw artifacts for `matmul`, `large_context`, and `sleep` already pass one-trial correctness checks through `lmpu.sync`.
+Keep Gate C closed until the partial claims are resolved or explicitly accepted.
 
 ---
 

@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, help="Base seed")
     parser.add_argument("--device", help="Host device, e.g. cpu or cuda")
     parser.add_argument("--model", help="Reference model name")
+    parser.add_argument("--max-tokens", type=int, help="Per-turn decoding budget")
     parser.add_argument("--idle-seconds", type=float, help="Idle GPU baseline duration")
     parser.add_argument("--output", help="Results root directory")
     parser.add_argument("--no-resume", action="store_true", help="Disable resume checks")
@@ -70,6 +71,7 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed,
         device=args.device,
         model=args.model,
+        max_tokens=args.max_tokens,
         idle_seconds=args.idle_seconds,
         results_root=args.output,
         resume=False if args.no_resume else None,
