@@ -1,6 +1,6 @@
 # TODO.2 — LMPU Execution Plan
 
-**Status:** Active execution plan — 2026-11-03  
+**Status:** Superseded for execution by `TODO.3.md` — 2026-11-03  
 **Supersedes for execution:** `TODO.1.md`  
 **Design authority:** `TODO.1.md` remains the detailed reference for architecture, schemas, phase rationale, and original acceptance text. This file owns order, scope, and progress.  
 **Companions:** `README.md`, `compared.md`
