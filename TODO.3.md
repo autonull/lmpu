@@ -176,20 +176,24 @@ the claims that pass; the release notes must list every claim that did not.
 
 ## 0.3 Handoff for a fresh session
 
-**Where the plan stands (2026-11-03, Batch 0 complete).** `TODO.2.md` is
-superseded. `TODO.3.md` is the active execution plan. Gates A-C from `TODO.2`
-are closed; D3 artifacts build but the release is parked and unsigned. Batch 0
-(L0) landed: correctness scoring on decoded final answers for every model arm,
-all-token accounting retained on the failure path, simulation quarantine for
-`trace_token`, the mechanism/end-to-end report split (`lmpu.bench.report.v2`),
-per-correct-task cost, paired-trial deltas, the baseline taxonomy with
-in-process `app_agent` and `engine_native` competitors, per-phase
-instrumentation, and the pre-registration artifact committed **before** the
-first measured run. The ceiling verdict is **INCONCLUSIVE** — existing
-artifacts cannot price the best-case workload and the instrumented pilot
-(`benchmarks/reports/l0-pilot`) shows the 0.8B model-planner arm failing at
-this budget (see `docs/viability/ceiling-analysis.md`). Batch 1 (oracle arms)
-is required to resolve it.
+**Where the plan stands (2026-11-03, Batch 1 in flight — review pending).**
+`TODO.2.md` is superseded. `TODO.3.md` is the active execution plan. Gates
+A-C from `TODO.2` are closed; D3 artifacts build but the release is parked
+and unsigned. Batch 0 (L0) landed: ceiling verdict INCONCLUSIVE. Batch 1
+(L1) is **not complete and no Batch 1 verdict may be recorded**: treatment
+arms, the oracle planner, the two-session arms, and the `best_case` workload
+are implemented and committed (`5360c1c`), and the Batch 1 pre-registration
+is committed (`docs/viability/preregistration-batch1.md`). The first pilot
+was discarded (void: 0.8B hybrid model OOM'd a 10 GB card — default
+`logits_to_keep=0` computes logits for all 32,761 positions ≈ 16.3 GB in
+one tensor; fixed in `01acf15` by keeping last-position logits only). The
+re-run was operator-aborted mid-trial-1 on memory-fraction concern; its
+partial records show every model arm failing on a **context-headroom
+defect**: the best_case prompt counts 32,818 tokens (32,761-token document
++ 57-token TASK suffix), exceeding the engine's `max_context = 32768`
+guard, so the decode loop breaks after 1–2 tokens and no arm can emit
+`ANSWER: <sha256>`. Tool execution was correct throughout
+(`tool_correct=True`). See section 10 → Batch 1 status and section 11.
 
 **What to read first.** `README.md` for the design; `TODO.3.md` sections 0,
 0.1, 0.2, 0.3; `docs/viability/` (pre-registration, strongest-baseline audit,
@@ -204,10 +208,9 @@ uv run python -c "import torch, transformers, scipy, pytest; print('smoke ok')"
 uv run python -m pytest tests/unit/test_bench_gate.py tests/unit/test_bench_report.py -q
 ```
 
-Then Batch 0 (L0) is **done**. The next milestone is **Batch 1 (L1)**:
-`lmpu.model_async`, `lmpu.model_sync`, the oracle planner, and the best-case
-oracle arms (single- and two-session). Commit the pre-registration artifact
-before any measured trial.
+Batch 0 (L0) is **done**. Batch 1 (L1) is **implemented but blocked** — read
+the §10 "Batch 1 status detail" and §11 before running anything; the L1
+pilot has not produced a usable dataset yet.
 
 **Non-negotiables.**
 - Do not sign, tag, publish, or market anything.
@@ -588,7 +591,7 @@ all-token accounting, simulation quarantine, baseline taxonomy, cost
 decomposition, and the report split. Run the ceiling analysis on existing
 artifacts; no new GPU matrix yet.
 
-**Batch 1 — one baseline change (L1 + probes).**
+**Batch 1 — one baseline change (L1 + probes).** *(In flight 2026-11-03; not complete. Implemented in `5360c1c`; blocked on the context-headroom defect, see §10/§11.)*
 V1.1, V1.2, V1.8, V0.9, V1.10. Add the treatment, oracle planner, and fast
 probes; run the best-case workload single-session and with two concurrent
 sessions plus P1-P3. Stop only if both oracle arms lose and the probes show no
@@ -630,10 +633,58 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-03 (Batch 0 committed).** Harness integrity is closed and
-verified on GPU (`benchmarks/reports/l0-pilot`). The ceiling verdict is
-INCONCLUSIVE; V0.8 stays open until the best-case oracle arms exist. Batch 1
-(V1.1, V1.2, V1.8, V1.10, V0.9-validated) is next.
+**As of 2026-11-03 (Batch 0 committed; Batch 1 in flight, review pending).**
+Harness integrity is closed and verified on GPU (`benchmarks/reports/l0-pilot`).
+The ceiling verdict is INCONCLUSIVE; V0.8 stays open until the best-case
+oracle arms exist. Batch 1 is implemented (`5360c1c`) and the L1 pilot is
+**blocked on a context-headroom defect**; no Batch 1 result exists yet.
+
+### Batch 1 status detail (for the reviewer)
+
+Committed work: treatment arms `lmpu.model_async` / `lmpu.model_sync`
+(V1.1/V1.2), oracle planner via `<arm>_oracle` twins for every end-to-end
+arm (V1.8), two-session arms `lmpu.model_async_2session` /
+`app_agent_2session` (oracle-planned by construction), the `best_case`
+workload (16 MiB deterministic buffer, 60 s python.vm job, 850-line ledger
+document + TASK suffix, exact sha256 oracle), per-session KV-warm decoders
+on a shared engine, pre-registration `docs/viability/preregistration-batch1.md`
+committed **before** any measured run, and `HFEngine` logits fix `01acf15`.
+
+Void/aborted runs (results gitignored under `benchmarks/results/`; no report
+copied to `benchmarks/reports/`; **not evidence**):
+1. First best_case pilot — all arms OOM'd: default `logits_to_keep=0` makes
+   the lm_head emit all-position logits (~16.3 GB) on a 10 GB card. Artifact
+   deleted; engine fix committed (`01acf15`). Initial eager-attention
+   diagnosis was wrong (default SDPA already handled the hybrid
+   linear/full-attention architecture; Qwen3.5-0.8B: 18 linear-attention +
+   6 full-attention layers, 2 KV heads, head_dim 256).
+2. Re-run aborted mid-trial-1 on a 10 GB memory-fraction concern (peak
+   ~7.7 GB observed with two 32k sessions in flight). Partial records:
+   every model arm produced `tool_correct=True` but `generated_tokens=1–2`
+   and `correct=False`. Root cause is **not** model quality: the harness
+   counts the prompt at 32,818 tokens (32,761 document + 57 TASK),
+   exceeding the engine's `max_context=32768` guard
+   (`src/lmpu/host/hf.py:196`), so the decode loop breaks after 1–2 tokens.
+   `direct_cot` failed identically. The 0.8B has not yet been given a fair
+   chance to answer; no capability conclusion may be drawn.
+
+Open defects/decisions for the reviewer:
+- **Context-headroom defect** (blocking): either trim the document so the
+  total prompt fits under 32,768 with answer headroom (~32.4k, e.g. 840
+  lines), or raise `HFEngine.max_context` (a guard constant; memory scales
+  with actual tokens). If the prompt size changes, commit a dated
+  pre-registration revision **before** re-running.
+- **Memory fraction**: user constraint — use only a fraction of the 10 GB
+  card. Two-session arms peaked ~7.7 GB; if the constraint is binding, the
+  two-session arm needs a smaller context or exclusion, again via dated
+  pre-registration revision.
+- **P2** (plan graph) is not implemented; V1.10 lists it as required signal.
+  P1 (worker-side reducer) is satisfied by design pending measurement
+  (`injected_tokens` ≈ 99–198 on the answer turn observed); P3 (KV wake vs
+  reopen) is measurable from `session_reopen_oracle` vs
+  `lmpu.model_async_oracle` once the arms run.
+- `logs/batch1-oracle-pilot.log` (gitignored) holds the relaunched pilot
+  command lines verbatim; re-run from `01acf15` or later.
 
 ### V0 — Measurement integrity
 - [x] V0.1 Correctness scoring — every model arm decodes a final answer and is scored on it (`score_answer`); tool result correctness retained separately as `tool_correct`
@@ -647,16 +698,16 @@ INCONCLUSIVE; V0.8 stays open until the best-case oracle arms exist. Batch 1
 - [x] V0.9 Competitor prototypes — `app_agent` (in-process tool, KV-warm prefix cache, bounded 200-char ingestion, programmatic polling) and `engine_native` (blocking in-process call) runnable in-harness; cache layout/chunking/interval/prompt/retry policy recorded in the pre-registration
 
 ### V1 — Mechanism isolation
-- [ ] V1.1 `lmpu.model_async` — Batch 1
-- [ ] V1.2 `lmpu.model_sync` — Batch 1
-- [x] V1.3 Baseline taxonomy — mechanism (`lmpu.*`, `native`), end-to-end (seven model arms), simulation (`trace_token`); old `sync_tool`/`async_poll` names removed
+- [~] V1.1 `lmpu.model_async` — implemented (`5360c1c`); unmeasured (Batch 1 blocked on context-headroom defect)
+- [~] V1.2 `lmpu.model_sync` — implemented (`5360c1c`); unmeasured (same block)
+- [x] V1.3 Baseline taxonomy — mechanism (`lmpu.*`, `native`), end-to-end (seven base model arms + `lmpu.model_async/sync` + two two-session arms; every end-to-end base arm has an `<arm>_oracle` twin via `split_oracle`), simulation (`trace_token`); old `sync_tool`/`async_poll` names removed
 - [x] V1.4 Per-phase instrumentation — `plan`, `prefill`, `submit`, `park`, `wake`, `poll`, `import`, `execute`, `ingest`, `answer`, `reprefill` recorded per phase (wall seconds) plus token-kind splits
 - [x] V1.5 Mechanism pre-registration — hypotheses and thresholds recorded (`docs/viability/preregistration.md`)
 - [ ] V1.6 Negative controls — Batch 3
-- [x] V1.7 Pre-registration artifact — `docs/viability/preregistration.md` committed before the first measured run (pre-registration commit precedes `l0-pilot`)
-- [ ] V1.8 Oracle planner — Batch 1
+- [x] V1.7 Pre-registration artifact — `docs/viability/preregistration.md` committed before the first measured run (pre-registration commit precedes `l0-pilot`); Batch 1 pre-registration (`preregistration-batch1.md`) committed before the first Batch 1 run (`5360c1c`)
+- [~] V1.8 Oracle planner — implemented (V1.1 commit; `<arm>_oracle` twins, zero planning tokens, gold program injected); partially exercised — tool path verified correct, answer turn blocked by the context-headroom defect
 - [ ] V1.9 Capability arm — Batch 3
-- [ ] V1.10 Fast probes — Batch 1
+- [ ] V1.10 Fast probes — P1 satisfied by design pending measurement; P3 measurable from best_case arms; **P2 not implemented**
 
 ### V2 — End-to-end
 - [ ] V2.1 Calibrate model and budget
@@ -719,27 +770,46 @@ INCONCLUSIVE; V0.8 stays open until the best-case oracle arms exist. Batch 1
 
 ## 11. Immediate next actions
 
-*Batch 0 is complete as of 2026-11-03 (harness integrity committed; ceiling
-INCONCLUSIVE). The remaining work, in order:*
+*Batch 0 closed. Batch 1 is implemented but blocked and unmeasured as of
+2026-11-03; a developer review precedes the next run. In order:*
 
-1. **Batch 1 (L1).** Implement `lmpu.model_async` (V1.1) and `lmpu.model_sync`
-   (V1.2): host model in the loop; runtime submits, parks, wakes; one KV-warm
-   session. Add the oracle planner (V1.8): gold program injected into both tool
-   arms so architecture is isolated from model planning. Run the best-case
-   workload — 16 MiB result, 60 s job, 32k context, exact oracle — single- and
-   two-session. If LMPU loses to `app_agent` in both arms, record FAIL and
-   narrow; otherwise diagnose before expanding. Also run the fast probes
-   (V1.10, P1-P3: worker-side reducer, plan graph, KV wake vs reopen). The
-   best-case oracle arms are where V0.8's ceiling verdict resolves.
-2. **V2.1 calibration (prerequisite for Batch 2).** The 0.8B model never emits
-   EOS within 256 tokens and echoes `<a>`-style placeholders verbatim (measured
-   in `benchmarks/reports/l0-pilot`). Budget sweep 128/256/512, few-shot
-   prompts with concrete values, stop discipline; measure parse failures.
-3. **Batch 3 (L3).** Capability and negative controls (V1.6, V1.9).
-4. **Freeze release.** Keep `dist/` and the release checklist; do not sign,
-   tag, or publish.
-5. **Record the verdict rule now.** No post-hoc threshold changes after seeing
-   results.
+1. **Review Batch 1 commits.** `5360c1c` (treatment arms, oracle planner,
+   two-session arms, `best_case`, pre-registration) and `01acf15`
+   (`HFEngine` last-position-logits fix). Verify: `lmpu.model_async` S1
+   park semantics (`src/lmpu/bench/baselines.py`), oracle twin wiring
+   (`lmpu/bench/taxonomy.py::split_oracle`), two-session decoder sharing,
+   and the claim path in `report.py` (`lmpu.model_*` arms enter claim E;
+   oracle twins are end-to-end competitors).
+2. **Fix the context-headroom defect (blocking).** The best_case prompt
+   counts 32,818 tokens, above `HFEngine.max_context = 32768`
+   (`src/lmpu/host/hf.py:196`), so every model arm generated 1–2 tokens
+   and scored 0. Either trim the document (~840 lines) or raise the engine
+   guard; if the prompt changes, commit a dated revision to
+   `docs/viability/preregistration-batch1.md` **before** re-running.
+3. **Decide the memory-fraction question.** The user capped experiments at
+   a fraction of the 10 GB card; the two-session arms peaked ~7.7 GB. If
+   the cap is binding, drop or shrink the two-session arms (dated
+   pre-registration revision); the single-session arms still decide L1.
+4. **Re-run the Batch 1 pilot from a clean tree** (`01acf15` or later),
+   same arms/trials/seed as `logs/batch1-oracle-pilot.log`. Include the
+   failure-mode check: if the model still stops at the answer turn with
+   headroom available, the defect is prompting, not capacity — that is the
+   V2.1 calibration finding, not a harness re-run.
+5. **Then the stop rule applies** (preregistration-batch1.md §5): LMPU path
+   vs `app_agent_oracle` in single- and two-session arms; P3 (KV wake vs
+   re-prefill) from the same dataset; P2 ships only as an explicitly
+   unimplemented probe if the plan-graph executor is out of scope.
+6. **V0.8 ceiling verdict** stays INCONCLUSIVE until step 4 completes. No
+   end-to-end or release claim may cite the aborted pilot.
+7. **Do not run model-planner arms yet** — V2.1 calibration (L0 pilot
+   showed the 0.8B echoing `<a>`-style placeholders at max_tokens=256)
+   precedes Batch 2; Batch 2 remains out of scope until the L1 stop rule
+   is decided.
+
+The aborted-pilot artifacts (gitignored
+`benchmarks/results/batch1-oracle-pilot/`) show `tool_correct=True`,
+`correct=False`, `generated_tokens=1–2` on every model arm — evidence of
+the headroom defect only. Do not analyze them as results.
 
 The harness is now incapable of producing a false efficiency claim from
 simulation or tool-result scoring. The next commit should add the treatment
