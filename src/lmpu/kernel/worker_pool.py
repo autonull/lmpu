@@ -19,6 +19,7 @@ from ..kernel.events import EventLog
 from ..kernel.jobs import JobRecord, JobStatus, JobTable
 from ..memory.fdpass import FDPassingError, send_fds
 from ..protocol.messages import (
+    ErrorCode,
     Event,
     EventKind,
     HeartbeatData,
@@ -28,6 +29,8 @@ from ..protocol.messages import (
     NeedsMoreInputData,
     ProgressData,
 )
+
+_VALID_ERROR_CODES = frozenset(code.value for code in ErrorCode)
 
 
 @dataclass
@@ -341,10 +344,11 @@ class WorkerPool:
                     fds.append(os.open(spec["path"], flags))
                 header = {"job_id": job.job_id, "buffers": metadata}
                 await asyncio.to_thread(send_fds, worker.fd_socket, fds, header)
-                command["buffer_transfer"] = "scm_rights"
-                return
             except (OSError, FDPassingError):
                 command["buffer_transfer"] = "inline_fallback"
+            else:
+                command["buffer_transfer"] = "scm_rights"
+                return
             finally:
                 for fd in fds:
                     os.close(fd)
@@ -471,6 +475,8 @@ class WorkerPool:
             return
 
         error_code = msg.get("error_code", "internal")
+        if error_code not in _VALID_ERROR_CODES:
+            error_code = "internal"
         retriable = msg.get("retriable", False)
         self._fail_job(job, error_code, msg.get("message", "Worker error"), retriable)
 

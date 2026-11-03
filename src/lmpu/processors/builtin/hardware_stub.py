@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
 import numpy as np
@@ -20,9 +21,19 @@ class HardwareStubProcessor(Processor):
         version="0.1.0",
         protocol="lmpu/1",
         ops=[
-            {"name": "simulate_latency", "inputs": ["duration_ms", "payload"], "outputs": ["result"]},
-            {"name": "deterministic_compute", "inputs": ["seed", "operation"], "outputs": ["result"]},
+            {
+                "name": "simulate_latency",
+                "inputs": ["duration_ms", "payload"],
+                "outputs": ["result"],
+            },
+            {
+                "name": "deterministic_compute",
+                "inputs": ["seed", "operation"],
+                "outputs": ["result"],
+            },
             {"name": "stream_data", "inputs": ["chunks", "delay_ms"], "outputs": ["stream"]},
+            {"name": "simulate_oom", "inputs": ["bytes"], "outputs": []},
+            {"name": "simulate_crash", "inputs": ["signal"], "outputs": []},
         ],
         limits={
             "max_buffer_bytes": 1_000_000,
@@ -56,12 +67,18 @@ class HardwareStubProcessor(Processor):
                 return await self._deterministic_compute(inputs, ctx)
             elif op == "stream_data":
                 return await self._stream_data(inputs, ctx, config)
+            elif op == "simulate_oom":
+                self._simulate_oom()
+            elif op == "simulate_crash":
+                os._exit(int(inputs.get("signal", 17)))
             else:
                 return Result(
                     success=False,
                     error_code="unknown_op",
                     error_message=f"Unknown operation: {op}",
                 )
+        except MemoryError:
+            raise
         except Exception as e:
             return Result(
                 success=False,
@@ -71,6 +88,10 @@ class HardwareStubProcessor(Processor):
             )
         finally:
             ctx.progress(1.0, f"{op} finished")
+
+    @staticmethod
+    def _simulate_oom() -> None:
+        raise MemoryError("simulated device OOM")
 
     async def _simulate_latency(
         self,
@@ -154,7 +175,7 @@ class HardwareStubProcessor(Processor):
             await asyncio.sleep(delay_ms / 1000)
             chunk = {"index": i, "data": np.random.randn(10).astype(np.float32).tolist()}
             stream_data.append(chunk)
-            ctx.progress((i + 1) / chunks, f"Chunk {i+1}/{chunks}")
+            ctx.progress((i + 1) / chunks, f"Chunk {i + 1}/{chunks}")
 
         result_data = {
             "stream": stream_data,

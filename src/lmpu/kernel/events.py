@@ -2,32 +2,33 @@
 
 from __future__ import annotations
 
-import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Optional
-from ulid import ULID
 
 from ..protocol.messages import (
     Event,
-    EventKind,
-    EventPayload,
 )
 
 
 @dataclass
 class SessionEventLog:
     """Per-session event log with ring buffer."""
+
     session_id: str
     events: deque = field(default_factory=lambda: deque(maxlen=10000))
     seq_counter: int = 0
     ack_cursor: int = 0  # Highest acknowledged sequence
+    event_ids: dict[str, Event] = field(default_factory=dict)
 
     def append(self, event: Event) -> Event:
-        """Append event, assign sequence number."""
+        """Append event, assign sequence number, and dedupe by event_id."""
+        if event.event_id and event.event_id in self.event_ids:
+            return self.event_ids[event.event_id]
         self.seq_counter += 1
         event.seq = self.seq_counter
         self.events.append(event)
+        if event.event_id:
+            self.event_ids[event.event_id] = event
         return event
 
     def get_since(self, seq: int) -> list[Event]:

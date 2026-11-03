@@ -81,6 +81,7 @@ not merely "a file exists".
 | `pure.func`, `python.vm`, `vector.engine`, `symbolic.planner`, `neural.summary`, `hardware.stub` | Partial | all register and return results; all six pass the representative contract suite (`tests/contract/test_processor_contract.py`); per-op coverage is incomplete |
 | `vector.engine` | Partial | fd-mapped 16 KiB matmul completes with `copy_count == 0` and refreshed output checksum; other ops still use placeholder paths |
 | Worker fd passing | Partial | `SCM_RIGHTS` works end-to-end; inline base64 fallback is implemented and tested |
+| Failure injection | Partial | `tests/failure/test_failure_injection.py`: timeout, OOM, worker crash + recovery, disconnect cleanup, duplicate event/completion, event-before-sleep. Fake-worker malformed/delayed cases remain |
 | `python.vm` timeout and cancellation enforcement | Partial | parent-side hard cancel verified; child-side sandbox limits incomplete |
 | Host engine ABC, scripted engine, parser, grammar, session controller | Partial | scripted session loop, injection policy, context/event budgets, `ResultTooLarge`, parser-failure recovery, and forced wake are covered by `tests/scenario/test_session_loop.py`; HF engine still unverified |
 | HF engine and GPU path | Not verified | code exists; model/toolchain gate P0-08 is open |
@@ -89,9 +90,9 @@ not merely "a file exists".
 
 **Immediate next work (in order).**
 
-1. Add the failure-injection suite (worker crash, OOM, duplicate delivery, event-before-sleep, disconnect).
-2. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
-3. Extend fd mapping to the remaining `vector.engine` ops and the 16 MiB acceptance case.
+1. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
+2. Extend fd mapping to the remaining `vector.engine` ops and the 16 MiB acceptance case.
+3. Add deterministic fake-worker cases for delayed, duplicate, and malformed messages.
 
 **Completed in this pass (2026-11-03).**
 
@@ -102,6 +103,7 @@ not merely "a file exists".
 - Scripted host loop: `ScriptedDecoder`, runtime session adoption, policy-driven event injection, event/context budgets, `ResultTooLarge`, parser-failure recovery, engine-error handling, and forced wake.
 - Scenario suite `tests/scenario/test_session_loop.py` covers nine model-free controller cases.
 - `SCM_RIGHTS` fd passing over a per-worker socketpair, worker-side mmap, output-buffer checksum refresh, inline base64 fallback, and `copy_count`/`mapped_bytes` evidence in `JobCompleted`. End-to-end matmul test: `tests/integration/test_zero_copy_matmul.py`.
+- Failure-injection suite: real-worker timeout, OOM, crash/recovery, disconnect cleanup; event-id dedupe and duplicate-completion guards; event-before-sleep returns `already_satisfied`.
 
 **P1 exit gate — still open.**
 
@@ -1519,7 +1521,7 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [x] P2-08 Batching coalescer + batch API (M)
 - [~] P2-09 Progress events, throttling, observe-only injection, bounded event injection (S)
 - [~] P2-10 Demos 3, 4 (scripted), 6, 9, 10 (L)
-- [~] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate, deterministic fake-worker cases (M)
+- [~] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate, deterministic fake-worker cases (M) — real-worker cases done; fake-worker delayed/malformed cases remain
 - [ ] P2-12 Sandbox profiles: nsjail and Docker templates, public-mode guard, profile tests (M)
 
 **Exit gate:** cancellation and timeout tests pass under race injection; a 16 MiB matmul completes with `copy_count == 0` on the data path; 1,000 batched adds complete in one control round-trip; nsjail/Docker profile tests pass; no orphan workers or shm after tests.
@@ -1805,7 +1807,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (Unit, property, contract, integration, and scenario pass: 103 tests, 2 skipped.)
+- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (All current suites pass: 110 tests, 2 skipped; failure suite is 28 s.)
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.
@@ -1965,7 +1967,8 @@ These restate and tighten §0.2. They are not new promises.
 3. Close P1 exit gate: contract suite, property tests, trace/replay tests **(done)**; demo 1/2 assertion mode remains.
 4. Complete the scripted session loop: injection, context budget, `ResultTooLarge`, parser failure, forced wake. **Done.**
 5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`. **Done for matmul.**
-6. Add the failure-injection suite. **Next.**
+6. Add the failure-injection suite. **Done for real workers; fake-worker cases remain.**
+7. Verify P0-08 on the reference GPU. **Next.**
 6. Verify P0-08 on the reference GPU and start P3.
 7. Keep P5.5 benchmarks behind a working P3 sleep/wake proof.
 

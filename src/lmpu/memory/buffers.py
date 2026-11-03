@@ -6,25 +6,26 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from .shm import SHMBackend, SHMError, TempSHMBackend
-from .checksum import ChecksumAlgorithm, compute_checksum, verify_checksum
-from .grants import GrantManager, Grant, GrantType
-
 from ..protocol.messages import BufferRef
+from .checksum import ChecksumAlgorithm, compute_checksum
+from .grants import Grant, GrantManager, GrantType
+from .shm import SHMBackend
 
 
 class BufferError(Exception):
     """Buffer operation errors."""
+
     pass
 
 
 @dataclass
 class BufferMetadata:
     """Complete buffer metadata."""
+
     buffer_id: str
     session_id: str
     dtype: str
@@ -33,7 +34,7 @@ class BufferMetadata:
     checksum: str
     owner: str
     created_at: float
-    ttl_ms: Optional[int] = None
+    ttl_ms: int | None = None
     persist: bool = False
     provenance: dict[str, Any] = field(default_factory=dict)
     grants: list[Grant] = field(default_factory=list)
@@ -61,8 +62,8 @@ class BufferView:
         buffer_id: str,
         dtype: str,
         shape: tuple[int, ...],
-        slices: Optional[list[slice]] = None,
-        strides: Optional[tuple[int, ...]] = None,
+        slices: list[slice] | None = None,
+        strides: tuple[int, ...] | None = None,
     ):
         self.buffer_id = buffer_id
         self.dtype = dtype
@@ -77,7 +78,9 @@ class BufferView:
             "shape": list(self.shape),
         }
         if self.slices:
-            result["view"] = {"slices": [[s.start or 0, s.stop or 0, s.step or 1] for s in self.slices]}
+            result["view"] = {
+                "slices": [[s.start or 0, s.stop or 0, s.step or 1] for s in self.slices]
+            }
         return result
 
 
@@ -86,10 +89,10 @@ class BufferManager:
 
     def __init__(
         self,
-        backend: Optional[SHMBackend] = None,
-        grant_manager: Optional[GrantManager] = None,
+        backend: SHMBackend | None = None,
+        grant_manager: GrantManager | None = None,
         default_ttl_ms: int = 3600000,
-        import_roots: Optional[list[str]] = None,
+        import_roots: list[str] | None = None,
         verify_on_read: bool = True,
     ):
         self.backend = backend or SHMBackend()
@@ -128,7 +131,7 @@ class BufferManager:
         dtype: str,
         shape: tuple[int, ...],
         persist: bool = False,
-        ttl_ms: Optional[int] = None,
+        ttl_ms: int | None = None,
     ) -> BufferRef:
         """Create a new zero-initialized buffer."""
         np_dtype = self._dtype_from_str(dtype)
@@ -170,7 +173,7 @@ class BufferManager:
         data: bytes,
         dtype: str,
         shape: tuple[int, ...],
-        ttl_ms: Optional[int] = None,
+        ttl_ms: int | None = None,
     ) -> BufferRef:
         """Import buffer from bytes."""
         np_dtype = self._dtype_from_str(dtype)
@@ -210,11 +213,11 @@ class BufferManager:
         path: str,
         dtype: str,
         shape: tuple[int, ...],
-        ttl_ms: Optional[int] = None,
+        ttl_ms: int | None = None,
     ) -> BufferRef:
         """Import buffer from file (path must be under import_roots)."""
         path_obj = Path(path).resolve()
-        
+
         # Check path is under import roots
         allowed = False
         for root in self.import_roots:
@@ -261,7 +264,12 @@ class BufferManager:
             owner=session_id,
             created_at=time.time(),
             ttl_ms=ttl_ms or self.default_ttl_ms,
-            provenance={"source": "file", "name": name, "original_path": str(path_obj), "original_hash": checksum},
+            provenance={
+                "source": "file",
+                "name": name,
+                "original_path": str(path_obj),
+                "original_hash": checksum,
+            },
         )
         self._metadata[buffer_id] = metadata
         return metadata.to_ref()
@@ -270,18 +278,18 @@ class BufferManager:
         self,
         buffer_id: str,
         offset: int = 0,
-        length: Optional[int] = None,
+        length: int | None = None,
     ) -> bytes:
         """Export buffer contents as bytes (bounded)."""
         meta = self._metadata.get(buffer_id)
         if not meta:
             raise BufferError(f"Buffer not found: {buffer_id}")
-        
+
         if length is None:
             length = meta.bytes - offset
         if offset + length > meta.bytes:
             raise BufferError("Export range exceeds buffer size")
-        
+
         return self.backend.read_bytes(meta.session_id, buffer_id, offset, length)
 
     def export_file(
@@ -289,7 +297,7 @@ class BufferManager:
         buffer_id: str,
         path: str,
         offset: int = 0,
-        length: Optional[int] = None,
+        length: int | None = None,
     ) -> None:
         """Export buffer to file (bounded)."""
         data = self.export_bytes(buffer_id, offset, length)
@@ -298,9 +306,9 @@ class BufferManager:
     def read_view(
         self,
         buffer_id: str,
-        slices: Optional[list[tuple[int, int, int]]] = None,
+        slices: list[tuple[int, int, int]] | None = None,
         max_inline_bytes: int = 65536,
-    ) -> tuple[Optional[np.ndarray], Optional[BufferRef]]:
+    ) -> tuple[np.ndarray | None, BufferRef | None]:
         """Read a buffer view. Returns (inline_data, derived_buffer_ref)."""
         meta = self._metadata.get(buffer_id)
         if not meta:
@@ -310,7 +318,7 @@ class BufferManager:
         mm, f = self.backend.open_buffer(meta.session_id, buffer_id, writable=False)
         try:
             arr = np.ndarray(meta.shape, dtype=np_dtype, buffer=mm)
-            
+
             if slices:
                 slice_objs = tuple(slice(s[0], s[1], s[2]) for s in slices)
                 view = arr[slice_objs]
@@ -354,7 +362,7 @@ class BufferManager:
         # Calculate byte offset and length
         np_dtype = self._dtype_from_str(meta.dtype)
         itemsize = np_dtype.itemsize
-        
+
         # Simplified: check full buffer grant for now
         grant = self.grant_manager.check_access(job_id, buffer_id, 0, meta.bytes, write=True)
         if not grant:
@@ -397,7 +405,7 @@ class BufferManager:
         meta = self._metadata.get(buffer_id)
         if not meta:
             raise BufferError(f"Buffer not found: {buffer_id}")
-        
+
         # Verify cached checksum matches
         if self.verify_on_read:
             computed = self.backend.compute_checksum(meta.session_id, buffer_id, algorithm)
@@ -417,7 +425,7 @@ class BufferManager:
 
         # Revoke all grants
         self.grant_manager.revoke_buffer(buffer_id)
-        
+
         # Delete from backend
         deleted = self.backend.delete_buffer(meta.session_id, buffer_id)
         if deleted:
@@ -429,7 +437,7 @@ class BufferManager:
         job_id: str,
         buffer_id: str,
         offset: int = 0,
-        length: Optional[int] = None,
+        length: int | None = None,
     ) -> Grant:
         """Grant read access to a job."""
         meta = self._metadata.get(buffer_id)
@@ -446,7 +454,7 @@ class BufferManager:
         job_id: str,
         buffer_id: str,
         offset: int = 0,
-        length: Optional[int] = None,
+        length: int | None = None,
     ) -> Grant:
         """Grant write access to a job."""
         meta = self._metadata.get(buffer_id)
@@ -463,7 +471,7 @@ class BufferManager:
         job_id: str,
         buffer_id: str,
         offset: int = 0,
-        length: Optional[int] = None,
+        length: int | None = None,
     ) -> Grant:
         """Grant read-write access to a job."""
         meta = self._metadata.get(buffer_id)
@@ -490,13 +498,16 @@ class BufferManager:
     def cleanup_session(self, session_id: str) -> int:
         """Clean up all non-persistent buffers for a session."""
         to_delete = [
-            bid for bid, meta in self._metadata.items()
+            bid
+            for bid, meta in self._metadata.items()
             if meta.session_id == session_id and not meta.persist
         ]
         count = 0
         for bid in to_delete:
             if self.delete(bid, force=True):
                 count += 1
+        if not any(meta.session_id == session_id for meta in self._metadata.values()):
+            self.backend.cleanup_session(session_id)
         return count
 
     @contextmanager
@@ -505,7 +516,7 @@ class BufferManager:
         meta = self._metadata.get(buffer_id)
         if not meta:
             raise BufferError(f"Buffer not found: {buffer_id}")
-        
+
         with self.backend.map_buffer(meta.session_id, buffer_id, writable) as mm:
             np_dtype = self._dtype_from_str(meta.dtype)
             arr = np.ndarray(meta.shape, dtype=np_dtype, buffer=mm)

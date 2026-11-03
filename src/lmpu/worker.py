@@ -397,6 +397,16 @@ class Worker:
                         "retriable": result.retriable,
                     }
                 )
+        except MemoryError:
+            await self._send_message(
+                {
+                    "type": "error",
+                    "job_id": self.current_job_id,
+                    "error_code": "oom",
+                    "message": "Worker ran out of memory",
+                    "retriable": False,
+                }
+            )
         except Exception as e:
             await self._send_message(
                 {

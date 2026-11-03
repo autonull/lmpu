@@ -672,6 +672,7 @@ class Runtime:
             finished = await self.job_table.wait_terminal(job.job_id, timeout=timeout)
             if finished is None:
                 self.worker_pool._fail_job(job, "timeout", "Job exceeded wait timeout")
+                await self.worker_pool.terminate_for_job(job.job_id)
                 raise JobError("Job timed out", code=ErrorCode.TIMEOUT.value)
             return SubmitResult(
                 job_id=job.job_id,
@@ -1054,6 +1055,8 @@ class Runtime:
                 else:
                     self.job_table.transition(job.job_id, JobStatus.CANCEL_REQUESTED)
                     await self.worker_pool.cancel_job(job.job_id)
+                    self._finish_cancelled(job, "session_closed")
+                    await self.worker_pool.terminate_for_job(job.job_id)
                     cancelled.append(job.job_id)
 
         # Clean up buffers
