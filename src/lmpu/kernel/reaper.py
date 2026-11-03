@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ulid
 import time
 from typing import Any, Callable, Optional
 
@@ -117,7 +118,7 @@ class Reaper:
         }
         # Emit event
         event = Event(
-            event_id=str(ULID()),
+            event_id=str(ulid.new()),
             seq=0,  # Will be set by event log
             session=job.session_id,
             job_id=job.job_id,

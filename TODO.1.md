@@ -3,7 +3,7 @@
 **Status:** Accepted baseline for implementation — 2026-11-03  
 **Supersedes:** `TODO.md` (proof-of-concept blueprint)  
 **Companions:** `README.md` (architecture specification), `compared.md` (positioning)  
-**Repository state:** greenfield; only the three design documents exist.
+**Repository state:** CPU reference runtime is running end to end (49 tests green, 6 integration tests); GPU/model paths are not yet verified. See §0.3 and §20.
 
 > **Thesis.** The host language model is a semantic control plane. Native processors do the computation. The host submits a small job, parks its generation loop, and wakes to a compact buffer reference. The expensive model is used for decisions, not for simulating execution.
 
@@ -59,6 +59,45 @@ This table is part of the plan: benchmark results must record the actual host, n
 - No full OS, hypervisor, or distributed scheduler claim.
 
 These are scoped out so the PoC can prove the execution model without turning into an infrastructure project.
+
+### 0.3 Implementation progress (2026-11-03)
+
+This section is the running progress record. It is updated before each commit; phase
+checkboxes below carry the same status. Status means *verified by a test or a run*,
+not merely "a file exists".
+
+| Area | Status | Evidence |
+|---|---|---|
+| Package, CLI, test tree, dependency metadata | Done | `pyproject.toml`, `src/lmpu/`, `tests/`, `Makefile` |
+| Protocol models, discriminated unions, JSON-RPC codec | Done | `src/lmpu/protocol/`, `tests/unit/test_protocol.py` |
+| Job state machine, idempotency, terminal waiters | Done | `src/lmpu/kernel/jobs.py`, `tests/unit/test_kernel.py` |
+| Event log: sequence, ring buffer, ack, gap detection | Done | `src/lmpu/kernel/events.py`, unit tests |
+| Buffer manager, shm backend, NumPy views, BLAKE3 | Done | `src/lmpu/memory/`, `tests/unit/test_memory.py` |
+| Grants, TTL, reaper, provenance | Partial | grants/TTL/reaper exist; provenance not fully audited |
+| Capability registry, routing, capability query | Partial | registry and routing exist; no routing contract test |
+| RPC surface (`hello` … `close`) | Done | `src/lmpu/kernel/runtime.py` |
+| Worker execution path (dispatch, sync submit, wait, timeout, cancel) | Done | `tests/integration/test_runtime_execution.py` (6 tests) |
+| Explicit batch API and async batch coalescing with per-job fanout | Done | integration test; manual 100-item batch run |
+| `pure.func`, `python.vm`, `vector.engine`, `symbolic.planner`, `neural.summary`, `hardware.stub` | Partial | all register and return results; contract suite missing |
+| `python.vm` timeout and cancellation enforcement | Partial | parent-side hard cancel verified; child-side sandbox limits incomplete |
+| Host engine ABC, scripted engine, parser, grammar, session controller | Partial | modules exist; session loop and injection rendering incomplete |
+| HF engine and GPU path | Not verified | code exists; model/toolchain gate P0-08 is open |
+| Trace sink and metrics | Partial | JSONL sink exists; replay tests and host token/energy metrics missing |
+| Benchmarks, Mission Control, RFC/SDK/docs | Not started | directories exist only |
+
+**Immediate next work (in order).**
+
+1. Close the P1 exit gate: add processor contract tests; add property tests for buffer slices and protocol round-trip; add trace/replay tests.
+2. Make the scripted-host session loop real: event injection, context budget, `ResultTooLarge`, parser failure, forced wake.
+3. Add `SCM_RIGHTS` fd passing for buffers and an end-to-end `vector.engine` matmul with `copy_count == 0`.
+4. Add the failure-injection suite (worker crash, OOM, duplicate delivery, event-before-sleep, disconnect).
+5. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
+
+**Known red items.**
+
+- `make check` is not green: `mypy` still reports pre-existing annotation errors; `ruff` is runnable but not yet clean.
+- P0-08 (toolchain/model proof) is blocked on a model download and a Transformers 5.x environment.
+- The HF/vLLM/GPU paths have not been executed in this environment.
 
 ---
 
@@ -1421,78 +1460,78 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 
 ### Phase 0 — Foundations (week 1)
 
-- [ ] P0-01 Create `pyproject.toml`, `uv.lock`, `src/lmpu/`, `tests/`, `configs/`, `docs/` (S)
-- [ ] P0-02 Configure `ruff`, `mypy`, `pytest`, `pre-commit`, coverage, markers (S)
+- [x] P0-01 Create `pyproject.toml`, `uv.lock`, `src/lmpu/`, `tests/`, `configs/`, `docs/` (S)
+- [~] P0-02 Configure `ruff`, `mypy`, `pytest`, `pre-commit`, coverage, markers (S)
 - [ ] P0-03 CI: CPU `core` lane; GPU lane stub with self-hosted runner docs (M)
 - [ ] P0-04 Write `docs/rfcs/0001-lmpu-protocol.md` skeleton and JSON Schema location (M)
-- [ ] P0-05 Implement `lmpu doctor` checks: Python, shm, UDS, GPU, model cache, sandbox (S)
+- [x] P0-05 Implement `lmpu doctor` checks: Python, shm, UDS, GPU, model cache, sandbox (S)
 - [ ] P0-06 Record accepted ADRs for D-01/D-03/D-06/D-12; no decision freeze needed (S)
-- [ ] P0-07 Define trace schema and example trace fixture (S)
-- [ ] P0-08 Create a Python 3.12/3.13 environment if 3.14 wheels are missing; upgrade Transformers 5.x, vLLM 0.33, Outlines 0.1.14; verify Qwen3.5-0.8B/2B load, tokenizer, VRAM, and tokens/sec; record the baseline (M)
+- [~] P0-07 Define trace schema and example trace fixture (S)
+- [!] P0-08 Create a Python 3.12/3.13 environment if 3.14 wheels are missing; upgrade Transformers 5.x, vLLM 0.33, Outlines 0.1.14; verify Qwen3.5-0.8B/2B load, tokenizer, VRAM, and tokens/sec; record the baseline (M)
 
 **Exit gate:** `make check` is green; the protocol RFC skeleton is reviewed; naming is frozen; no runtime behavior is claimed yet.
 
 ### Phase 1 — Kernel, buffers, pure functions (weeks 2–3)
 
-- [ ] P1-01 Protocol models, discriminated unions, JSON-RPC codec, limits (M)
-- [ ] P1-02 Job state machine table + exhaustive transition tests (M)
-- [ ] P1-03 JobTable, idempotency, terminal-event guarantee (M)
-- [ ] P1-04 EventLog: seq, ULID, ring buffer, ack, replay (M)
-- [ ] P1-05 BufferManager + shm backend + NumPy views + BLAKE3 (L)
-- [ ] P1-06 Grants, refcounts, TTL, reaper (M)
-- [ ] P1-07 CapabilityRegistry + routing + `query_capabilities` (M)
-- [ ] P1-08 `pure.func` processor and contract tests (M)
-- [ ] P1-09 Scripted host + minimal session loop (M)
-- [ ] P1-10 Demos 1 and 2, headless assertion mode (S)
+- [x] P1-01 Protocol models, discriminated unions, JSON-RPC codec, limits (M)
+- [x] P1-02 Job state machine table + exhaustive transition tests (M)
+- [x] P1-03 JobTable, idempotency, terminal-event guarantee (M)
+- [x] P1-04 EventLog: seq, ULID, ring buffer, ack, replay (M)
+- [x] P1-05 BufferManager + shm backend + NumPy views + BLAKE3 (L)
+- [~] P1-06 Grants, refcounts, TTL, reaper (M)
+- [~] P1-07 CapabilityRegistry + routing + `query_capabilities` (M)
+- [~] P1-08 `pure.func` processor and contract tests (M)
+- [~] P1-09 Scripted host + minimal session loop (M)
+- [~] P1-10 Demos 1 and 2, headless assertion mode (S)
 - [ ] P1-11 Property tests: buffer slices, protocol round-trip (M)
-- [ ] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close (M)
-- [ ] P1-13 TraceSink implementation and trace/replay schema tests (M)
-- [ ] P1-14 Buffer import from bytes/files plus provenance metadata (M)
+- [x] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close (M)
+- [~] P1-13 TraceSink implementation and trace/replay schema tests (M)
+- [~] P1-14 Buffer import from bytes/files plus provenance metadata (M)
 
 **Exit gate:** `pytest -m "unit or property or integration"` green; all RPC methods are covered; trace replay works; buffer round-trip, checksum, import, and provenance verified; demo 1/2 pass CPU-only; a 16 MiB buffer can be created and read as a 4×4 slice without copying the whole payload into the process that reads it.
 
 ### Phase 2 — Isolation, long jobs, batching (weeks 3–5)
 
-- [ ] P2-01 Worker protocol, parent client, `SCM_RIGHTS` fd passing (L)
-- [ ] P2-02 Worker pool, health, restart, crash quarantine (M)
-- [ ] P2-03 Subprocess sandbox: rlimits, temp cwd, env scrubbing, no-network wrapper (M)
-- [ ] P2-04 `python.vm` processor + `lmpu` helper module (L)
-- [ ] P2-05 `vector.engine` processor + buffer zero-copy + summaries (L)
-- [ ] P2-06 Timeouts, cooperative cancel, hard kill, terminal race tests (M)
-- [ ] P2-07 Quotas and admission control (M)
-- [ ] P2-08 Batching coalescer + batch API (M)
-- [ ] P2-09 Progress events, throttling, observe-only injection (S)
-- [ ] P2-10 Demos 3, 4 (scripted), 6, 9, 10 (L)
-- [ ] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate (M)
+- [~] P2-01 Worker protocol, parent client, `SCM_RIGHTS` fd passing (L)
+- [~] P2-02 Worker pool, health, restart, crash quarantine (M)
+- [~] P2-03 Subprocess sandbox: rlimits, temp cwd, env scrubbing, no-network wrapper (M)
+- [~] P2-04 `python.vm` processor + `lmpu` helper module (L)
+- [~] P2-05 `vector.engine` processor + buffer zero-copy + summaries (L)
+- [x] P2-06 Timeouts, cooperative cancel, hard kill, terminal race tests (M)
+- [~] P2-07 Quotas and admission control (M)
+- [x] P2-08 Batching coalescer + batch API (M)
+- [~] P2-09 Progress events, throttling, observe-only injection (S)
+- [~] P2-10 Demos 3, 4 (scripted), 6, 9, 10 (L)
+- [~] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate (M)
 - [ ] P2-12 Sandbox profiles: nsjail and Docker templates, public-mode guard, profile tests (M)
 
 **Exit gate:** cancellation and timeout tests pass under race injection; a 16 MiB matmul completes with `copy_count == 0` on the data path; 1,000 batched adds complete in one control round-trip; nsjail/Docker profile tests pass; no orphan workers or shm after tests.
 
 ### Phase 3 — HF host, constrained decoding, sleep/wake (weeks 5–7)
 
-- [ ] P3-01 `HostEngine` ABC + `HostState` + metrics (M)
-- [ ] P3-02 HF engine: manual decode loop, cache, forward counter (L)
-- [ ] P3-03 Sentinel scanner with token-boundary handling (M)
-- [ ] P3-04 Two-phase constrained decoder spike: Outlines vs lm-format-enforcer (L)
-- [ ] P3-05 Parser, schema validation, `ControlError`, minimal repair policy (M)
-- [ ] P3-06 SessionController: generate/parse/dispatch/park/wake (L)
-- [ ] P3-07 Injection renderer + context budget + `ResultTooLarge` (M)
-- [ ] P3-08 S1 park/resume with zero-forward-pass assertion (M)
+- [x] P3-01 `HostEngine` ABC + `HostState` + metrics (M)
+- [~] P3-02 HF engine: manual decode loop, cache, forward counter (L)
+- [x] P3-03 Sentinel scanner with token-boundary handling (M)
+- [~] P3-04 Two-phase constrained decoder spike: Outlines vs lm-format-enforcer (L)
+- [~] P3-05 Parser, schema validation, `ControlError`, minimal repair policy (M)
+- [~] P3-06 SessionController: generate/parse/dispatch/park/wake (L)
+- [~] P3-07 Injection renderer + context budget + `ResultTooLarge` (M)
+- [~] P3-08 S1 park/resume with zero-forward-pass assertion (M)
 - [ ] P3-09 S2 offload/restore spike and cache-equality test (M)
 - [ ] P3-10 Demos 4 and 5 with `Qwen/Qwen3.5-0.8B`; record a 2B run for the demo (L)
-- [ ] P3-11 Trace and metrics for host forwards/tokens/energy (M)
+- [~] P3-11 Trace and metrics for host forwards/tokens/energy (M)
 - [ ] P3-12 E2E GPU tests marked `gpu`/`model` (M)
 - [ ] P3-13 Sentinel experiment: `<|p|>` vs `<|proc|>` with and without special-token registration; measure token cost and free-generation validity (M)
-- [ ] P3-14 Prompt templates with generated capability summary; version and regression tests (M)
+- [~] P3-14 Prompt templates with generated capability summary; version and regression tests (M)
 
 **Exit gate:** flagship demo runs on GPU; trace shows zero `host_forward` between `park_enter` and `wake`; injected result metadata ≤64 tokens for a 16 MiB matrix; wake latency p99 <50 ms; prompt templates and capability summary are versioned; one canonical model scenario passes deterministically.
 
 ### Phase 4 — Processor ecosystem and interactivity (weeks 7–8)
 
-- [ ] P4-01 `symbolic.planner` with Dijkstra/BFS and deterministic tie-break (M)
+- [~] P4-01 `symbolic.planner` with Dijkstra/BFS and deterministic tie-break (M)
 - [ ] P4-02 `NeedsMoreInput`/`write_input` job state and resume path (M)
-- [ ] P4-03 `neural.summary` with CPU extractive backend; optional model backend (M)
-- [ ] P4-04 `hardware.stub` with simulated latency and capability flags (S)
+- [~] P4-03 `neural.summary` with CPU extractive backend; optional model backend (M)
+- [~] P4-04 `hardware.stub` with simulated latency and capability flags (S)
 - [ ] P4-05 Composition: child jobs, depth/budget/cycle limits (M)
 - [ ] P4-06 Capability routing heuristics + explicit override (S)
 - [ ] P4-07 Demos 7 and 8 (M)
@@ -1747,7 +1786,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [ ] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes.
+- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (Unit + integration pass; property/contract/scenario suites are not written yet.)
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.
@@ -1790,6 +1829,117 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 6. **The schedule is optimistic.** 12–16 weeks assumes focused work and a successful vLLM spike.
 
 **Review outcome.** The plan is complete enough to start Phase 0. It is not evidence of production readiness. Do not start Phase 1 until P0-08 proves the toolchain and model path.
+
+---
+
+## 20. Revision reconciliation (2026-11-03)
+
+A separate revision proposal was received after this plan was accepted. It is a delta,
+not a replacement. This section reconciles it with the existing plan and with the code
+that now exists. No existing phase number, decision ID, or gate was renumbered. Where the
+proposal repeats existing work, the existing task is the source of truth; only genuinely
+missing requirements were added.
+
+### 20.1 Proposal priority mapping
+
+| Proposal band | Existing plan home | Reconciliation |
+|---|---|---|
+| P0 protocol contract, lifecycle, errors, idempotency, timeout/cancel | §3, §5, P1-01…P1-03, P2-06 | Already covered; added acceptance detail in §20.4 |
+| P0 CPU reference runtime, control/execution split, queues, shutdown, ownership | §5, §6, P1-08, P1-12, P2-02, P2-07 | Dispatch path and terminal ownership are now implemented; bounded queues and restart remain |
+| P0 safe defaults, capability authorization, boundary validation | §6, §12.3, P2-03, P2-12 | Existing non-goal and threat model retained; added explicit acceptance checks |
+| P1 buffer semantics, capability-scoped access, portable fallback, streaming, persistence | §4, P1-05, P1-06, P1-14 | Semantics exist; portable fallback and snapshot semantics need a decision/ADR |
+| P1 sleep/wake as an integration layer, notification semantics, KV as optimization | §7, §8, P3-06…P3-09 | Existing decision retained; added the explicit “runtime works without sleep” rule |
+| P1 scheduling, capability discovery, cost-aware dispatch | §5.2, §6.2, P1-07, P4-06 | Discovery and deterministic routing exist; cost model stays deferred |
+| P1 observability, operational controls | §9, P1-13, P3-11 | Trace/metrics skeleton exists; health/readiness and sensitive-data redaction need tests |
+| P1 conformance, fake worker, stress, fault injection, security tests, CI example | §10, P1-11, P2-11 | Integration tests added; property/contract/failure/security suites remain |
+| P2 accelerators, zero-copy, checkpointing, verification, distributed execution | §8, P6, P8, D-23 | Confirmed deferred; no active-scope expansion |
+
+### 20.2 Missing requirements accepted into active scope
+
+These are additions to existing tasks, not new parallel tasks:
+
+1. **First usable milestone is explicit** (§20.4). It precedes P3 and must stay green.
+2. **Resource ownership is named per terminal path** (§20.5). P2-02, P2-06, and P2-07 use it as a checklist.
+3. **Bounded queues and backpressure are gate items**, not later tuning. Add to P2-07 and P2-09.
+4. **Graceful shutdown and restart behavior must be documented and tested** at the level the plan actually promises. P1–P5 remain in-memory; P6-05 owns durability.
+5. **Capability authorization is separate from capability advertisement.** Discovery may say a processor supports an op; submission still validates session, grants, and quotas. Add to P1-07 and P2-07.
+6. **Portable copy path is mandatory; zero-copy is optional.** Add to P2-05 and P5.5 evidence.
+7. **Notification recovery by status query is mandatory.** A client must be able to recover from a missed event with `poll`/`wait`; add to P1-04 and P3-06.
+8. **Sensitive payloads are not logged by default.** Add to P1-13 and P6-08.
+9. **CI must contain a model-free end-to-end example.** Satisfied by `tests/integration/test_runtime_execution.py`; keep it model-free.
+10. **The plan must not promise exactly-once execution or cross-device determinism.** Already in §5.6 and §6.5; restated in §20.6 guardrails.
+
+### 20.3 Additional decisions recorded
+
+The proposal’s open questions are resolved here or explicitly deferred. A changed answer
+requires an ADR.
+
+| Question | 0.1 answer | Source |
+|---|---|---|
+| Protocol boundary | Local JSON-RPC 2.0 over a Unix domain socket. The model plane is separate. Network transports are later adapters. | D-03, §3.1 |
+| What `wait` blocks | An async caller/runtime task. Host generation parking is a different operation. | §7.6 |
+| What `sleep` means | Host generation suspension plus an optional job/event wake condition. Job `WAITING_INPUT`/`WAITING_EVENT` are distinct job states. | §3.4, §8.2 |
+| Durability | In-memory through P5; non-terminal jobs fail with `runtime_restarted` after P6-05. No exactly-once execution. | §5.6 |
+| Buffer consistency | Per-job grants; inputs are declared read-only references in 0.1. Producer mutation during a job is undefined and must not be relied on. | §4.4, needs ADR for snapshots |
+| Result representation | Small values inline under `max_inline_bytes`; large values as `BufferRef` plus a bounded slice. | §4.3 |
+| Client identity | Session ID plus local peer credentials. Single tenant; no remote authentication. | D-21, §12.3 |
+| Portability | Linux-first implementation; the interface is portable, implementations are transformer-only. | D-23 |
+| Capability versioning | `protocol`, `processor_version`, and `schema_hash` travel with capabilities; major mismatch is rejected. | §3.8 |
+| Determinism | `strict` means reproducible on the same processor version, dtype, shape, host, BLAS build, and thread count. Not cross-machine bit-exactness. | §6.5 |
+
+### 20.4 Acceptance criteria for the first usable milestone
+
+The milestone is “CPU reference runtime works end to end.” It must be true before P3 GPU
+work becomes the main track.
+
+| Criterion | Status | Verification |
+|---|---|---|
+| Typed operation reaches a CPU backend and returns a stable job handle | Done | `tests/integration/test_runtime_execution.py::test_sync_submit_returns_result` |
+| Client can await a result without busy-looping | Done | `JobTable.wait_terminal`; `test_async_wait_reports_one_terminal_event` |
+| Duplicate submission has deterministic behavior | Done | `test_duplicate_submit_does_not_duplicate_execution` |
+| Cancellation produces exactly one terminal event | Done | `test_cancel_running_job_emits_only_cancelled` |
+| Timeout produces `FAILED/timeout` and stops the worker | Done | manual timeout run; promote to `failure` test |
+| Explicit batch preserves order and reports per-item errors | Done | `test_explicit_batch_preserves_item_order` |
+| Worker loss produces `FAILED/worker_crashed` and does not affect other jobs | Partial | crash path exists; no automated test yet |
+| Queue depth, payload size, execution time, and resources are bounded | Partial | quotas and wall timeout exist; queue/backpressure test missing |
+| Unauthorized operation or buffer access is rejected | Partial | grants exist; negative tests missing |
+| Worker output and all input boundaries are validated | Partial | schema and buffer bounds exist; fuzz tests missing |
+| Resources are released on every terminal path | Partial | grants and quota counter released; buffer refcount audit missing |
+| Runtime restart behavior matches the documented promise | Partial | in-memory behavior documented; restart test is P6-05 |
+| A model-free example runs in CI | Done | integration lane |
+| A second independent client/backend can implement the protocol | Not yet | requires RFC + conformance fixtures |
+
+### 20.5 Resource ownership matrix
+
+| Resource | Owner | Released on success | Released on failure/cancel/timeout | Released on disconnect |
+|---|---|---|---|---|
+| Job record | `JobTable` | TTL expiry | TTL expiry | session close policy |
+| Worker slot | `WorkerPool` | on result | on error or forced kill | reaped on session close |
+| Grants | `GrantManager` | terminal callback | terminal callback | session close |
+| Buffer bytes | `BufferManager` / session quota | TTL or explicit delete | TTL or explicit delete | session close, non-persistent only |
+| Sleep registration | `SessionState` / `QuotaManager` | wake | wake or session close | session close |
+| Event retention | `EventLog` ring | ring eviction | ring eviction | session removal |
+
+### 20.6 Scope guardrails
+
+These restate and tighten §0.2. They are not new promises.
+
+- Do not make any LLM vendor, transformer class, or inference server part of the protocol core.
+- Do not require KV freezing, sleep support, shared memory, or zero-copy for runtime correctness.
+- Do not make arbitrary code execution the default; `python.vm` is an explicit, non-default processor.
+- Do not promise exactly-once execution, durable results, deterministic scheduling, or cross-device reproducibility.
+- Do not add multi-host scheduling, accelerator-specific handles, or learned scheduling before the single-host CPU path is correct and observable.
+- Do not expand the active scope with P2 items until the §20.4 criteria are green.
+
+### 20.7 Dependency-aware order
+
+1. Reconcile plan and code. **Done in this revision.**
+2. Close §20.4: worker-loss test, bounded queue/backpressure test, negative authorization tests, resource-release audit.
+3. Close P1 exit gate: contract suite, property tests, trace/replay tests, demo 1/2 assertion mode.
+4. Complete the scripted session loop: injection, context budget, `ResultTooLarge`, parser failure, forced wake.
+5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`.
+6. Verify P0-08 on the reference GPU and start P3.
+7. Keep P5.5 benchmarks behind a working P3 sleep/wake proof.
 
 ---
 

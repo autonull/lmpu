@@ -4,30 +4,26 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import orjson
 import os
 import sys
 import traceback
-from typing import Any, Optional
+from typing import Any
+
+import orjson
 
 from lmpu.processors import (
+    JobContext,
     Processor,
     ProcessorContext,
-    JobContext,
-    Result,
-    WORKER_MESSAGES,
 )
 from lmpu.processors.builtin import (
+    HardwareStubProcessor,
+    NeuralSummaryProcessor,
     PureFunctionProcessor,
     PythonVMProcessor,
-    VectorEngineProcessor,
     SymbolicPlannerProcessor,
-    NeuralSummaryProcessor,
-    HardwareStubProcessor,
+    VectorEngineProcessor,
 )
-from lmpu.kernel.clock import get_clock
-from lmpu.protocol.messages import EventKind, ULID
-
 
 # Processor registry
 BUILTIN_PROCESSORS = {
@@ -47,17 +43,17 @@ class Worker:
         self,
         processor_name: str,
         worker_id: str,
-        plugin_path: Optional[str] = None,
+        plugin_path: str | None = None,
     ):
         self.processor_name = processor_name
         self.worker_id = worker_id
         self.plugin_path = plugin_path
-        self.processor: Optional[Processor] = None
-        self.current_job_id: Optional[str] = None
-        self.session_id: Optional[str] = None
+        self.processor: Processor | None = None
+        self.current_job_id: str | None = None
+        self.session_id: str | None = None
         self._running = True
-        self._stdin_reader: Optional[asyncio.StreamReader] = None
-        self._stdout_writer: Optional[asyncio.StreamWriter] = None
+        self._stdin_reader: asyncio.StreamReader | None = None
+        self._stdout_writer: asyncio.StreamWriter | None = None
 
     async def start(self) -> None:
         """Start the worker."""
@@ -72,36 +68,36 @@ class Worker:
 
         # Setup stdin/stdout for communication (binary mode for orjson)
         loop = asyncio.get_event_loop()
-        
+
         # Use a simpler approach: create readers/writers directly
         self._stdin_reader = asyncio.StreamReader()
         self._stdin_protocol = asyncio.StreamReaderProtocol(self._stdin_reader)
-        
+
         # Connect stdin (binary)
         await loop.connect_read_pipe(
             lambda: self._stdin_protocol,
             sys.stdin.buffer,
         )
-        
+
         # For stdout, use a simple approach with sys.stdout.buffer directly
         class BinaryStreamWriter:
             def __init__(self, stream):
                 self._stream = stream
                 self._loop = loop
-            
+
             def write(self, data: bytes) -> None:
                 self._stream.write(data)
                 self._stream.flush()
-            
+
             async def drain(self) -> None:
                 pass
-            
+
             def close(self) -> None:
                 pass
-            
+
             async def wait_closed(self) -> None:
                 pass
-        
+
         self._stdout_writer = BinaryStreamWriter(sys.stdout.buffer)
 
         # Initialize processor
@@ -129,13 +125,13 @@ class Worker:
         spec = importlib.util.spec_from_file_location("plugin", self.plugin_path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        
+
         # Find Processor subclass
         for name in dir(module):
             obj = getattr(module, name)
             if isinstance(obj, type) and issubclass(obj, Processor) and obj is not Processor:
                 return obj()
-        
+
         raise ValueError("No Processor subclass found in plugin")
 
     async def _heartbeat_loop(self) -> None:
@@ -157,7 +153,7 @@ class Worker:
                 line = await self._stdin_reader.readline()
                 if not line:
                     break
-                
+
                 msg = orjson.loads(line)
                 await self._handle_command(msg)
             except orjson.JSONDecodeError:
@@ -175,7 +171,7 @@ class Worker:
     async def _handle_command(self, msg: dict[str, Any]) -> None:
         """Handle a command from parent."""
         cmd_type = msg.get("type")
-        
+
         if cmd_type == "execute":
             await self._execute_job(msg)
         elif cmd_type == "cancel":
@@ -188,10 +184,10 @@ class Worker:
         job = msg.get("job", {})
         self.current_job_id = job.get("job_id")
         self.session_id = msg.get("session_id")
-        
+
         # Prepare buffers (in real impl, these come from fd passing)
         buffers = {}
-        
+
         # Create job context
         async def send_progress(fraction: float, message: str = None):
             await self._send_message({
@@ -200,7 +196,7 @@ class Worker:
                 "fraction": fraction,
                 "message": message,
             })
-        
+
         async def send_needs_input(fields: list[str], prompt: str):
             await self._send_message({
                 "type": "needs_input",
@@ -208,20 +204,20 @@ class Worker:
                 "fields": fields,
                 "prompt": prompt,
             })
-        
+
         async def submit_child(processor: str, op: str, inputs: dict, config: dict = None):
             # Would submit to parent runtime
             pass
-        
+
         def log(level: str, message: str, **kwargs):
             pass
-        
+
         def trace(event: str, data: dict):
             pass
-        
+
         def cancelled() -> bool:
             return False  # Would check cancellation flag
-        
+
         job_ctx = JobContext(
             job_id=self.current_job_id,
             session_id=self.session_id,
@@ -233,7 +229,7 @@ class Worker:
             trace=trace,
             cancelled=cancelled,
         )
-        
+
         try:
             # Send started event
             await self._send_message({
@@ -241,10 +237,10 @@ class Worker:
                 "job_id": self.current_job_id,
                 "worker": self.worker_id,
             })
-            
+
             # Execute
             result = await self.processor.execute(job, job_ctx)
-            
+
             if result.success:
                 await self._send_message({
                     "type": "result",
@@ -299,15 +295,15 @@ async def main():
     parser.add_argument("--worker-id", required=True, help="Worker ID")
     parser.add_argument("--plugin", help="Plugin path")
     parser.add_argument("--socket", help="Unix socket path (unused, uses stdio)")
-    
+
     args = parser.parse_args()
-    
+
     worker = Worker(
         processor_name=args.processor,
         worker_id=args.worker_id,
         plugin_path=args.plugin,
     )
-    
+
     try:
         await worker.start()
     except KeyboardInterrupt:

@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import json
-from abc import ABC
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional, Union
-from uuid import UUID
+from typing import Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from ulid import ULID
+import ulid
+import orjson
+from pydantic import BaseModel, ConfigDict, Field
 
 from .sentinels import PROTOCOL_VERSION
-
 
 # =============================================================================
 # Enums and constants
@@ -38,6 +34,7 @@ class ModelJobStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     SLEEPING = "sleeping"  # Maps to WAITING_INPUT, WAITING_EVENT
+    CANCEL_REQUESTED = "cancel_requested"  # Internal; terminal event follows
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -135,15 +132,15 @@ class RPCError(LMPUBaseModel):
     """JSON-RPC 2.0 error object."""
     code: ErrorCode
     message: str
-    job_id: Optional[str] = None
+    job_id: str | None = None
     retriable: bool = False
-    details: Optional[dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
 
 class RPCRequest(LMPUBaseModel):
     """JSON-RPC 2.0 request."""
     jsonrpc: Literal["2.0"] = "2.0"
-    id: Union[str, int, None] = None
+    id: str | int | None = None
     method: str
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -151,9 +148,9 @@ class RPCRequest(LMPUBaseModel):
 class RPCResponse(LMPUBaseModel):
     """JSON-RPC 2.0 response."""
     jsonrpc: Literal["2.0"] = "2.0"
-    id: Union[str, int, None] = None
-    result: Optional[Any] = None
-    error: Optional[RPCError] = None
+    id: str | int | None = None
+    result: Any | None = None
+    error: RPCError | None = None
 
 
 class RPCNotification(LMPUBaseModel):
@@ -189,14 +186,14 @@ class ModelMessageBase(LMPUBaseModel):
 class SubmitMessage(ModelMessageBase):
     """Submit a job or batch."""
     kind: Literal[ModelMessageKind.SUBMIT] = ModelMessageKind.SUBMIT
-    job_id: Optional[str] = None
-    processor: Optional[str] = None
+    job_id: str | None = None
+    processor: str | None = None
     op: str
     inputs: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
-    program: Optional[str] = None
-    batch: Optional[dict[str, Any]] = None
-    config: Optional[dict[str, Any]] = None
+    program: str | None = None
+    batch: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
 
 
 class PollMessage(ModelMessageBase):
@@ -209,7 +206,7 @@ class WaitMessage(ModelMessageBase):
     """Wait for job completion with timeout."""
     kind: Literal[ModelMessageKind.WAIT] = ModelMessageKind.WAIT
     job_id: str
-    timeout_ms: Optional[int] = None
+    timeout_ms: int | None = None
 
 
 class ReadResultMessage(ModelMessageBase):
@@ -217,7 +214,7 @@ class ReadResultMessage(ModelMessageBase):
     kind: Literal[ModelMessageKind.READ_RESULT] = ModelMessageKind.READ_RESULT
     job_id: str
     buffer: str
-    slices: Optional[list[list[int]]] = None
+    slices: list[list[int]] | None = None
     max_inline_bytes: int = 65536
 
 
@@ -233,7 +230,7 @@ class CancelMessage(ModelMessageBase):
     """Request job cancellation."""
     kind: Literal[ModelMessageKind.CANCEL] = ModelMessageKind.CANCEL
     job_id: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class SleepCondition(LMPUBaseModel):
@@ -241,7 +238,7 @@ class SleepCondition(LMPUBaseModel):
     all: list[str] = Field(default_factory=list)
     any: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
-    deadline_ms: Optional[int] = None
+    deadline_ms: int | None = None
     success_only: bool = False
 
 
@@ -249,20 +246,20 @@ class SleepMessage(ModelMessageBase):
     """Request host sleep/park."""
     kind: Literal[ModelMessageKind.SLEEP] = ModelMessageKind.SLEEP
     until: SleepCondition
-    level: Optional[SleepLevel] = None
+    level: SleepLevel | None = None
 
 
 class WakeMessage(ModelMessageBase):
     """Force wake or cancel sleep."""
     kind: Literal[ModelMessageKind.WAKE] = ModelMessageKind.WAKE
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class QueryCapabilitiesMessage(ModelMessageBase):
     """Query available processors and operations."""
     kind: Literal[ModelMessageKind.QUERY_CAPABILITIES] = ModelMessageKind.QUERY_CAPABILITIES
-    op: Optional[str] = None
-    processor: Optional[str] = None
+    op: str | None = None
+    processor: str | None = None
 
 
 ModelMessage = Union[
@@ -284,8 +281,8 @@ ModelMessage = Union[
 
 class HelloParams(LMPUBaseModel):
     protocol: str = PROTOCOL_VERSION
-    resume_from: Optional[int] = None
-    session_config: Optional[dict[str, Any]] = None
+    resume_from: int | None = None
+    session_config: dict[str, Any] | None = None
 
 
 class HelloResult(LMPUBaseModel):
@@ -297,8 +294,8 @@ class HelloResult(LMPUBaseModel):
 
 
 class CapabilitiesParams(LMPUBaseModel):
-    op: Optional[str] = None
-    processor: Optional[str] = None
+    op: str | None = None
+    processor: str | None = None
 
 
 class CapabilityDescriptor(LMPUBaseModel):
@@ -320,26 +317,28 @@ class CapabilityDescriptor(LMPUBaseModel):
 
 class CapabilitiesResult(LMPUBaseModel):
     processors: list[CapabilityDescriptor]
-    matches: Optional[list[str]] = None
-    recommended: Optional[str] = None
+    matches: list[str] | None = None
+    recommended: str | None = None
 
 
 class SubmitParams(LMPUBaseModel):
-    job_id: Optional[str] = None
-    processor: Optional[str] = None
+    job_id: str | None = None
+    processor: str | None = None
     op: str
     inputs: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
-    program: Optional[str] = None
-    batch: Optional[dict[str, Any]] = None
-    config: Optional[dict[str, Any]] = None
+    program: str | None = None
+    batch: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
 
 
 class SubmitResult(LMPUBaseModel):
     job_id: str
     status: ModelJobStatus
-    queue_position: Optional[int] = None
+    queue_position: int | None = None
     seq: int
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
 
 
 class PollParams(LMPUBaseModel):
@@ -349,35 +348,35 @@ class PollParams(LMPUBaseModel):
 class PollResult(LMPUBaseModel):
     job_id: str
     status: ModelJobStatus
-    progress: Optional[float] = None
-    elapsed_ms: Optional[int] = None
-    queue_position: Optional[int] = None
+    progress: float | None = None
+    elapsed_ms: int | None = None
+    queue_position: int | None = None
 
 
 class WaitParams(LMPUBaseModel):
     job_id: str
-    timeout_ms: Optional[int] = None
+    timeout_ms: int | None = None
 
 
 class WaitResult(LMPUBaseModel):
     status: ModelJobStatus
-    result: Optional[dict[str, Any]] = None
-    error: Optional[RPCError] = None
+    result: dict[str, Any] | None = None
+    error: RPCError | None = None
 
 
 class ReadParams(LMPUBaseModel):
     buffer: str
-    slices: Optional[list[list[int]]] = None
+    slices: list[list[int]] | None = None
     max_inline_bytes: int = 65536
 
 
 class BufferView(LMPUBaseModel):
     buffer: str
-    view: Optional[dict[str, Any]] = None
+    view: dict[str, Any] | None = None
     dtype: str
-    data: Optional[list[Any]] = None
-    derived_buffer: Optional[str] = None
-    note: Optional[str] = None
+    data: list[Any] | None = None
+    derived_buffer: str | None = None
+    note: str | None = None
 
 
 class WriteParams(LMPUBaseModel):
@@ -388,7 +387,7 @@ class WriteParams(LMPUBaseModel):
 
 class CancelParams(LMPUBaseModel):
     job_id: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class CancelResult(LMPUBaseModel):
@@ -398,17 +397,17 @@ class CancelResult(LMPUBaseModel):
 
 class SleepParams(LMPUBaseModel):
     until: SleepCondition
-    level: Optional[SleepLevel] = None
+    level: SleepLevel | None = None
 
 
 class SleepResult(LMPUBaseModel):
     sleep_id: str
     status: Literal["registered", "already_satisfied"]
-    woken: Optional[dict[str, Any]] = None
+    woken: dict[str, Any] | None = None
 
 
 class WakeParams(LMPUBaseModel):
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class WakeResult(LMPUBaseModel):
@@ -432,8 +431,8 @@ class BufferCreateParams(LMPUBaseModel):
 
 class BufferImportParams(LMPUBaseModel):
     name: str
-    data: Optional[bytes] = None
-    path: Optional[str] = None
+    data: bytes | None = None
+    path: str | None = None
     dtype: str
     shape: list[int]
 
@@ -446,8 +445,8 @@ class BufferRef(LMPUBaseModel):
     checksum: str
     owner: str
     created_at: float
-    ttl_ms: Optional[int] = None
-    provenance: Optional[dict[str, Any]] = None
+    ttl_ms: int | None = None
+    provenance: dict[str, Any] | None = None
 
 
 class BufferStatParams(LMPUBaseModel):
@@ -464,17 +463,17 @@ class BufferDeleteParams(LMPUBaseModel):
 
 
 class JobsListParams(LMPUBaseModel):
-    session_id: Optional[str] = None
-    status: Optional[list[ModelJobStatus]] = None
+    session_id: str | None = None
+    status: list[ModelJobStatus] | None = None
     limit: int = 100
 
 
 class ConfigureParams(LMPUBaseModel):
-    max_outstanding_jobs: Optional[int] = None
-    max_buffer_bytes: Optional[int] = None
-    max_sleep_seconds: Optional[int] = None
-    sleep_level: Optional[SleepLevel] = None
-    injection: Optional[dict[str, Any]] = None
+    max_outstanding_jobs: int | None = None
+    max_buffer_bytes: int | None = None
+    max_sleep_seconds: int | None = None
+    sleep_level: SleepLevel | None = None
+    injection: dict[str, Any] | None = None
 
 
 class HealthResult(LMPUBaseModel):
@@ -517,8 +516,8 @@ class JobStartedData(EventData):
 class ProgressData(EventData):
     job_id: str
     fraction: float
-    checkpoint: Optional[dict[str, Any]] = None
-    message: Optional[str] = None
+    checkpoint: dict[str, Any] | None = None
+    message: str | None = None
 
 
 class JobCompletedData(EventData):
@@ -615,10 +614,10 @@ EventPayload = Union[
 
 class Event(LMPUBaseModel):
     """Event log entry."""
-    event_id: str = Field(default_factory=lambda: str(ULID()))
+    event_id: str = Field(default_factory=lambda: str(ulid.new()))
     seq: int
     session: str
-    job_id: Optional[str] = None
+    job_id: str | None = None
     type: EventKind
     ts_monotonic: float
     ts_wall: float = Field(default_factory=lambda: datetime.now().timestamp())
@@ -634,9 +633,9 @@ class InjectedEvent(LMPUBaseModel):
     version: int = 1
     kind: Literal["event"] = "event"
     event: EventKind
-    job_id: Optional[str] = None
-    status: Optional[str] = None
-    summary: Optional[dict[str, Any]] = None
+    job_id: str | None = None
+    status: str | None = None
+    summary: dict[str, Any] | None = None
 
 
 # =============================================================================
@@ -694,7 +693,3 @@ class JSONRPCCodec:
     @staticmethod
     def decode_notification(data: bytes) -> RPCNotification:
         return RPCNotification.model_validate_json(data)
-
-
-# Import orjson at module level for the codec
-import orjson

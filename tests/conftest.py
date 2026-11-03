@@ -1,15 +1,16 @@
 """Pytest configuration and fixtures."""
 
 import asyncio
-import pytest
 import tempfile
 from pathlib import Path
 
-from lmpu.memory import TempSHMBackend, BufferManager
-from lmpu.kernel.jobs import JobTable
+import pytest
+
+from lmpu.kernel.clock import FakeClock, RealClock, set_clock
 from lmpu.kernel.events import EventLog
-from lmpu.kernel.clock import FakeClock, set_clock, get_clock
+from lmpu.kernel.jobs import JobTable
 from lmpu.kernel.runtime import Runtime
+from lmpu.memory import BufferManager, TempSHMBackend
 
 
 @pytest.fixture

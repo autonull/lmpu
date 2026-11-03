@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from typing import Any
 
-import numpy as np
-
-from ..base import Manifest, Processor, ProcessorContext, JobContext, Result
+from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
 class PureFunctionProcessor(Processor):
     """Pure function processor for deterministic, stateless operations."""
-    
+
     manifest = Manifest(
         name="pure.func",
         version="0.1.0",
@@ -51,8 +48,9 @@ class PureFunctionProcessor(Processor):
     async def execute(self, job: dict[str, Any], ctx: JobContext) -> Result:
         op = job.get("op")
         inputs = job.get("inputs", {})
-        config = job.get("config", {})
-        
+        if job.get("batch"):
+            return await self._batch(job, ctx)
+
         try:
             if op == "bigint_add":
                 return await self._bigint_add(inputs)
@@ -122,7 +120,7 @@ class PureFunctionProcessor(Processor):
         elif isinstance(data, dict) and data.get("buffer"):
             # Buffer reference - would need buffer manager
             data = b""  # Placeholder
-        
+
         hash_obj = hashlib.sha256(data)
         hex_digest = hash_obj.hexdigest()
         return Result(
@@ -146,7 +144,7 @@ class PureFunctionProcessor(Processor):
             if isinstance(data, str):
                 data = data.encode()
             hex_digest = hashlib.sha256(data).hexdigest()
-        
+
         return Result(
             success=True,
             data={"hash": hex_digest},
@@ -156,7 +154,7 @@ class PureFunctionProcessor(Processor):
     async def _json_query(self, inputs: dict[str, Any]) -> Result:
         data = inputs.get("data", {})
         query = inputs.get("query", "")
-        
+
         # Simple JSONPath-like query (very basic)
         if query.startswith("$."):
             path = query[2:].split(".")
@@ -171,7 +169,7 @@ class PureFunctionProcessor(Processor):
                     break
         else:
             result = data
-        
+
         return Result(
             success=True,
             data={"result": result},
@@ -181,12 +179,12 @@ class PureFunctionProcessor(Processor):
     async def _lookup(self, inputs: dict[str, Any]) -> Result:
         table = inputs.get("table", {})
         key = inputs.get("key")
-        
+
         if isinstance(table, dict):
             value = table.get(key)
         else:
             value = None
-        
+
         return Result(
             success=True,
             data={"value": value},
@@ -198,19 +196,19 @@ class PureFunctionProcessor(Processor):
         batch = job.get("batch", {})
         items = batch.get("items", [])
         max_parallel = batch.get("max_parallel", 10)
-        
+
         results = []
         errors = []
-        
+
         for i, item in enumerate(items):
             try:
                 item_inputs = item.get("inputs", {})
                 item_op = item.get("op", job.get("op"))
-                
+
                 # Create sub-job
                 sub_job = {"op": item_op, "inputs": item_inputs}
                 sub_result = await self.execute(sub_job, ctx)
-                
+
                 if sub_result.success:
                     results.append(sub_result.data)
                 else:
@@ -219,7 +217,7 @@ class PureFunctionProcessor(Processor):
             except Exception as e:
                 errors.append({"index": i, "error": str(e)})
                 results.append(None)
-        
+
         return Result(
             success=True,
             data={"results": results, "errors": errors},

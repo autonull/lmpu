@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
-from ulid import ULID
+from collections import defaultdict
+from dataclasses import dataclass
 
-from .jobs import JobRecord, JobStatus, JobTable
+import orjson
+
 from ..protocol.messages import ExecutionMode
+from .jobs import JobRecord, JobStatus, JobTable
 
 
 @dataclass
@@ -19,9 +19,9 @@ class ScheduledJob:
     job: JobRecord
     effective_priority: int
     enqueued_at: float
-    batch_key: Optional[str] = None
+    batch_key: str | None = None
 
-    def __lt__(self, other: "ScheduledJob") -> bool:
+    def __lt__(self, other: ScheduledJob) -> bool:
         # Higher priority first, then earlier enqueue time
         if self.effective_priority != other.effective_priority:
             return self.effective_priority > other.effective_priority
@@ -51,12 +51,12 @@ class Scheduler:
         )
         # Global queue for cross-processor scheduling
         self._global_queue: asyncio.PriorityQueue[ScheduledJob] = asyncio.PriorityQueue()
-        
+
         # Concurrency control
         self._processor_semaphores: dict[str, asyncio.Semaphore] = {}
-        self._global_semaphore: Optional[asyncio.Semaphore] = None
+        self._global_semaphore: asyncio.Semaphore | None = None
         self._processor_limits: dict[str, int] = {}
-        self._global_limit: Optional[int] = None
+        self._global_limit: int | None = None
 
         # Batching
         self._batch_buffers: dict[str, list[ScheduledJob]] = defaultdict(list)
@@ -78,15 +78,21 @@ class Scheduler:
     def _get_semaphore(self, processor: str) -> asyncio.Semaphore:
         return self._processor_semaphores.get(processor, asyncio.Semaphore(1))
 
-    def _compute_batch_key(self, job: JobRecord) -> Optional[str]:
+    def _compute_batch_key(self, job: JobRecord) -> str | None:
         """Compute batch key for compatible jobs."""
         config = job.config or {}
         if config.get("mode") != ExecutionMode.ASYNC.value:
             return None
         if job.batch:
             return None  # Already a batch
+        if not job.processor:
+            return None
         # Batch by processor, op, and compatible config
-        return f"{job.processor}:{job.op}:{hash(frozenset(config.items()))}"
+        config_key = orjson.dumps(
+            {k: v for k, v in config.items() if not k.startswith("_")},
+            option=orjson.OPT_SORT_KEYS,
+        )
+        return f"{job.processor}:{job.op}:{config_key.decode()}"
 
     def _compute_effective_priority(self, job: JobRecord, now: float) -> int:
         """Compute effective priority with aging."""
@@ -101,7 +107,7 @@ class Scheduler:
         """Add job to scheduler queue."""
         now = time.time()
         effective_priority = self._compute_effective_priority(job, now)
-        
+
         scheduled = ScheduledJob(
             job=job,
             effective_priority=effective_priority,
@@ -126,13 +132,13 @@ class Scheduler:
         await asyncio.sleep(self.batch_window_ms / 1000)
         jobs = self._batch_buffers.pop(batch_key, [])
         self._batch_timers.pop(batch_key, None)
-        
+
         if not jobs:
             return
 
         # Sort by priority and enqueue time
         jobs.sort()
-        
+
         # Take up to max_batch_size
         batch_jobs = jobs[:self.max_batch_size]
         remaining = jobs[self.max_batch_size:]
@@ -155,19 +161,20 @@ class Scheduler:
                 ],
                 "max_parallel": len(batch_jobs),
             }
-            # Update first job to be the batch
+            # Update first job to carry the coalesced batch
             first.job.batch = batch_config
-            first.job.config = {**first.job.config, "mode": ExecutionMode.ASYNC.value}
+            first.job.config = {
+                **first.job.config,
+                "mode": ExecutionMode.ASYNC.value,
+                "_coalesced_job_ids": [j.job.job_id for j in batch_jobs],
+            }
             await self._queues[first.job.processor].put(first)
         else:
             await self._queues[batch_jobs[0].job.processor].put(batch_jobs[0])
 
-    async def dequeue(self, processor: str) -> Optional[ScheduledJob]:
-        """Get next job for processor."""
-        queue = self._queues.get(processor)
-        if not queue or queue.empty():
-            return None
-        return await queue.get()
+    async def next_job(self, processor: str) -> ScheduledJob:
+        """Block until a job for this processor is available."""
+        return await self._queues[processor].get()
 
     async def acquire_slot(self, processor: str) -> None:
         """Acquire concurrency slot."""

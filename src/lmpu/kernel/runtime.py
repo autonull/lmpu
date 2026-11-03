@@ -4,72 +4,90 @@ from __future__ import annotations
 
 import asyncio
 import os
-import signal
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional, Awaitable
+from typing import Any
 
+import ulid
+from pydantic import BaseModel
+
+from ..kernel.clock import get_clock
+from ..kernel.events import EventLog
+from ..kernel.jobs import JobRecord, JobStatus, JobTable
+from ..kernel.quotas import QuotaConfig, QuotaManager
+from ..kernel.reaper import Reaper
+from ..kernel.routing import CapabilityRegistry, ProcessorRegistration
+from ..kernel.scheduler import Scheduler
+from ..kernel.trace import TraceConfig, init_trace_sink
+from ..kernel.worker_pool import WorkerPool
+from ..memory.buffers import BufferManager
+from ..memory.grants import GrantManager
+from ..processors.base import Processor
+from ..protocol.errors import (
+    BufferError,
+    JobError,
+    LMPUError,
+    ProtocolError,
+    ValidationError,
+)
 from ..protocol.messages import (
-    HelloParams,
-    HelloResult,
-    CapabilitiesParams,
-    CapabilitiesResult,
-    SubmitParams,
-    SubmitResult,
-    PollParams,
-    PollResult,
-    WaitParams,
-    WaitResult,
-    ReadParams,
-    BufferView,
-    WriteParams,
-    CancelParams,
-    CancelResult,
-    SleepParams,
-    SleepResult,
-    WakeParams,
-    WakeResult,
     AckParams,
     AckResult,
+    BufferChecksumParams,
     BufferCreateParams,
+    BufferDeleteParams,
     BufferImportParams,
     BufferRef,
     BufferStatParams,
-    BufferChecksumParams,
-    BufferDeleteParams,
-    JobsListParams,
-    ConfigureParams,
-    HealthResult,
+    BufferView,
+    CancelParams,
+    CancelResult,
+    CapabilitiesParams,
+    CapabilitiesResult,
+    CapabilityDescriptor,
     CloseParams,
     CloseResult,
+    ConfigureParams,
+    ErrorCode,
     Event,
     EventKind,
+    HealthResult,
+    HelloParams,
+    HelloResult,
+    PROTOCOL_VERSION,
+    JobCancelledData,
+    JobsListParams,
+    JobStartedData,
+    JobSubmittedData,
     ModelJobStatus,
-    SleepCondition,
-    ErrorCode,
+    PollParams,
+    PollResult,
+    ReadParams,
+    RPCError,
+    RPCResponse,
+    RPCRequest,
+    RPCNotification,
+    SleepParams,
+    SleepResult,
+    SubmitParams,
+    SubmitResult,
+    WaitParams,
+    WaitResult,
+    WakeParams,
+    WakeResult,
+    WriteParams,
 )
-from ..protocol.errors import (
-    LMPUError,
-    ValidationError,
-    QuotaExceededError,
-    BufferError,
-    JobError,
-    ProtocolError,
-    create_error,
-)
-from ..memory.buffers import BufferManager
-from ..memory.grants import GrantManager, GrantType
-from ..kernel.jobs import JobTable, JobRecord, JobStatus
-from ..kernel.events import EventLog, SessionEventLog
-from ..kernel.scheduler import Scheduler
-from ..kernel.quotas import QuotaManager, QuotaConfig
-from ..kernel.routing import CapabilityRegistry, ProcessorRegistration, route_job
-from ..kernel.reaper import Reaper
-from ..kernel.clock import get_clock, RealClock
-from ..kernel.trace import TraceSink, TraceConfig, init_trace_sink
-from ..kernel.worker_pool import WorkerPool
-from ..processors.base import Processor, ProcessorContext, JobContext, Manifest
+
+
+def _to_jsonable(value: Any) -> Any:
+    """Convert pydantic models and dataclasses to JSON-safe primitives."""
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, list):
+        return [_to_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    return value
 
 
 @dataclass
@@ -77,9 +95,9 @@ class SessionState:
     """Per-session state."""
     session_id: str
     config: QuotaConfig
-    sleep_registration: Optional[dict[str, Any]] = None
-    wake_event: Optional[asyncio.Event] = None
-    wake_result: Optional[dict[str, Any]] = None
+    sleep_registration: dict[str, Any] | None = None
+    wake_event: asyncio.Event | None = None
+    wake_result: dict[str, Any] | None = None
     event_cursor: int = 0
     injection_policy: dict[str, Any] = field(default_factory=dict)
 
@@ -91,12 +109,12 @@ class Runtime:
         self,
         socket_path: str = "/tmp/lmpu/run.sock",
         shm_dir: str = "/dev/shm/lmpu",
-        config: Optional[dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.socket_path = socket_path
         self.shm_dir = shm_dir
         self.config = config or {}
-        
+
         # Core components
         self.grant_manager = GrantManager()
         self.buffer_manager = BufferManager(
@@ -124,30 +142,32 @@ class Runtime:
             job_table=self.job_table,
             event_log=self.event_log,
         )
+        self.worker_pool.set_terminal_callback(self._on_job_terminal)
         self.trace_sink = init_trace_sink(TraceConfig(
             trace_dir=self.config.get("trace_dir", "traces"),
             trace_token_events=self.config.get("trace_token_events", "sampled"),
         ))
-        
+
         # Session management
         self._sessions: dict[str, SessionState] = {}
-        self._server: Optional[asyncio.Server] = None
+        self._server: asyncio.Server | None = None
         self._running = False
-        
+        self._dispatcher_tasks: list[asyncio.Task[None]] = []
+
         # Register built-in processors
         self._register_builtin_processors()
 
     def _register_builtin_processors(self) -> None:
         """Register built-in processors."""
         from lmpu.processors.builtin import (
+            HardwareStubProcessor,
+            NeuralSummaryProcessor,
             PureFunctionProcessor,
             PythonVMProcessor,
-            VectorEngineProcessor,
             SymbolicPlannerProcessor,
-            NeuralSummaryProcessor,
-            HardwareStubProcessor,
+            VectorEngineProcessor,
         )
-        
+
         processors = [
             PureFunctionProcessor(),
             PythonVMProcessor(),
@@ -156,7 +176,7 @@ class Runtime:
             NeuralSummaryProcessor(),
             HardwareStubProcessor(),
         ]
-        
+
         for proc in processors:
             self.register_processor(proc)
 
@@ -173,52 +193,142 @@ class Runtime:
             manifest.name,
             manifest.limits.get("max_concurrent", 4),
         )
-        
-        # Pre-warm worker
-        asyncio.create_task(self.worker_pool.get_worker(manifest.name, JobRecord(
-            job_id="warmup",
-            session_id="system",
-            processor=manifest.name,
-            op="warmup",
-        )))
+
+    def _on_job_terminal(self, job: JobRecord) -> None:
+        """Release job-owned resources exactly once."""
+        self.job_table.release_grants(job.job_id)
+        self.quota_manager.on_job_complete(job.session_id)
 
     async def start(self) -> None:
         """Start the runtime."""
         self._running = True
-        
+
         # Ensure socket directory exists
         Path(self.socket_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Remove stale socket
         try:
             os.unlink(self.socket_path)
         except FileNotFoundError:
             pass
-        
+
         # Start Unix domain socket server
         self._server = await asyncio.start_unix_server(
             self._handle_connection,
             path=self.socket_path,
         )
-        
+
         # Start background tasks
         await self.reaper.start()
         await self.scheduler._flush_batch("")  # Initialize batch timers
-        
+        self._start_dispatchers()
+
         # Set socket permissions
         os.chmod(self.socket_path, 0o600)
+
+    def _start_dispatchers(self) -> None:
+        """Start one dispatch loop per registered processor."""
+        for registration in self.capability_registry.list_processors():
+            self._dispatcher_tasks.append(
+                asyncio.create_task(self._dispatch_loop(registration.name))
+            )
+
+    async def _dispatch_loop(self, processor: str) -> None:
+        """Dequeue and execute jobs for one processor."""
+        while self._running:
+            try:
+                scheduled = await self.scheduler.next_job(processor)
+            except asyncio.CancelledError:
+                return
+            job = scheduled.job
+            if job.is_terminal():
+                continue
+            if job.status == JobStatus.CANCEL_REQUESTED:
+                self._finish_cancelled(job, "cancelled_before_start")
+                continue
+
+            await self.scheduler.acquire_slot(processor)
+            try:
+                await self._run_job(job)
+            finally:
+                self.scheduler.release_slot(processor)
+
+    async def _run_job(self, job: JobRecord) -> None:
+        """Assign a job to a worker and wait for its terminal state."""
+        if job.status == JobStatus.CREATED:
+            self.job_table.transition(job.job_id, JobStatus.PENDING)
+        if job.status == JobStatus.CANCEL_REQUESTED:
+            self._finish_cancelled(job, "cancelled_before_start")
+            return
+
+        self.job_table.transition(job.job_id, JobStatus.RUNNING)
+        self.event_log.append(
+            job.session_id,
+            Event(
+                event_id=str(ulid.new()),
+                seq=0,
+                session=job.session_id,
+                job_id=job.job_id,
+                type=EventKind.JOB_STARTED,
+                ts_monotonic=get_clock().monotonic(),
+                data=JobStartedData(
+                    job_id=job.job_id,
+                    worker=job.processor,
+                    start_time=get_clock().monotonic(),
+                ),
+            ),
+        )
+
+        try:
+            worker = await self.worker_pool.get_worker(job.processor, job)
+            await self.worker_pool.execute_job(worker, job)
+        except Exception as exc:
+            self.worker_pool._fail_job(job, "worker_crashed", str(exc), retriable=True)
+            return
+
+        timeout = (job.timeout_ms / 1000) if job.timeout_ms else None
+        finished = await self.job_table.wait_terminal(job.job_id, timeout=timeout)
+        if finished is None:
+            self.worker_pool._fail_job(job, "timeout", "Job exceeded wall-clock timeout")
+            await self.worker_pool.terminate_for_job(job.job_id)
+
+    def _finish_cancelled(self, job: JobRecord, reason: str) -> None:
+        """Complete cancellation when no worker owns the job."""
+        if job.is_terminal():
+            return
+        self.job_table.transition(job.job_id, JobStatus.CANCELLED)
+        self.event_log.append(
+            job.session_id,
+            Event(
+                event_id=str(ulid.new()),
+                seq=0,
+                session=job.session_id,
+                job_id=job.job_id,
+                type=EventKind.JOB_CANCELLED,
+                ts_monotonic=get_clock().monotonic(),
+                data=JobCancelledData(job_id=job.job_id, reason=reason),
+            ),
+        )
+        self._on_job_terminal(job)
 
     async def stop(self) -> None:
         """Stop the runtime."""
         self._running = False
-        
+
+        for task in self._dispatcher_tasks:
+            task.cancel()
+        if self._dispatcher_tasks:
+            await asyncio.gather(*self._dispatcher_tasks, return_exceptions=True)
+        self._dispatcher_tasks.clear()
+        await self.scheduler.close()
+
         if self._server:
             self._server.close()
             await self._server.wait_closed()
-        
+
         await self.reaper.stop()
         await self.worker_pool.stop()
-        
+
         # Clean up socket
         try:
             os.unlink(self.socket_path)
@@ -231,12 +341,12 @@ class Runtime:
         writer: asyncio.StreamWriter,
     ) -> None:
         """Handle incoming JSON-RPC connection."""
-        from ..protocol.codec import RPCStream, RPCCodec
-        from ..protocol.messages import RPCRequest, RPCResponse, RPCNotification
-        
+        from ..protocol.codec import RPCStream
+        from ..protocol.messages import RPCNotification, RPCRequest
+
         stream = RPCStream(reader, writer)
         session_id = None
-        
+
         try:
             async for msg in stream:
                 if isinstance(msg, RPCRequest):
@@ -257,8 +367,8 @@ class Runtime:
     async def _handle_request(
         self,
         request: RPCRequest,
-        session_id: Optional[str],
-    ) -> Optional[RPCResponse]:
+        session_id: str | None,
+    ) -> RPCResponse | None:
         """Handle JSON-RPC request."""
         try:
             if request.method == "lmpu.hello":
@@ -306,9 +416,9 @@ class Runtime:
                     message=f"Unknown method: {request.method}",
                     code=ErrorCode.UNKNOWN_METHOD.value,
                 )
-            
-            return RPCResponse(id=request.id, result=result)
-            
+
+            return RPCResponse(id=request.id, result=_to_jsonable(result))
+
         except LMPUError as e:
             return RPCResponse(
                 id=request.id,
@@ -327,7 +437,7 @@ class Runtime:
     async def _handle_notification(
         self,
         notification: RPCNotification,
-        session_id: Optional[str],
+        session_id: str | None,
     ) -> None:
         """Handle JSON-RPC notification."""
         # Notifications don't expect responses
@@ -337,19 +447,19 @@ class Runtime:
 
     async def _hello(self, params: dict) -> HelloResult:
         hello_params = HelloParams(**params)
-        session_id = f"s_{ULID()}"
-        
+        session_id = f"s_{ulid.new()}"
+
         # Create session state
         session_config = hello_params.session_config or {}
         quotas = QuotaConfig(**session_config)
         self.quota_manager.set_session_quotas(session_id, quotas)
-        
+
         session_state = SessionState(
             session_id=session_id,
             config=quotas,
         )
         self._sessions[session_id] = session_state
-        
+
         # Resume from sequence if requested
         resume_status = "none"
         if hello_params.resume_from is not None:
@@ -357,7 +467,7 @@ class Runtime:
                 resume_status = "gap"
             else:
                 resume_status = "ok"
-        
+
         return HelloResult(
             session_id=session_id,
             protocol=PROTOCOL_VERSION,
@@ -368,7 +478,25 @@ class Runtime:
 
     async def _capabilities(self, params: dict) -> CapabilitiesResult:
         caps_params = CapabilitiesParams(**params)
-        processors = self.capability_registry.list_processors()
+        processors = [
+            CapabilityDescriptor(
+                name=m.name,
+                version=m.version,
+                protocol=m.protocol,
+                ops=m.ops,
+                limits=m.limits,
+                determinism=m.determinism,
+                latency_class=m.latency_class,
+                streaming=m.streaming,
+                progress=m.progress,
+                interactive=m.interactive,
+                persistent_state=m.persistent_state,
+                batching=m.batching,
+                zero_copy=m.zero_copy,
+                sandbox=m.sandbox,
+            )
+            for m in self.capability_registry.list_processors()
+        ]
         
         matches = None
         recommended = None
@@ -387,15 +515,16 @@ class Runtime:
     async def _submit(self, params: dict, session_id: str) -> SubmitResult:
         if not session_id:
             raise ProtocolError("No session", code=ErrorCode.PROTOCOL_VERSION.value)
-        
+
         submit_params = SubmitParams(**params)
         session = self._sessions.get(session_id)
         if not session:
             raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
-        
+
         # Validate processor/op
-        if submit_params.processor:
-            reg = self.capability_registry.get(submit_params.processor)
+        processor = submit_params.processor
+        if processor:
+            reg = self.capability_registry.get(processor)
             if not reg:
                 raise JobError("Unknown processor", code=ErrorCode.UNKNOWN_PROCESSOR.value)
             # Check op support
@@ -406,24 +535,34 @@ class Runtime:
                     break
             if not op_supported:
                 raise JobError("Processor does not support op", code=ErrorCode.UNKNOWN_OP.value)
-        
+        else:
+            candidates = self.capability_registry.find_by_op(submit_params.op)
+            if not candidates:
+                raise JobError(
+                    "No capable processor",
+                    code=ErrorCode.CAPABILITY_MISMATCH.value,
+                )
+            processor = candidates[0].manifest.name
+
+        config = submit_params.config or {}
+        estimated_buffer_bytes = self._estimate_output_bytes(submit_params.outputs)
+
         # Check quotas
-        estimated_buffer_bytes = 0  # TODO: estimate from inputs/outputs
         self.quota_manager.check_job_submit(session_id, estimated_buffer_bytes)
-        
+
         # Create job
         job, is_new = self.job_table.create_job(
             session_id=session_id,
-            processor=submit_params.processor or "",
+            processor=processor,
             op=submit_params.op,
             inputs=submit_params.inputs,
             outputs=submit_params.outputs,
             program=submit_params.program,
             batch=submit_params.batch,
-            config=submit_params.config,
+            config=config,
             job_id=submit_params.job_id,
         )
-        
+
         if not is_new:
             # Idempotent return
             return SubmitResult(
@@ -431,22 +570,27 @@ class Runtime:
                 status=job.to_model_status(),
                 queue_position=job.queue_position,
                 seq=self.event_log.get_last_seq(session_id),
+                result=job.result,
+                error=job.error,
             )
-        
+
         # Grant buffer access
         for name, spec in submit_params.inputs.items():
             if isinstance(spec, dict) and spec.get("buffer"):
                 buffer_id = spec["buffer"]
                 self.buffer_manager.grant_read(job.job_id, buffer_id)
-        
+
         for name, spec in submit_params.outputs.items():
             if isinstance(spec, dict) and spec.get("buffer"):
                 buffer_id = spec["buffer"]
                 self.buffer_manager.grant_write(job.job_id, buffer_id)
-        
+
+        self.job_table.transition(job.job_id, JobStatus.PENDING)
+        job.queue_position = self.scheduler.get_queue_depth(processor) + 1
+
         # Emit submitted event
         self.event_log.append(session_id, Event(
-            event_id=str(ULID()),
+            event_id=str(ulid.new()),
             seq=0,
             session=session_id,
             job_id=job.job_id,
@@ -458,11 +602,26 @@ class Runtime:
                 queue_position=job.queue_position,
             ),
         ))
-        
+
         # Enqueue for scheduling
         await self.scheduler.enqueue(job)
         self.quota_manager.on_job_submit(session_id, estimated_buffer_bytes)
-        
+
+        if config.get("mode") == "sync":
+            timeout = (config.get("timeout_ms", 0) or 0) / 1000 or None
+            finished = await self.job_table.wait_terminal(job.job_id, timeout=timeout)
+            if finished is None:
+                self.worker_pool._fail_job(job, "timeout", "Job exceeded wait timeout")
+                raise JobError("Job timed out", code=ErrorCode.TIMEOUT.value)
+            return SubmitResult(
+                job_id=job.job_id,
+                status=finished.to_model_status(),
+                queue_position=job.queue_position,
+                seq=self.event_log.get_last_seq(session_id),
+                result=finished.result,
+                error=finished.error,
+            )
+
         return SubmitResult(
             job_id=job.job_id,
             status=ModelJobStatus.PENDING,
@@ -470,15 +629,25 @@ class Runtime:
             seq=self.event_log.get_last_seq(session_id),
         )
 
+    def _estimate_output_bytes(self, outputs: dict[str, Any]) -> int:
+        """Estimate bytes for declared output buffers."""
+        total = 0
+        for spec in outputs.values():
+            if isinstance(spec, dict) and spec.get("buffer"):
+                meta = self.buffer_manager._metadata.get(spec["buffer"])
+                if meta is not None:
+                    total += meta.bytes
+        return total
+
     async def _poll(self, params: dict, session_id: str) -> PollResult:
         poll_params = PollParams(**params)
         job = self.job_table.get(poll_params.job_id)
         if not job:
             raise JobError("Job not found", code=ErrorCode.UNKNOWN_PROCESSOR.value)
-        
+
         if job.session_id != session_id:
             raise JobError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
-        
+
         return PollResult(
             job_id=job.job_id,
             status=job.to_model_status(),
@@ -492,30 +661,27 @@ class Runtime:
         job = self.job_table.get(wait_params.job_id)
         if not job:
             raise JobError("Job not found", code=ErrorCode.UNKNOWN_PROCESSOR.value)
-        
+
         if job.session_id != session_id:
             raise JobError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
-        
+
         if job.is_terminal():
             return WaitResult(
                 status=job.to_model_status(),
                 result=job.result,
                 error=job.error,
             )
-        
-        # Wait for completion with timeout
-        start = get_clock().monotonic()
+
+        # Wait for completion without busy-looping
         timeout = wait_params.timeout_ms / 1000 if wait_params.timeout_ms else None
-        
-        while not job.is_terminal():
-            if timeout and (get_clock().monotonic() - start) > timeout:
-                raise JobError("Wait timeout", code=ErrorCode.TIMEOUT.value)
-            await asyncio.sleep(0.01)
-        
+        finished = await self.job_table.wait_terminal(job.job_id, timeout=timeout)
+        if finished is None:
+            raise JobError("Wait timeout", code=ErrorCode.TIMEOUT.value)
+
         return WaitResult(
-            status=job.to_model_status(),
-            result=job.result,
-            error=job.error,
+            status=finished.to_model_status(),
+            result=finished.result,
+            error=finished.error,
         )
 
     async def _read(self, params: dict, session_id: str) -> BufferView:
@@ -524,13 +690,13 @@ class Runtime:
         meta = self.buffer_manager._metadata.get(read_params.buffer)
         if not meta:
             raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
-        
+
         inline_data, derived_ref = self.buffer_manager.read_view(
             read_params.buffer,
             slices=read_params.slices,
             max_inline_bytes=read_params.max_inline_bytes,
         )
-        
+
         if inline_data is not None:
             return BufferView(
                 buffer=read_params.buffer,
@@ -550,11 +716,11 @@ class Runtime:
         meta = self.buffer_manager._metadata.get(write_params.buffer)
         if not meta:
             raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
-        
+
         # Convert data to numpy array
         import numpy as np
         data = np.array(write_params.data)
-        
+
         ref = self.buffer_manager.write_view(
             write_params.buffer,
             write_params.slices,
@@ -568,41 +734,57 @@ class Runtime:
         job = self.job_table.get(cancel_params.job_id)
         if not job:
             raise JobError("Job not found", code=ErrorCode.UNKNOWN_PROCESSOR.value)
-        
+
         if job.session_id != session_id:
             raise JobError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
-        
+
         if job.is_terminal():
             return CancelResult(
                 job_id=job.job_id,
                 status="already_terminal",
             )
-        
-        # Transition to cancel requested
+
+        # Transition to cancel requested. In a single event-loop thread this
+        # is the cancellation linearization point.
         self.job_table.transition(job.job_id, JobStatus.CANCEL_REQUESTED)
-        
-        # Send cancel to worker
-        await self.worker_pool.cancel_job(job.job_id)
-        
+
+        worker_id = await self.worker_pool.cancel_job(job.job_id)
+        if worker_id is None:
+            self._finish_cancelled(job, cancel_params.reason or "cancel_requested")
+        else:
+            asyncio.create_task(self._finalize_cancel(job.job_id, worker_id))
+
         return CancelResult(
             job_id=job.job_id,
             status="cancel_requested",
         )
+
+    async def _finalize_cancel(self, job_id: str, worker_id: str) -> None:
+        """Give the worker a grace period, then force terminal cancellation."""
+        grace = self.config.get("cancel_grace_ms", 500) / 1000
+        await asyncio.sleep(grace)
+        job = self.job_table.get(job_id)
+        if job is None or job.is_terminal():
+            return
+        if job.status != JobStatus.CANCEL_REQUESTED:
+            return
+        self._finish_cancelled(job, "cancel_requested")
+        await self.worker_pool.terminate_for_job(job_id)
 
     async def _sleep(self, params: dict, session_id: str) -> SleepResult:
         sleep_params = SleepParams(**params)
         session = self._sessions.get(session_id)
         if not session:
             raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
-        
+
         self.quota_manager.check_sleep_register(session_id)
-        
+
         # Check if already satisfied
         condition = sleep_params.until
         already_satisfied = False
         satisfied_jobs = []
         statuses = {}
-        
+
         if condition.all:
             all_done = True
             for job_id in condition.all:
@@ -615,7 +797,7 @@ class Runtime:
                     statuses[job_id] = job.to_model_status()
             if all_done:
                 already_satisfied = True
-        
+
         if not already_satisfied and condition.any:
             for job_id in condition.any:
                 job = self.job_table.get(job_id)
@@ -624,7 +806,7 @@ class Runtime:
                     satisfied_jobs.append(job_id)
                     statuses[job_id] = job.to_model_status()
                     break
-        
+
         if already_satisfied:
             return SleepResult(
                 sleep_id="",
@@ -636,9 +818,9 @@ class Runtime:
                     "already_satisfied": True,
                 },
             )
-        
+
         # Register sleep
-        sleep_id = f"sleep_{ULID()}"
+        sleep_id = f"sleep_{ulid.new()}"
         session.sleep_registration = {
             "sleep_id": sleep_id,
             "condition": condition,
@@ -648,7 +830,7 @@ class Runtime:
         session.wake_event = asyncio.Event()
         session.wake_result = None
         self.quota_manager.on_sleep_register(session_id)
-        
+
         return SleepResult(
             sleep_id=sleep_id,
             status="registered",
@@ -659,12 +841,12 @@ class Runtime:
         session = self._sessions.get(session_id or "")
         if not session:
             return WakeResult(status="no_active_sleep")
-        
+
         if session.wake_event:
             session.wake_event.set()
             session.wake_result = {"reason": "forced_wake"}
             return WakeResult(status="woken")
-        
+
         return WakeResult(status="no_active_sleep")
 
     async def _ack(self, params: dict, session_id: str) -> AckResult:
@@ -677,9 +859,9 @@ class Runtime:
         session = self._sessions.get(session_id)
         if not session:
             raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
-        
+
         self.quota_manager.check_buffer_create(session_id, 0)  # TODO: calculate size
-        
+
         ref = self.buffer_manager.create(
             session_id=session_id,
             name=create_params.name,
@@ -695,9 +877,9 @@ class Runtime:
         session = self._sessions.get(session_id)
         if not session:
             raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
-        
+
         self.quota_manager.check_buffer_create(session_id, 0)
-        
+
         if import_params.data is not None:
             ref = self.buffer_manager.import_bytes(
                 session_id=session_id,
@@ -716,7 +898,7 @@ class Runtime:
             )
         else:
             raise ValidationError("Either data or path required", code=ErrorCode.INVALID_SCHEMA.value)
-        
+
         self.quota_manager.on_buffer_create(session_id, ref.bytes)
         return ref
 
@@ -763,7 +945,7 @@ class Runtime:
         session = self._sessions.get(session_id)
         if not session:
             raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
-        
+
         # Update quotas
         new_quotas = QuotaConfig()
         if config_params.max_outstanding_jobs is not None:
@@ -774,13 +956,13 @@ class Runtime:
             new_quotas.max_sleep_seconds = config_params.max_sleep_seconds
         if config_params.sleep_level is not None:
             new_quotas.sleep_level = config_params.sleep_level
-        
+
         self.quota_manager.set_session_quotas(session_id, new_quotas)
-        
+
         # Update injection policy
         if config_params.injection:
             session.injection_policy = config_params.injection
-        
+
         return {"status": "ok"}
 
     async def _health(self, params: dict) -> HealthResult:
@@ -796,10 +978,10 @@ class Runtime:
         session = self._sessions.get(session_id)
         if not session:
             return CloseResult(cancelled_jobs=[], detached_jobs=[])
-        
+
         cancelled = []
         detached = []
-        
+
         jobs = self.job_table.get_by_session(session_id)
         for job in jobs:
             if not job.is_terminal():
@@ -809,22 +991,17 @@ class Runtime:
                     self.job_table.transition(job.job_id, JobStatus.CANCEL_REQUESTED)
                     await self.worker_pool.cancel_job(job.job_id)
                     cancelled.append(job.job_id)
-        
+
         # Clean up buffers
         if not close_params.detach:
             self.buffer_manager.cleanup_session(session_id)
-        
+
         # Remove session
         self._sessions.pop(session_id, None)
         self.quota_manager.remove_session(session_id)
         self.event_log.remove_session(session_id)
-        
+
         return CloseResult(
             cancelled_jobs=cancelled,
             detached_jobs=detached,
         )
-
-
-# Import ULID for session IDs
-from ulid import ULID
-from ..protocol.messages import PROTOCOL_VERSION

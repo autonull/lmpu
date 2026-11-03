@@ -3,29 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import signal
 import sys
-import ulid
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
+import ulid
+
+from ..kernel.clock import get_clock
+from ..kernel.events import EventLog
+from ..kernel.jobs import JobRecord, JobStatus, JobTable
 from ..protocol.messages import (
-    EventKind,
     Event,
-    JobStartedData,
-    ProgressData,
+    EventKind,
+    HeartbeatData,
+    JobCancelledData,
     JobCompletedData,
     JobFailedData,
-    JobCancelledData,
     NeedsMoreInputData,
-    HeartbeatData,
+    ProgressData,
 )
-import ulid
-from ..kernel.events import EventLog
-from ..kernel.jobs import JobTable, JobRecord, JobStatus
-from ..kernel.clock import get_clock
 
 
 @dataclass
@@ -38,7 +35,7 @@ class WorkerInfo:
     manifest: dict[str, Any]
     started_at: float
     last_heartbeat: float
-    current_job: Optional[str] = None
+    current_job: str | None = None
     crash_count: int = 0
 
 
@@ -69,6 +66,17 @@ class WorkerPool:
         self._processor_queues: dict[str, asyncio.Queue[str]] = {}  # processor -> worker_ids
         self._available_workers: dict[str, set[str]] = {}  # processor -> available worker_ids
         self._lock = asyncio.Lock()
+        self._job_workers: dict[str, str] = {}  # job_id -> worker_id
+        self._on_terminal: Callable[[JobRecord], None] | None = None
+
+    def set_terminal_callback(self, callback: Callable[[JobRecord], None]) -> None:
+        """Register a callback invoked once after a job reaches a terminal state."""
+        self._on_terminal = callback
+
+    def _after_terminal(self, job: JobRecord) -> None:
+        self._job_workers.pop(job.job_id, None)
+        if self._on_terminal is not None:
+            self._on_terminal(job)
 
     async def start(self) -> None:
         """Start warm worker pool."""
@@ -88,11 +96,11 @@ class WorkerPool:
         self,
         processor: str,
         manifest: dict[str, Any],
-        plugin_path: Optional[str] = None,
+        plugin_path: str | None = None,
     ) -> WorkerInfo:
         """Spawn a new worker process."""
         worker_id = f"worker_{str(ulid.new())}"
-        
+
         # Build command
         cmd = [
             self.python_executable,
@@ -102,7 +110,7 @@ class WorkerPool:
         ]
         if plugin_path:
             cmd.extend(["--plugin", plugin_path])
-        
+
         # Start process
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -131,13 +139,13 @@ class WorkerPool:
             started_at=get_clock().monotonic(),
             last_heartbeat=get_clock().monotonic(),
         )
-        
+
         self._workers[worker_id] = worker
         self._available_workers.setdefault(processor, set()).add(worker_id)
-        
+
         # Start heartbeat monitor
         asyncio.create_task(self._monitor_worker(worker_id))
-        
+
         return worker
 
     async def _monitor_worker(self, worker_id: str) -> None:
@@ -162,7 +170,7 @@ class WorkerPool:
                 print(f"WORKER {worker_id} STDERR: {line.decode().strip()}")
 
         await asyncio.gather(read_stdout(), read_stderr())
-        
+
         # Process exited
         await worker.process.wait()
         await self._handle_worker_exit(worker_id)
@@ -249,81 +257,144 @@ class WorkerPool:
         elif msg_type == "error":
             await self._handle_worker_error(worker_id, msg)
 
-    async def _handle_worker_result(self, worker_id: str, msg: dict[str, Any]) -> None:
-        """Handle successful job result."""
-        job_id = msg.get("job_id")
-        job = self.job_table.get(job_id)
-        if not job:
-            return
+    async def execute_job(self, worker: WorkerInfo, job: JobRecord) -> None:
+        """Assign a job to a worker and send the execute command."""
+        worker.current_job = job.job_id
+        self._job_workers[job.job_id] = worker.worker_id
+        await self.send_command(
+            worker.worker_id,
+            {
+                "type": "execute",
+                "session_id": job.session_id,
+                "job": {
+                    "job_id": job.job_id,
+                    "processor": job.processor,
+                    "op": job.op,
+                    "inputs": job.inputs,
+                    "outputs": job.outputs,
+                    "program": job.program,
+                    "batch": job.batch,
+                    "config": job.config,
+                },
+            },
+        )
 
-        self.job_table.transition(job_id, JobStatus.COMPLETED)
-        job.result = msg.get("result")
-        job.buffer_refs = msg.get("buffer_refs", [])
-        
+    def _complete_job(
+        self,
+        job: JobRecord,
+        result: dict[str, Any],
+        checksum: str = "",
+        cache_hit: bool = False,
+    ) -> None:
+        """Move a job to COMPLETED and emit exactly one terminal event."""
+        if job.is_terminal():
+            return
+        if job.status != JobStatus.RUNNING:
+            self.job_table.transition(job.job_id, JobStatus.RUNNING)
+        self.job_table.transition(job.job_id, JobStatus.COMPLETED)
+        job.result = result
         self.event_log.append(
             job.session_id,
             Event(
                 event_id=str(ulid.new()),
                 seq=0,
                 session=job.session_id,
-                job_id=job_id,
+                job_id=job.job_id,
                 type=EventKind.JOB_COMPLETED,
                 ts_monotonic=get_clock().monotonic(),
                 data=JobCompletedData(
-                    job_id=job_id,
-                    result=msg.get("result", {}),
-                    buffer_refs=msg.get("buffer_refs", []),
-                    checksum=msg.get("checksum", ""),
-                    cache_hit=msg.get("cache_hit", False),
+                    job_id=job.job_id,
+                    result=result,
+                    buffer_refs=job.buffer_refs,
+                    checksum=checksum,
+                    cache_hit=cache_hit,
                 ),
             ),
         )
+        self._after_terminal(job)
 
-        # Release worker
+    def _fail_job(self, job: JobRecord, code: str, message: str, retriable: bool = False) -> None:
+        """Move a job to FAILED and emit exactly one terminal event."""
+        if job.is_terminal():
+            return
+        if job.status != JobStatus.RUNNING:
+            self.job_table.transition(job.job_id, JobStatus.RUNNING)
+        self.job_table.transition(job.job_id, JobStatus.FAILED)
+        job.error = {"code": code, "message": message, "retriable": retriable}
+        self.event_log.append(
+            job.session_id,
+            Event(
+                event_id=str(ulid.new()),
+                seq=0,
+                session=job.session_id,
+                job_id=job.job_id,
+                type=EventKind.JOB_FAILED,
+                ts_monotonic=get_clock().monotonic(),
+                data=JobFailedData(
+                    job_id=job.job_id,
+                    error_code=code,
+                    retriable=retriable,
+                    detail=message,
+                ),
+            ),
+        )
+        self._after_terminal(job)
+
+    async def _handle_worker_result(self, worker_id: str, msg: dict[str, Any]) -> None:
+        """Handle successful job result."""
+        job_id = msg.get("job_id")
+        job = self.job_table.get(job_id)
+        if not job or job.is_terminal():
+            self._release_worker(worker_id)
+            return
+
+        coalesced = (job.config or {}).get("_coalesced_job_ids")
+        if coalesced:
+            data = msg.get("result") or {}
+            results = data.get("results", [])
+            errors = {e.get("index"): e.get("error") for e in data.get("errors", [])}
+            for index, child_id in enumerate(coalesced):
+                child = self.job_table.get(child_id)
+                if child is None or child.is_terminal():
+                    continue
+                if index in errors:
+                    self._fail_job(child, "execution_error", str(errors[index]))
+                else:
+                    item = results[index] if index < len(results) else None
+                    self._complete_job(
+                        child,
+                        item if isinstance(item, dict) else {"result": item},
+                        checksum=msg.get("checksum", ""),
+                    )
+            self._release_worker(worker_id)
+            return
+
+        self._complete_job(
+            job,
+            msg.get("result") or {},
+            checksum=msg.get("checksum", ""),
+            cache_hit=msg.get("cache_hit", False),
+        )
         self._release_worker(worker_id)
 
     async def _handle_worker_error(self, worker_id: str, msg: dict[str, Any]) -> None:
         """Handle job error."""
         job_id = msg.get("job_id")
         job = self.job_table.get(job_id)
-        if not job:
+        if not job or job.is_terminal():
+            self._release_worker(worker_id)
             return
 
         error_code = msg.get("error_code", "internal")
         retriable = msg.get("retriable", False)
-        
-        self.job_table.transition(job_id, JobStatus.FAILED)
-        job.error = {
-            "code": error_code,
-            "message": msg.get("message", "Worker error"),
-            "retriable": retriable,
-        }
-
-        self.event_log.append(
-            job.session_id,
-            Event(
-                event_id=str(ulid.new()),
-                seq=0,
-                session=job.session_id,
-                job_id=job_id,
-                type=EventKind.JOB_FAILED,
-                ts_monotonic=get_clock().monotonic(),
-                data=JobFailedData(
-                    job_id=job_id,
-                    error_code=error_code,
-                    retriable=retriable,
-                    detail=msg.get("message", "Worker error"),
-                ),
-            ),
-        )
+        self._fail_job(job, error_code, msg.get("message", "Worker error"), retriable)
 
         worker = self._workers.get(worker_id)
         if worker:
             worker.crash_count += 1
             if worker.crash_count >= self.crash_threshold:
-                # Quarantine processor
                 await self._quarantine_processor(worker.processor)
-        
+
         self._release_worker(worker_id)
 
     async def _handle_worker_exit(self, worker_id: str) -> None:
@@ -334,33 +405,55 @@ class WorkerPool:
 
         self._available_workers.get(worker.processor, set()).discard(worker_id)
 
-        # If worker had a job, mark it failed
+        # If worker had a job, mark it failed or cancelled
         if worker.current_job:
             job = self.job_table.get(worker.current_job)
             if job and not job.is_terminal():
-                self.job_table.transition(job.job_id, JobStatus.FAILED)
-                job.error = {
-                    "code": "worker_crashed",
-                    "message": "Worker process exited unexpectedly",
-                    "retriable": True,
-                }
-                self.event_log.append(
-                    job.session_id,
-                    Event(
-                        event_id=str(ulid.new()),
-                        seq=0,
-                        session=job.session_id,
-                        job_id=job.job_id,
-                        type=EventKind.JOB_FAILED,
-                        ts_monotonic=get_clock().monotonic(),
-                        data=JobFailedData(
+                cancelled = job.status == JobStatus.CANCEL_REQUESTED
+                target = JobStatus.CANCELLED if cancelled else JobStatus.FAILED
+                self.job_table.transition(job.job_id, target)
+                if cancelled:
+                    job.error = {
+                        "code": "cancelled",
+                        "message": "Job cancelled while worker was stopping",
+                        "retriable": False,
+                    }
+                    self.event_log.append(
+                        job.session_id,
+                        Event(
+                            event_id=str(ulid.new()),
+                            seq=0,
+                            session=job.session_id,
                             job_id=job.job_id,
-                            error_code="worker_crashed",
-                            retriable=True,
-                            detail="Worker process exited",
+                            type=EventKind.JOB_CANCELLED,
+                            ts_monotonic=get_clock().monotonic(),
+                            data=JobCancelledData(job_id=job.job_id, reason="cancel_requested"),
                         ),
-                    ),
-                )
+                    )
+                else:
+                    job.error = {
+                        "code": "worker_crashed",
+                        "message": "Worker process exited unexpectedly",
+                        "retriable": True,
+                    }
+                    self.event_log.append(
+                        job.session_id,
+                        Event(
+                            event_id=str(ulid.new()),
+                            seq=0,
+                            session=job.session_id,
+                            job_id=job.job_id,
+                            type=EventKind.JOB_FAILED,
+                            ts_monotonic=get_clock().monotonic(),
+                            data=JobFailedData(
+                                job_id=job.job_id,
+                                error_code="worker_crashed",
+                                retriable=True,
+                                detail="Worker process exited",
+                            ),
+                        ),
+                    )
+                self._after_terminal(job)
 
     def _release_worker(self, worker_id: str) -> None:
         """Release worker back to pool."""
@@ -381,17 +474,17 @@ class WorkerPool:
                 import orjson
                 worker.process.stdin.write(orjson.dumps({"type": "shutdown"}) + b"\n")
                 await worker.process.stdin.drain()
-            
+
             try:
                 await asyncio.wait_for(worker.process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         if worker.process.returncode is None:
             worker.process.terminate()
             try:
                 await asyncio.wait_for(worker.process.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 worker.process.kill()
                 await worker.process.wait()
 
@@ -404,7 +497,7 @@ class WorkerPool:
         for worker_id, worker in list(self._workers.items()):
             if worker.processor == processor:
                 await self._terminate_worker(worker_id, graceful=False)
-        
+
         # Emit resource warning
         # TODO: emit to all sessions or admin
 
@@ -412,7 +505,7 @@ class WorkerPool:
         """Get an available worker for a processor, spawning if needed."""
         async with self._lock:
             available = self._available_workers.get(processor, set())
-            
+
             if available:
                 worker_id = available.pop()
                 worker = self._workers[worker_id]
@@ -442,18 +535,34 @@ class WorkerPool:
         worker = self._workers.get(worker_id)
         if not worker or not worker.process.stdin:
             raise RuntimeError(f"Worker {worker_id} not available")
-        
+
         import orjson
         worker.process.stdin.write(orjson.dumps(command) + b"\n")
         await worker.process.stdin.drain()
 
-    async def cancel_job(self, job_id: str) -> bool:
-        """Send cancel to worker running job."""
-        for worker in self._workers.values():
-            if worker.current_job == job_id:
-                await self.send_command(worker.worker_id, {"type": "cancel", "job_id": job_id})
-                return True
-        return False
+    async def cancel_job(self, job_id: str) -> str | None:
+        """Send cancel to the worker running a job. Returns worker id."""
+        worker_id = self._job_workers.get(job_id)
+        if worker_id is None:
+            for worker in self._workers.values():
+                if worker.current_job == job_id:
+                    worker_id = worker.worker_id
+                    break
+        if worker_id is None:
+            return None
+        try:
+            await self.send_command(worker_id, {"type": "cancel", "job_id": job_id})
+        except (RuntimeError, BrokenPipeError):
+            pass
+        return worker_id
+
+    async def terminate_for_job(self, job_id: str) -> bool:
+        """Force-terminate the worker assigned to a job."""
+        worker_id = self._job_workers.get(job_id)
+        if worker_id is None:
+            return False
+        await self._terminate_worker(worker_id, graceful=False)
+        return True
 
     def get_stats(self) -> dict[str, Any]:
         return {

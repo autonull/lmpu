@@ -2,28 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
-import ulid
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
+import ulid
+
+from ..memory.grants import GrantManager
 from ..protocol.messages import (
+    BufferRef,
     JobStatus,
     ModelJobStatus,
-    EventKind,
-    Event,
-    JobSubmittedData,
-    JobStartedData,
-    ProgressData,
-    JobCompletedData,
-    JobFailedData,
-    JobCancelledData,
-    NeedsMoreInputData,
-    SleepCondition,
-    BufferRef,
 )
-from ..memory.grants import GrantManager
 
 
 class TransitionError(Exception):
@@ -76,30 +67,30 @@ class JobRecord:
     op: str
     inputs: dict[str, Any] = field(default_factory=dict)
     outputs: dict[str, Any] = field(default_factory=dict)
-    program: Optional[str] = None
-    batch: Optional[dict[str, Any]] = None
+    program: str | None = None
+    batch: dict[str, Any] | None = None
     config: dict[str, Any] = field(default_factory=dict)
     status: JobStatus = JobStatus.CREATED
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    worker_id: Optional[str] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    worker_id: str | None = None
     queue_position: int = 0
     priority: int = 5
-    timeout_ms: Optional[int] = None
-    deadline_ms: Optional[int] = None
-    request_hash: Optional[str] = None
-    result: Optional[dict[str, Any]] = None
-    error: Optional[dict[str, Any]] = None
+    timeout_ms: int | None = None
+    deadline_ms: int | None = None
+    request_hash: str | None = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
     buffer_refs: list[BufferRef] = field(default_factory=list)
     grants: list[str] = field(default_factory=list)  # grant IDs
     progress: float = 0.0
-    progress_message: Optional[str] = None
+    progress_message: str | None = None
     retry_count: int = 0
     idempotent: bool = False
     ttl_ms: int = 3600000
-    trace_id: Optional[str] = None
-    span_id: Optional[str] = None
+    trace_id: str | None = None
+    span_id: str | None = None
 
     def to_model_status(self) -> ModelJobStatus:
         """Convert internal status to model-facing status."""
@@ -108,13 +99,13 @@ class JobRecord:
         if self.status == JobStatus.CREATED:
             return ModelJobStatus.PENDING
         if self.status == JobStatus.CANCEL_REQUESTED:
-            return ModelJobStatus.CANCELLED
+            return ModelJobStatus.CANCEL_REQUESTED
         return ModelJobStatus(self.status.value)
 
     def is_terminal(self) -> bool:
         return is_terminal(self.status)
 
-    def elapsed_ms(self) -> Optional[int]:
+    def elapsed_ms(self) -> int | None:
         if self.started_at is None:
             return None
         end = self.completed_at or time.time()
@@ -124,12 +115,13 @@ class JobRecord:
 class JobTable:
     """Thread-safe job table with idempotency and state machine."""
 
-    def __init__(self, grant_manager: Optional[GrantManager] = None):
+    def __init__(self, grant_manager: GrantManager | None = None):
         self._jobs: dict[str, JobRecord] = {}
         self._idempotency_index: dict[str, str] = {}  # request_hash -> job_id
         self._session_jobs: dict[str, set[str]] = {}  # session_id -> job_ids
         self._grant_manager = grant_manager or GrantManager()
         self._lock = None  # asyncio.Lock when used in async context
+        self._terminal_waiters: dict[str, asyncio.Event] = {}
 
     def _make_job_id(self) -> str:
         return f"job_{str(ulid.new())}"
@@ -147,10 +139,10 @@ class JobTable:
         op: str,
         inputs: dict[str, Any],
         outputs: dict[str, Any],
-        program: Optional[str] = None,
-        batch: Optional[dict[str, Any]] = None,
-        config: Optional[dict[str, Any]] = None,
-        job_id: Optional[str] = None,
+        program: str | None = None,
+        batch: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
+        job_id: str | None = None,
     ) -> tuple[JobRecord, bool]:
         """Create a new job or return existing idempotent job.
         
@@ -211,19 +203,49 @@ class JobTable:
         job = self._jobs.get(job_id)
         if not job:
             raise KeyError(f"Job not found: {job_id}")
-        
+
         transition(job.status, new_status)
         old_status = job.status
         job.status = new_status
-        
+
         if new_status == JobStatus.RUNNING and old_status == JobStatus.PENDING:
             job.started_at = time.time()
         elif new_status in TERMINAL_STATES:
             job.completed_at = time.time()
-        
+            waiter = self._terminal_waiters.pop(job_id, None)
+            if waiter is not None:
+                waiter.set()
+
         return job
 
-    def get(self, job_id: str) -> Optional[JobRecord]:
+    async def wait_terminal(
+        self,
+        job_id: str,
+        timeout: float | None = None,
+    ) -> JobRecord | None:
+        """Await a terminal state without polling. Returns None on timeout."""
+        job = self._jobs.get(job_id)
+        if not job:
+            raise KeyError(f"Job not found: {job_id}")
+        if job.is_terminal():
+            return job
+
+        waiter = self._terminal_waiters.get(job_id)
+        if waiter is None:
+            waiter = asyncio.Event()
+            self._terminal_waiters[job_id] = waiter
+
+        try:
+            await asyncio.wait_for(waiter.wait(), timeout=timeout)
+        except TimeoutError:
+            return None
+        finally:
+            if job.is_terminal():
+                self._terminal_waiters.pop(job_id, None)
+
+        return self._jobs.get(job_id)
+
+    def get(self, job_id: str) -> JobRecord | None:
         return self._jobs.get(job_id)
 
     def get_by_session(self, session_id: str) -> list[JobRecord]:
@@ -232,19 +254,19 @@ class JobTable:
 
     def list_jobs(
         self,
-        session_id: Optional[str] = None,
-        status: Optional[list[ModelJobStatus]] = None,
+        session_id: str | None = None,
+        status: list[ModelJobStatus] | None = None,
         limit: int = 100,
     ) -> list[JobRecord]:
         if session_id:
             jobs = self.get_by_session(session_id)
         else:
             jobs = list(self._jobs.values())
-        
+
         if status:
             status_set = set(s.value for s in status)
             jobs = [j for j in jobs if j.status.value in status_set]
-        
+
         # Sort by priority (desc), then created_at (asc)
         jobs.sort(key=lambda j: (-j.priority, j.created_at))
         return jobs[:limit]
@@ -270,10 +292,13 @@ class JobTable:
         if job:
             self._idempotency_index.pop(job.request_hash, None)
             self._session_jobs.get(job.session_id, set()).discard(job_id)
+            waiter = self._terminal_waiters.pop(job_id, None)
+            if waiter is not None:
+                waiter.set()
             return True
         return False
 
-    def cleanup_expired(self, now: Optional[float] = None) -> list[str]:
+    def cleanup_expired(self, now: float | None = None) -> list[str]:
         now = now or time.time()
         expired = []
         for job_id, job in list(self._jobs.items()):
