@@ -11,11 +11,21 @@ from lmpu.bench.workloads import _large_document, _matmul_expected
 pytestmark = pytest.mark.unit
 
 
-def test_initial_workload_set_is_registered() -> None:
-    assert set(list_workloads()) == {"bigint_mul", "matmul", "large_context", "sleep"}
+def test_workload_set_is_registered() -> None:
+    assert set(list_workloads()) == {
+        "bigint_mul",
+        "matmul",
+        "large_context",
+        "sleep",
+        "large_result",
+        "batch",
+    }
     assert get_workload("matmul").inputs == {"size": 512, "seed": 7}
-    assert get_workload("large_context").baselines == ("lmpu.sync", "trace_token")
+    assert get_workload("large_context").baselines == ("lmpu.sync", "trace_token", "native")
     assert get_workload("sleep").inputs["program"].count("sleep(3)") == 1
+    assert get_workload("large_result").config["result_bytes"] == 16 * 1024 * 1024
+    assert get_workload("batch").native is not None
+    assert get_workload("batch").verify(get_workload("batch").native()) is True
 
 
 def test_large_context_and_matmul_helpers_are_deterministic() -> None:

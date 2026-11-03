@@ -19,9 +19,13 @@ Artifacts are written under `benchmarks/results/<date>/<device>/<commit>/`:
 - `report.json` / `report.md`: C1–C5 tables, CDFs, timeline, and limitations.
 
 Run `make report` to render the newest artifact directory. Published reports live
-in `benchmarks/reports/`. The initial Gate B report is
-`benchmarks/reports/gate-b-initial/report.md`; its C2–C5 status and limitations
-are part of the artifact.
+in `benchmarks/reports/`:
+
+- `gate-b-initial`: first C1–C5 pass with C2–C5 limitations.
+- `gate-b-evidence`: measured C2 (S1 zero forwards), C3 (16 MiB bounded slice),
+  C4 (batch vs individual), and C5 (native baseline). C1 remains partial
+  because the small-budget model baselines fail correctness; the report keeps
+  those failures instead of hiding them.
 
 Run settings are intentionally small for reproducibility: 512² matmul, 12k
 context, 3 s sleep, 64-token default budget. Increase them explicitly for a
@@ -30,6 +34,16 @@ paper run.
 ## Baselines
 
 - **`lmpu.sync`**: submit and wait through one LMPU session; summary-only result.
+- **`lmpu.sleep`**: submit asynchronously, register an S1 sleep, park for the job
+  window, and wake. The treatment performs no decode, so
+  `forward_passes` is zero while parked; park duration is recorded in
+  `metadata.park`.
+- **`lmpu.slice`**: import a 16 MiB shared-memory buffer and read it through the
+  bounded-slice path. Only derived-buffer metadata enters context.
+- **`lmpu.individual`**: submit each batch item as its own synchronous job.
+- **`lmpu.batch`**: submit all batch items in one job.
+- **`native`**: run the same workload computation in-process, without the
+  runtime, for C5 overhead comparison.
 - **`direct_cot`**: model reasons in natural language with no tool.
 - **`trace_token`**: labelled interpreter-driven trace emulation. It is a token
   baseline, not a wall-time or energy baseline.
@@ -47,6 +61,12 @@ counts. Trial order is shuffled per trial with a seed derived from the base seed
 - `matmul`: 512 x 512 deterministic float32 matrix product.
 - `large_context`: find a marker in a 12k+ character document.
 - `sleep`: a 3-second blocking `python.vm` job.
+- `large_result`: a 16 MiB buffer read through a bounded slice (C3).
+- `batch`: 64 small additions submitted individually and as one batch (C4).
+
+Each workload declares its applicable baselines, so a run never attempts a
+model baseline on a non-model workload. `native` runs the same computation
+in-process for C5.
 
 ## Energy
 

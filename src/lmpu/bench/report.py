@@ -21,6 +21,15 @@ TOKEN_KEYS = (
     "total_tokens",
 )
 ENERGY_KEYS = ("gpu_energy_joules", "vram_peak_mb")
+TIMING_KEYS = ("sleep_duration_seconds", "wake_latency_seconds")
+PRIMARY_BASELINES = ("lmpu.sync", "lmpu.slice", "lmpu.sleep", "lmpu.batch")
+
+
+def _primary_baseline(table: dict[str, Any], workload: str) -> str | None:
+    return next(
+        (baseline for baseline in PRIMARY_BASELINES if baseline in table.get(workload, {})),
+        None,
+    )
 
 
 def _median(values: list[float]) -> float | None:
@@ -63,6 +72,19 @@ def _stats(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
         )
         for key in ENERGY_KEYS
     }
+    timing = {
+        key: _median(
+            [float(record["metrics"][key]) for record in trials if key in record["metrics"]]
+        )
+        for key in TIMING_KEYS
+    }
+    result_bytes = _median(
+        [
+            float(record["metadata"]["result_bytes"])
+            for record in trials
+            if "result_bytes" in record.get("metadata", {})
+        ]
+    )
     return {
         "trials": len(trials),
         "wall_time_seconds": {"median": _median(walls), "ci95": _ci95(walls, seed)},
@@ -84,6 +106,9 @@ def _stats(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
         ),
         "token_cdf": {key: _cdf([float(r["metrics"][key]) for r in trials]) for key in TOKEN_KEYS},
         "energy": energy,
+        "timing": timing,
+        "result_bytes": result_bytes,
+        "derived": any(record.get("metadata", {}).get("derived") for record in trials),
         "correctness": {
             "passes": sum(correctness),
             "total": len(correctness),
@@ -138,14 +163,60 @@ def build_report(run_dir: Path) -> dict[str, Any]:
                 "correctness": stats["correctness"],
             }
             for baseline, stats in table[workload].items()
-            if baseline != "lmpu.sync"
+            if baseline in {"direct_cot", "trace_token", "sync_tool", "async_poll"}
         }
         for stats in c1[workload].values():
             if stats["correctness"]["rate"] != 1.0 or stats["reduction"] is None:
                 c1_complete = False
 
     sleep = table.get("sleep", {})
-    large = table.get("large_context", {})
+    sleep_treatment = sleep.get("lmpu.sleep")
+    large_result = table.get("large_result", {})
+    slice_stats = large_result.get("lmpu.slice")
+    batch = table.get("batch", {})
+    individual = batch.get("lmpu.individual")
+    batched = batch.get("lmpu.batch")
+    native_by_workload = {
+        workload: table[workload]["native"]
+        for workload in workloads
+        if "native" in table.get(workload, {})
+    }
+
+    c2_measured = (
+        sleep_treatment is not None
+        and (sleep_treatment["forward_passes"] or 0) == 0
+        and sleep_treatment["correctness"]["rate"] == 1.0
+    )
+    c3_measured = (
+        slice_stats is not None
+        and slice_stats["peak_context_tokens"] is not None
+        and slice_stats["peak_context_tokens"] <= 64
+        and slice_stats["correctness"]["rate"] == 1.0
+    )
+    c4_measured = (
+        individual is not None
+        and batched is not None
+        and individual["correctness"]["rate"] == 1.0
+        and batched["correctness"]["rate"] == 1.0
+        and batched["wall_time_seconds"]["median"] <= individual["wall_time_seconds"]["median"]
+    )
+    c5_measured = (
+        bool(workloads)
+        and len(native_by_workload) == len(workloads)
+        and all(stats["correctness"]["rate"] == 1.0 for stats in native_by_workload.values())
+    )
+
+    def _duration(stats: dict[str, Any] | None) -> dict[str, Any] | None:
+        if stats is None:
+            return None
+        return {
+            "forward_passes": stats["forward_passes"],
+            "sleep_duration_seconds": stats["timing"]["sleep_duration_seconds"],
+            "wake_latency_seconds": stats["timing"]["wake_latency_seconds"],
+            "wall_time_seconds": stats["wall_time_seconds"]["median"],
+            "correctness": stats["correctness"],
+        }
+
     report: dict[str, Any] = {
         "schema": "lmpu.bench.report.v1",
         "run_dir": str(run_dir),
@@ -157,7 +228,8 @@ def build_report(run_dir: Path) -> dict[str, Any]:
                 "by_workload": c1,
             },
             "C2_sleep_proof": {
-                "status": "partial" if sleep else "not_measured",
+                "status": ("measured" if c2_measured else ("partial" if sleep else "not_measured")),
+                "treatment": _duration(sleep_treatment),
                 "measured": {
                     baseline: {
                         "generated_tokens": stats["tokens"]["generated_tokens"],
@@ -167,32 +239,71 @@ def build_report(run_dir: Path) -> dict[str, Any]:
                     }
                     for baseline, stats in sleep.items()
                 },
-                "limitation": (
-                    "No lmpu.sleep/S1 treatment is wired; synchronous and polling "
-                    "baselines are shown for context only."
+                "note": (
+                    "The lmpu.sleep treatment parks the host in S1 for the measured "
+                    "job window and performs zero forward passes while parked."
                 ),
+                "limitation": None
+                if c2_measured
+                else "No lmpu.sleep/S1 treatment is present in this run.",
             },
             "C3_context_protection": {
-                "status": "partial" if large else "not_measured",
-                "measured": {
-                    baseline: {
-                        "control_tokens": stats["tokens"]["control_tokens"],
-                        "injected_tokens": stats["tokens"]["injected_tokens"],
-                        "peak_context_tokens": stats["peak_context_tokens"],
-                    }
-                    for baseline, stats in large.items()
-                },
-                "limitation": (
-                    "The workload demonstrates bounded injection on a 12k-character "
-                    "context, not a 16 MiB result buffer."
+                "status": (
+                    "measured" if c3_measured else ("partial" if slice_stats else "not_measured")
                 ),
+                "result_bytes": slice_stats["result_bytes"] if slice_stats else None,
+                "measured": None
+                if slice_stats is None
+                else {
+                    "lmpu.slice": {
+                        "control_tokens": slice_stats["tokens"]["control_tokens"],
+                        "injected_tokens": slice_stats["tokens"]["injected_tokens"],
+                        "peak_context_tokens": slice_stats["peak_context_tokens"],
+                        "derived": slice_stats["derived"],
+                        "correctness": slice_stats["correctness"],
+                    }
+                },
+                "note": (
+                    "A 16 MiB shared-memory buffer is represented in context by "
+                    "bounded-slice metadata; no slice payload is inlined."
+                ),
+                "limitation": None
+                if c3_measured
+                else "No 16 MiB bounded-slice probe is present in this run.",
             },
             "C4_batching": {
-                "status": "not_measured",
-                "limitation": "No batched-vs-individual submission probe is wired.",
+                "status": (
+                    "measured"
+                    if c4_measured
+                    else ("partial" if individual or batched else "not_measured")
+                ),
+                "individual": None
+                if individual is None
+                else {
+                    "wall_time_seconds": individual["wall_time_seconds"]["median"],
+                    "control_tokens": individual["tokens"]["control_tokens"],
+                },
+                "batched": None
+                if batched is None
+                else {
+                    "wall_time_seconds": batched["wall_time_seconds"]["median"],
+                    "control_tokens": batched["tokens"]["control_tokens"],
+                },
+                "speedup": _reduction(
+                    batched["wall_time_seconds"]["median"] if batched else None,
+                    individual["wall_time_seconds"]["median"] if individual else None,
+                ),
+                "note": "One batch submission replaces one submission per item.",
+                "limitation": None
+                if c4_measured
+                else "Batched and individual submissions are not both present.",
             },
             "C5_wall_time": {
-                "status": "partial" if table else "not_measured",
+                "status": (
+                    "measured"
+                    if c5_measured
+                    else ("partial" if native_by_workload else "not_measured")
+                ),
                 "by_workload": {
                     workload: {
                         baseline: stats["wall_time_seconds"]["median"]
@@ -200,10 +311,21 @@ def build_report(run_dir: Path) -> dict[str, Any]:
                     }
                     for workload in workloads
                 },
-                "limitation": (
-                    "Native-only timings are not recorded; LMPU includes worker and "
-                    "control-plane overhead."
+                "native_speedup": {
+                    workload: _reduction(
+                        stats["wall_time_seconds"]["median"],
+                        table[workload][primary]["wall_time_seconds"]["median"],
+                    )
+                    for workload, stats in native_by_workload.items()
+                    if (primary := _primary_baseline(table, workload)) is not None
+                },
+                "note": (
+                    "native runs the same computation in-process; LMPU includes "
+                    "worker, IPC, and control-plane overhead."
                 ),
+                "limitation": None
+                if c5_measured
+                else "A native baseline is missing for at least one workload.",
             },
         },
         "timeline": [
@@ -218,10 +340,12 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         ],
         "limitations": [
             "Trace-token is a labelled simulation and is not a wall-time or energy result.",
-            "C2 uses synchronous/polling baselines because lmpu.sleep is not yet wired.",
-            "C3 uses a 12k-character context task, not a 16 MiB result.",
-            "C4 batching has no probe in this report.",
-            "C5 lacks a separately measured native baseline.",
+            "C2 measures the S1 park window; the treatment performs no model decode by "
+            "construction.",
+            "C3 inlines derived-buffer metadata only, not any slice payload.",
+            "C4 uses 64 pure-function additions; it is control-plane evidence, not "
+            "model-quality evidence.",
+            "C5 native runs in-process and excludes worker, IPC, and control-plane overhead.",
             "Incorrect or failed baselines are retained; token reductions require "
             "equal task correctness.",
             "Failures and incorrect answers are retained in the table.",
@@ -278,7 +402,10 @@ def render_markdown(report: dict[str, Any]) -> str:
                         f"{reduction_text} | {stats['correctness']['passes']}/"
                         f"{stats['correctness']['total']} |"
                     )
-        if "limitation" in claim:
+        if claim.get("note"):
+            lines.append("")
+            lines.append(claim["note"])
+        if claim.get("limitation"):
             lines.append("")
             lines.append(claim["limitation"])
         lines.append("")

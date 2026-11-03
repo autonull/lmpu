@@ -85,7 +85,15 @@ async def test_all_baselines_run_and_emit_canonical_metrics(tmp_path: Path) -> N
 
     records = read_raw(Path(summary["run_id"]) / "raw.jsonl")
     by_baseline = {record["baseline"]: record for record in records}
-    assert set(by_baseline) == set(BASELINES)
+    expected = {
+        "lmpu.sync",
+        "direct_cot",
+        "trace_token",
+        "sync_tool",
+        "async_poll",
+        "native",
+    }
+    assert set(by_baseline) == expected
     assert all(record["correct"] for record in records)
     assert all(record["metrics"]["schema"] == "lmpu.host_metrics.v1" for record in records)
 
@@ -95,7 +103,52 @@ async def test_all_baselines_run_and_emit_canonical_metrics(tmp_path: Path) -> N
     assert by_baseline["sync_tool"]["metrics"]["injected_tokens"] > 0
     assert by_baseline["async_poll"]["metadata"]["polls"] >= 1
     assert by_baseline["lmpu.sync"]["metrics"]["control_tokens"] > 0
+    assert by_baseline["native"]["metadata"]["native"] is True
+    assert by_baseline["native"]["metrics"]["forward_passes"] == 0
 
     stats = summary["workloads"]["bigint_mul"]["baselines"]
-    assert set(stats) == set(BASELINES)
+    assert set(stats) == expected
     assert all(item["correctness"]["rate"] == 1.0 for item in stats.values())
+
+
+async def _run_one(tmp_path: Path, workload: str, baseline: str) -> dict:
+    config = BenchmarkConfig(
+        workloads=(workload,),
+        baselines=(baseline,),
+        trials=1,
+        warmups=0,
+        seed=5,
+        device="cpu",
+        idle_seconds=0.0,
+        results_root=tmp_path / f"results-{workload}-{baseline}",
+    )
+    summary = await BenchmarkHarness(config).run()
+    return read_raw(Path(summary["run_id"]) / "raw.jsonl")[0]
+
+
+async def test_lmpu_sleep_parks_in_s1_with_zero_forward_passes(tmp_path: Path) -> None:
+    record = await _run_one(tmp_path, "sleep", "lmpu.sleep")
+
+    assert record["correct"] is True
+    assert record["metadata"]["park"]["level"] == "S1"
+    assert record["metadata"]["park"]["forward_passes_during_park"] == 0
+    assert record["metrics"]["forward_passes"] == 0
+    assert record["metrics"]["sleep_duration_seconds"] >= 2.5
+
+
+async def test_lmpu_slice_reads_16mib_with_bounded_context(tmp_path: Path) -> None:
+    record = await _run_one(tmp_path, "large_result", "lmpu.slice")
+
+    assert record["correct"] is True
+    assert record["metadata"]["result_bytes"] == 16 * 1024 * 1024
+    assert record["metadata"]["derived"] is True
+    assert record["metrics"]["peak_context_tokens"] <= 64
+
+
+async def test_batch_submission_uses_less_control_overhead(tmp_path: Path) -> None:
+    record = await _run_one(tmp_path, "batch", "lmpu.individual")
+    batched = await _run_one(tmp_path, "batch", "lmpu.batch")
+
+    assert record["correct"] is True
+    assert batched["correct"] is True
+    assert batched["metrics"]["control_tokens"] < record["metrics"]["control_tokens"]

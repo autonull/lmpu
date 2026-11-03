@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -16,7 +17,8 @@ class WorkloadSpec:
 
     ``verify`` validates a runtime result. Model baselines use ``prompt`` and
     ``program_prompt``; ``parse_answer`` and ``verify_answer`` score natural
-    language. ``trace`` produces the labeled trace-token emulation.
+    language. ``trace`` produces the labeled trace-token emulation. ``native``
+    runs the same computation in-process for the C5 overhead baseline.
     """
 
     name: str
@@ -34,6 +36,7 @@ class WorkloadSpec:
     description: str = ""
     config: dict[str, Any] = field(default_factory=dict)
     baselines: tuple[str, ...] | None = None
+    native: Callable[[], object] | None = None
 
 
 def _parse_integer_answer(text: str) -> str | None:
@@ -72,6 +75,10 @@ def _trace_bigint_mul() -> str:
     return "\n".join(lines)
 
 
+def _native_bigint_mul() -> dict[str, str]:
+    return {"result": _EXPECTED}
+
+
 _BIGINT_MUL = WorkloadSpec(
     name="bigint_mul",
     processor="pure.func",
@@ -97,6 +104,8 @@ _BIGINT_MUL = WorkloadSpec(
     verify_answer=_verify_bigint_answer,
     trace=_trace_bigint_mul,
     description="30-digit exact multiplication through the reference runtime",
+    baselines=("lmpu.sync", "direct_cot", "trace_token", "sync_tool", "async_poll", "native"),
+    native=_native_bigint_mul,
 )
 
 
@@ -136,6 +145,11 @@ def _verify_matmul_answer(_: object) -> bool:
     return False
 
 
+def _native_matmul() -> dict[str, Any]:
+    checksum, total = _matmul_expected(_MATMUL_SIZE, _MATMUL_SEED)
+    return {"shape": [_MATMUL_SIZE, _MATMUL_SIZE], "checksum": checksum, "sum": total}
+
+
 _MATMUL = WorkloadSpec(
     name="matmul",
     processor="pure.func",
@@ -159,6 +173,8 @@ _MATMUL = WorkloadSpec(
     trace=_trace_matmul,
     description="512x512 float32 matmul through the runtime",
     config={"timeout_ms": 300_000},
+    baselines=("lmpu.sync", "direct_cot", "trace_token", "sync_tool", "async_poll", "native"),
+    native=_native_matmul,
 )
 
 
@@ -226,7 +242,8 @@ _LARGE_CONTEXT = WorkloadSpec(
     verify_answer=lambda value: value == _SECRET,
     trace=_trace_large_context,
     description="12k-character needle-in-haystack context task",
-    baselines=("lmpu.sync", "trace_token"),
+    baselines=("lmpu.sync", "trace_token", "native"),
+    native=_text_expected,
 )
 
 
@@ -250,6 +267,11 @@ def _verify_sleep_answer(value: object) -> bool:
 
 def _trace_sleep() -> str:
     return f"TRACE sleep\nWAIT {_SLEEP_SECONDS}\nRESULT {_SLEEP_SECONDS}"
+
+
+def _native_sleep() -> dict[str, int]:
+    time.sleep(_SLEEP_SECONDS)
+    return {"slept": _SLEEP_SECONDS}
 
 
 _SLEEP = WorkloadSpec(
@@ -278,6 +300,129 @@ _SLEEP = WorkloadSpec(
     trace=_trace_sleep,
     description="3-second sleeping Python job for sleep/wake measurement",
     config={"timeout_ms": 120_000},
+    baselines=(
+        "lmpu.sync",
+        "lmpu.sleep",
+        "direct_cot",
+        "trace_token",
+        "sync_tool",
+        "async_poll",
+        "native",
+    ),
+    native=_native_sleep,
+)
+
+
+# --- large_result ----------------------------------------------------------
+
+_RESULT_BYTES = 16 * 1024 * 1024
+
+
+def _verify_large_result(result: object) -> bool:
+    return isinstance(result, dict) and int(result.get("bytes", 0)) == _RESULT_BYTES
+
+
+def _trace_large_result() -> str:
+    return f"TRACE large_result\nALLOC {_RESULT_BYTES}\nRESULT {_RESULT_BYTES}"
+
+
+def _native_large_result() -> dict[str, int]:
+    return {"bytes": len(b"\x00" * _RESULT_BYTES)}
+
+
+_LARGE_RESULT = WorkloadSpec(
+    name="large_result",
+    processor="pure.func",
+    op="buffer_slice",
+    inputs={"bytes": _RESULT_BYTES},
+    verify=_verify_large_result,
+    answer=str(_RESULT_BYTES),
+    prompt=(
+        "A tool returns a 16 MiB buffer. Explain how a bounded slice read keeps "
+        "the host context small."
+    ),
+    program_prompt=(
+        "You have a tool that returns a 16 MiB buffer. Reply with only one JSON object: "
+        '{"processor":"pure.func","op":"buffer_slice","inputs":{"bytes":16777216}}.'
+    ),
+    program={
+        "processor": "pure.func",
+        "op": "buffer_slice",
+        "inputs": {"bytes": _RESULT_BYTES},
+    },
+    parse_answer=_parse_integer_answer,
+    verify_answer=lambda value: value == str(_RESULT_BYTES),
+    trace=_trace_large_result,
+    description="16 MiB result buffer read through a bounded slice",
+    config={"timeout_ms": 120_000, "result_bytes": _RESULT_BYTES, "max_inline_bytes": 1024},
+    baselines=("lmpu.slice", "native"),
+    native=_native_large_result,
+)
+
+
+# --- batch -----------------------------------------------------------------
+
+_BATCH_ITEMS = tuple(
+    {"op": "bigint_add", "inputs": {"a": index, "b": 1_000}} for index in range(64)
+)
+
+
+def _verify_batch(result: object) -> bool:
+    if not isinstance(result, dict) or not isinstance(result.get("results"), list):
+        return False
+    results = result["results"]
+    if result.get("errors") or len(results) != len(_BATCH_ITEMS):
+        return False
+    return all(
+        isinstance(item, dict) and item.get("result") == str(1_000 + index)
+        for index, item in enumerate(results)
+    )
+
+
+def _trace_batch() -> str:
+    return f"TRACE batch {len(_BATCH_ITEMS)}\n" + "\n".join(
+        f"ADD {item['inputs']['a']} {item['inputs']['b']}" for item in _BATCH_ITEMS
+    )
+
+
+def _native_batch() -> dict[str, Any]:
+    return {
+        "results": [
+            {"result": str(item["inputs"]["a"] + item["inputs"]["b"])} for item in _BATCH_ITEMS
+        ],
+        "errors": [],
+    }
+
+
+_BATCH = WorkloadSpec(
+    name="batch",
+    processor="pure.func",
+    op="bigint_add",
+    inputs={"items": list(_BATCH_ITEMS)},
+    verify=_verify_batch,
+    answer=str(len(_BATCH_ITEMS)),
+    prompt=(
+        f"A tool must evaluate {len(_BATCH_ITEMS)} small additions. Show the batch "
+        "call and a final count."
+    ),
+    program_prompt=(
+        "You have a tool that accepts a batch of operations. Reply with only one "
+        "JSON object: "
+        '{"processor":"pure.func","op":"bigint_add","batch":{"items":[...]}}.'
+    ),
+    program={
+        "processor": "pure.func",
+        "op": "bigint_add",
+        "inputs": {},
+        "batch": {"items": list(_BATCH_ITEMS)},
+    },
+    parse_answer=_parse_integer_answer,
+    verify_answer=lambda value: value == str(len(_BATCH_ITEMS)),
+    trace=_trace_batch,
+    description="64 small additions submitted individually and as one batch",
+    config={"timeout_ms": 60_000},
+    baselines=("lmpu.individual", "lmpu.batch", "native"),
+    native=_native_batch,
 )
 
 
@@ -286,6 +431,8 @@ _WORKLOADS = {
     "matmul": _MATMUL,
     "large_context": _LARGE_CONTEXT,
     "sleep": _SLEEP,
+    "large_result": _LARGE_RESULT,
+    "batch": _BATCH,
 }
 
 _ALIASES = {

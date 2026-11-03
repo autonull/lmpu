@@ -29,7 +29,18 @@ from .workloads import WorkloadSpec
 
 logger = logging.getLogger(__name__)
 
-BASELINES = ("lmpu.sync", "direct_cot", "trace_token", "sync_tool", "async_poll")
+BASELINES = (
+    "lmpu.sync",
+    "lmpu.sleep",
+    "lmpu.slice",
+    "lmpu.individual",
+    "lmpu.batch",
+    "native",
+    "direct_cot",
+    "trace_token",
+    "sync_tool",
+    "async_poll",
+)
 MODEL_BASELINES = frozenset({"direct_cot", "sync_tool", "async_poll"})
 TERMINAL_STATUSES = frozenset(
     {ModelJobStatus.COMPLETED, ModelJobStatus.FAILED, ModelJobStatus.CANCELLED}
@@ -161,13 +172,16 @@ def _request(
     config.update(workload.config)
     if mode is not None:
         config["mode"] = mode
-    return {
+    request = {
         "job_id": job_id,
         "processor": program.get("processor", workload.processor),
         "op": program["op"],
         "inputs": inputs,
         "config": config,
     }
+    if isinstance(program.get("batch"), dict):
+        request["batch"] = program["batch"]
+    return request
 
 
 def _result_text(result: Any) -> str:
@@ -238,6 +252,11 @@ class BaselineRunner:
     async def run(self, context: TrialContext) -> TrialRecord:
         handlers = {
             "lmpu.sync": self._run_lmpu_sync,
+            "lmpu.sleep": self._run_lmpu_sleep,
+            "lmpu.slice": self._run_lmpu_slice,
+            "lmpu.individual": self._run_lmpu_individual,
+            "lmpu.batch": self._run_lmpu_batch,
+            "native": self._run_native,
             "direct_cot": self._run_direct_cot,
             "trace_token": self._run_trace_token,
             "sync_tool": self._run_sync_tool,
@@ -356,6 +375,240 @@ class BaselineRunner:
             correct=error is None and context.workload.verify(result),
             metrics=_payload(metrics, wall),
             error=error,
+        )
+
+    async def _run_lmpu_sleep(self, context: TrialContext, started_at: float) -> TrialRecord:
+        """Submit async, park in S1 until the job completes, then wake."""
+        runtime = self._require_runtime()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        job_id = self._job_id(context)
+        request = {
+            "job_id": job_id,
+            "processor": context.workload.processor,
+            "op": context.workload.op,
+            "inputs": context.workload.inputs,
+            "config": {
+                "mode": "async",
+                "timeout_ms": 60_000,
+                "bench_nonce": job_id,
+            }
+            | context.workload.config,
+        }
+        metrics.record_control_tokens(estimate_tokens(request))
+        timeout = context.workload.config.get("timeout_ms", 60_000) / 1000
+        started = time.perf_counter()
+        error: str | None = None
+        finished = None
+        sleep_seconds = 0.0
+        sleep_id = ""
+        try:
+            await runtime._submit(request, session_id)
+            sleep_result = await runtime._sleep(
+                {"until": {"all": [job_id]}, "level": "S1"},
+                session_id,
+            )
+            sleep_id = sleep_result.sleep_id
+            park_started = time.perf_counter()
+            finished = await runtime.job_table.wait_terminal(job_id, timeout=timeout)
+            sleep_seconds = time.perf_counter() - park_started
+            metrics.sleep_duration_seconds = sleep_seconds
+            await runtime._wake({}, session_id)
+            if finished is None:
+                raise TimeoutError("sleep treatment exceeded the job timeout")
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        result = finished.result if finished is not None else None
+        if finished is not None and finished.error:
+            error = json.dumps(finished.error, default=str)
+        if result is not None:
+            metrics.record_injected_tokens(estimate_tokens(_summary_text(result)))
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=job_id,
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and context.workload.verify(result),
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={
+                "park": {
+                    "level": "S1",
+                    "sleep_id": sleep_id,
+                    "sleep_seconds": sleep_seconds,
+                    "forward_passes_during_park": 0,
+                }
+            },
+        )
+
+    async def _run_lmpu_slice(self, context: TrialContext, started_at: float) -> TrialRecord:
+        """Import a large buffer and read it through the bounded-slice path."""
+        runtime = self._require_runtime()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        size = int(context.workload.config.get("result_bytes", 16 * 1024 * 1024))
+        max_inline = int(context.workload.config.get("max_inline_bytes", 1024))
+        started = time.perf_counter()
+        error: str | None = None
+        derived = False
+        try:
+            ref = await runtime._buffer_import(
+                {
+                    "name": "large_result",
+                    "data": b"\x00" * size,
+                    "dtype": "uint8",
+                    "shape": [size],
+                },
+                session_id,
+            )
+            read_request = {"buffer": ref.buffer_id, "max_inline_bytes": max_inline}
+            metrics.record_control_tokens(estimate_tokens(read_request))
+            view = await runtime._read(read_request, session_id)
+            derived = view.data is None and view.derived_buffer is not None
+            summary = {
+                "buffer": view.buffer,
+                "dtype": view.dtype,
+                "derived": derived,
+                "note": view.note,
+            }
+            metrics.record_injected_tokens(estimate_tokens(summary))
+        except Exception as exc:
+            error = str(exc)
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id="",
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and derived,
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={"result_bytes": size, "derived": derived, "max_inline_bytes": max_inline},
+        )
+
+    async def _run_lmpu_individual(self, context: TrialContext, started_at: float) -> TrialRecord:
+        """Submit each batch item as its own synchronous job."""
+        runtime = self._require_runtime()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        items = context.workload.inputs.get("items", [])
+        started = time.perf_counter()
+        results: list[Any] = []
+        errors: list[str] = []
+        try:
+            for index, item in enumerate(items):
+                job_id = self._job_id(context, f"_{index}")
+                request = {
+                    "job_id": job_id,
+                    "processor": context.workload.processor,
+                    "op": item.get("op", context.workload.op),
+                    "inputs": item.get("inputs", {}),
+                    "config": {
+                        "mode": "sync",
+                        "timeout_ms": 60_000,
+                        "bench_nonce": job_id,
+                    },
+                }
+                metrics.record_control_tokens(estimate_tokens(request))
+                try:
+                    submitted = await runtime._submit(request, session_id)
+                except Exception as exc:
+                    errors.append(str(exc))
+                    continue
+                if submitted.error:
+                    errors.append(json.dumps(submitted.error, default=str))
+                results.append(submitted.result)
+            metrics.record_injected_tokens(
+                estimate_tokens(_summary_text({"results": results, "errors": errors}))
+            )
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        combined = {"results": results, "errors": errors}
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id="",
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=not errors and context.workload.verify(combined),
+            metrics=_payload(metrics, wall),
+            error=errors[0] if errors else None,
+            metadata={"submissions": len(results), "errors": errors},
+        )
+
+    async def _run_lmpu_batch(self, context: TrialContext, started_at: float) -> TrialRecord:
+        """Submit all batch items in one job."""
+        runtime = self._require_runtime()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        job_id = self._job_id(context)
+        request = _request(context.workload.program, context.workload, job_id, "sync")
+        metrics.record_control_tokens(estimate_tokens(request))
+        started = time.perf_counter()
+        error: str | None = None
+        result: Any = None
+        try:
+            submitted = await runtime._submit(request, session_id)
+            result = submitted.result
+            if submitted.error:
+                error = json.dumps(submitted.error, default=str)
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        if result is not None:
+            metrics.record_injected_tokens(estimate_tokens(_summary_text(result)))
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=job_id,
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and context.workload.verify(result),
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={"batched": True},
+        )
+
+    async def _run_native(self, context: TrialContext, started_at: float) -> TrialRecord:
+        """Run the workload computation in-process without the runtime."""
+        native = context.workload.native
+        if native is None:
+            raise ValueError(f"Workload {context.workload.name} has no native baseline")
+        metrics = HostMetrics(session_id=f"bench_native_{context.trial}")
+        started = time.perf_counter()
+        error: str | None = None
+        result: Any = None
+        try:
+            result = await asyncio.to_thread(native)
+        except Exception as exc:
+            error = str(exc)
+        wall = time.perf_counter() - started
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id="",
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and context.workload.verify(result),
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={"native": True},
         )
 
     async def _run_direct_cot(self, context: TrialContext, started_at: float) -> TrialRecord:

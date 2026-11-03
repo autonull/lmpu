@@ -1,6 +1,24 @@
 name = "gate-b"
-workloads = ["bigint_mul", "matmul", "large_context", "sleep"]
-baselines = ["lmpu.sync", "direct_cot", "trace_token", "sync_tool", "async_poll"]
+workloads = [
+    "bigint_mul",
+    "matmul",
+    "large_context",
+    "sleep",
+    "large_result",
+    "batch",
+]
+baselines = [
+    "lmpu.sync",
+    "lmpu.sleep",
+    "lmpu.slice",
+    "lmpu.individual",
+    "lmpu.batch",
+    "native",
+    "direct_cot",
+    "trace_token",
+    "sync_tool",
+    "async_poll",
+]
 trials = 5
 warmups = 1
 seed = 20261103

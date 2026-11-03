@@ -1,0 +1,1093 @@
+{
+  "commit": "3a42d6a5a011",
+  "config": {
+    "baselines": [
+      "lmpu.sync",
+      "lmpu.sleep",
+      "lmpu.slice",
+      "lmpu.individual",
+      "lmpu.batch",
+      "native",
+      "direct_cot",
+      "trace_token",
+      "sync_tool",
+      "async_poll"
+    ],
+    "device": "cuda",
+    "idle_seconds": 1.0,
+    "max_tokens": 64,
+    "model": "Qwen/Qwen3.5-0.8B",
+    "name": "gate-b",
+    "poll_interval_ms": 50,
+    "results_root": "benchmarks/results",
+    "resume": true,
+    "seed": 20261103,
+    "trials": 3,
+    "warmups": 0,
+    "workloads": [
+      "bigint_mul",
+      "matmul",
+      "large_context",
+      "sleep",
+      "large_result",
+      "batch"
+    ]
+  },
+  "record_count": 81,
+  "run_id": "benchmarks/results/2026-11-03/NVIDIA-GeForce-RTX-3080/3a42d6a5a011",
+  "schema": "lmpu.bench.summary.v1",
+  "workloads": {
+    "batch": {
+      "baselines": {
+        "lmpu.batch": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 803.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 50.0,
+            "peak_context_tokens": 853.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 853.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0009546130895614624,
+              0.00273701804690063
+            ],
+            "median": 0.0011434131301939487
+          }
+        },
+        "lmpu.individual": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 3574.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 50.0,
+            "peak_context_tokens": 3624.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 3624.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.018631313927471638,
+              1.5343737159855664
+            ],
+            "median": 0.019560722867026925
+          }
+        },
+        "native": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.00027526100166141987,
+              0.0009568920359015465
+            ],
+            "median": 0.0002866210415959358
+          }
+        }
+      },
+      "description": "64 small additions submitted individually and as one batch"
+    },
+    "bigint_mul": {
+      "baselines": {
+        "async_poll": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.5703048270661384,
+              2.596452992875129
+            ],
+            "median": 2.5958134320098907
+          }
+        },
+        "direct_cot": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": null,
+              "trial": 1
+            },
+            {
+              "error": null,
+              "trial": 2
+            },
+            {
+              "error": null,
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 65.0,
+            "generated_tokens": 64.0,
+            "gpu_energy_joules": 246.87624555683672,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 148.0,
+            "prefill_tokens": 84.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 148.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.5599983450956643,
+              2.601273901993409
+            ],
+            "median": 2.5834543618839234
+          }
+        },
+        "lmpu.sync": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 68.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 18.0,
+            "peak_context_tokens": 86.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 86.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0006010620854794979,
+              0.0007108920253813267
+            ],
+            "median": 0.0006221621297299862
+          }
+        },
+        "native": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.00016034115105867386,
+              0.00020638993009924889
+            ],
+            "median": 0.0001674201339483261
+          }
+        },
+        "sync_tool": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.5720685850828886,
+              16.261791073950008
+            ],
+            "median": 7.854563968954608
+          }
+        },
+        "trace_token": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": true
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 3473.0,
+            "generated_tokens": 3473.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 3473.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 3473.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.001553413923829794,
+              0.0016018440946936607
+            ],
+            "median": 0.001567075029015541
+          }
+        }
+      },
+      "description": "30-digit exact multiplication through the reference runtime"
+    },
+    "large_context": {
+      "baselines": {
+        "lmpu.sync": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 3270.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 21.0,
+            "peak_context_tokens": 3291.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 3291.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0007196520455181599,
+              0.0008544630836695433
+            ],
+            "median": 0.0007880320772528648
+          }
+        },
+        "native": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0005384408868849277,
+              0.0005694117862731218
+            ],
+            "median": 0.0005433119367808104
+          }
+        },
+        "trace_token": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": true
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 3196.0,
+            "generated_tokens": 3196.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 3196.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 3196.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0011127130128443241,
+              0.0013398649170994759
+            ],
+            "median": 0.0011635830160230398
+          }
+        }
+      },
+      "description": "12k-character needle-in-haystack context task"
+    },
+    "large_result": {
+      "baselines": {
+        "lmpu.slice": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 15.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 28.0,
+            "peak_context_tokens": 43.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 43.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.01800478808581829,
+              0.021129838889464736
+            ],
+            "median": 0.018198736011981964
+          }
+        },
+        "native": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0008990820497274399,
+              0.004841614048928022
+            ],
+            "median": 0.0012419929262250662
+          }
+        }
+      },
+      "description": "16 MiB result buffer read through a bounded slice"
+    },
+    "matmul": {
+      "baselines": {
+        "async_poll": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.402975352946669,
+              2.498657777905464
+            ],
+            "median": 2.4066743350122124
+          }
+        },
+        "direct_cot": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": null,
+              "trial": 1
+            },
+            {
+              "error": null,
+              "trial": 2
+            },
+            {
+              "error": null,
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 65.0,
+            "generated_tokens": 64.0,
+            "gpu_energy_joules": 246.23470561977103,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 104.0,
+            "prefill_tokens": 40.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 104.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.545712067047134,
+              2.6243139039725065
+            ],
+            "median": 2.555538929067552
+          }
+        },
+        "lmpu.sync": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 52.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 18.0,
+            "peak_context_tokens": 70.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 70.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.010795202106237411,
+              0.06082527502439916
+            ],
+            "median": 0.016599528957158327
+          }
+        },
+        "native": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.00015744101256132126,
+              0.013398119015619159
+            ],
+            "median": 0.00023018009960651398
+          }
+        },
+        "sync_tool": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.3883134208153933,
+              2.4134266329929233
+            ],
+            "median": 2.3942181579768658
+          }
+        },
+        "trace_token": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": true
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 1519.0,
+            "generated_tokens": 1519.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 1519.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 1519.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              0.0006135408766567707,
+              0.0006367419846355915
+            ],
+            "median": 0.0006275021005421877
+          }
+        }
+      },
+      "description": "512x512 float32 matmul through the runtime"
+    },
+    "sleep": {
+      "baselines": {
+        "async_poll": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.592982716858387,
+              6.223325551021844
+            ],
+            "median": 2.6065854029729962
+          }
+        },
+        "direct_cot": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 65.0,
+            "generated_tokens": 64.0,
+            "gpu_energy_joules": 246.35530129351187,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 87.0,
+            "prefill_tokens": 23.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 87.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.55344171798788,
+              6.808126320131123
+            ],
+            "median": 2.559034664183855
+          }
+        },
+        "lmpu.sleep": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 68.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 2.0,
+            "peak_context_tokens": 70.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 3.12222292390652,
+            "total_tokens": 70.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              3.1047721169888973,
+              4.601448853965849
+            ],
+            "median": 3.1226015260908753
+          }
+        },
+        "lmpu.sync": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 67.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 2.0,
+            "peak_context_tokens": 69.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 69.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              3.102477769134566,
+              3.199517983943224
+            ],
+            "median": 3.1155260431114584
+          }
+        },
+        "native": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              3.000315578188747,
+              3.0008256339933723
+            ],
+            "median": 3.0003410649951547
+          }
+        },
+        "sync_tool": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 0.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              2.547470965888351,
+              2.573654147097841
+            ],
+            "median": 2.5711340110283345
+          }
+        },
+        "trace_token": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "metadata": {
+            "polls": [],
+            "simulated": true
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 6.0,
+            "generated_tokens": 6.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 6.0,
+            "prefill_tokens": 0.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 6.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              7.970025762915611e-06,
+              1.2079952284693718e-05
+            ],
+            "median": 8.479924872517586e-06
+          }
+        }
+      },
+      "description": "3-second sleeping Python job for sleep/wake measurement"
+    }
+  }
+}

@@ -25,16 +25,17 @@
 - Session authorization boundary: capability advertisement stays registry-wide; buffer and processor access are session-scoped.
 - Grant/refcount per-buffer release, TTL reaping, close-time shm cleanup, and fd-leak assertions.
 - Benchmark harness: TOML/JSON config, explicit seeds, warmups, measured trials, resume-safe `raw.jsonl`, hardware/commit manifest, summary medians and bootstrap CIs, and a real-runtime sync trial runner.
-- Fair baselines: direct CoT, labelled trace-token emulation, PAL-style sync tool, and summary-only async polling, plus `lmpu.sync`; randomized per-trial order, baseline-aware resume keys, and per-baseline summaries. Model baselines use the shared HF host and decoding budget.
+- Fair baselines: `lmpu.sync`, `lmpu.sleep`, `lmpu.slice`, `lmpu.individual`, `lmpu.batch`, `native`, direct CoT, labelled trace-token emulation, PAL-style sync tool, and summary-only async polling; per-workload applicability; randomized per-trial order, baseline-aware resume keys, and per-baseline summaries. Model baselines use the shared HF host and decoding budget.
 - Energy: NVML idle probe before every trial, per-model-trial GPU joules, idle-rate correction metadata, and a documented methodology in `docs/benchmarks.md`.
-- Initial workloads: `bigint_mul`, `matmul` (512²), `large_context` (12k-char secret lookup), and `sleep` (3 s); all verified through `lmpu.sync` one-trial artifacts.
+- Workloads: `bigint_mul`, `matmul` (512²), `large_context` (12k-char secret lookup), `sleep` (3 s), `large_result` (16 MiB bounded slice), and `batch` (64 additions); all verified through measured artifacts.
 - C1–C5 report generator: `src/lmpu/bench/report.py`; first published artifacts in `benchmarks/reports/gate-b-initial/` with raw data, medians, CIs, CDFs, timeline, and explicit claim limitations.
-- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1–B5 add 15 targeted tests (10 unit, 5 integration).
+- Gate B evidence closure: `lmpu.sleep` parks in S1 with zero forward passes; `lmpu.slice` reads a 16 MiB buffer with 43 peak context tokens; `lmpu.individual` vs `lmpu.batch` measures a 17x submission-speedup; `native` measures in-process C5 timings. Published in `benchmarks/reports/gate-b-evidence/`.
+- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1–B5 add 15 targeted tests (10 unit, 5 integration); evidence closure adds 3 integration tests.
 
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
 - P1 exit gate is not closed: canonical demo assertions and the 16 MiB dashboard proof (Gate C).
-- Report claims are partial: C1/C3/C5 are bounded by current workloads and failed strong baselines; C2 lacks `lmpu.sleep`; C4 lacks a batching probe.
+- C1 remains partial: the 64-token model budget makes `direct_cot`/`sync_tool`/`async_poll` fail program generation and answer extraction. Accepted as a model-budget limitation; `trace_token` and successful baselines still support the reduction claim.
 - Trace-token baseline is a labelled simulation; a small real-model trace run remains.
 - CPU RAPL energy is not measured; NVML GPU energy is the only energy path.
 - Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified (Gate E).
@@ -76,6 +77,8 @@
 ---
 
 ## 3. Gate B — Benchmark spine
+
+**Status:** CLOSED 2026-11-03. C2–C5 are measured; C1 is explicitly accepted as partial (model-budget limitation).
 
 **Goal:** produce the first credible C1–C5 report. Start as soon as A1–A3 are usable.
 
@@ -164,7 +167,12 @@ These items do not block A–D. Each has a kill criterion.
 - [x] B2 Baselines — `src/lmpu/bench/baselines.py`, baseline-aware harness records/summary/resume, `--baseline` CLI, `tests/integration/test_bench_baselines.py`; direct CoT, trace-token, sync tool, async polling, and LMPU sync
 - [x] B3 Energy sampling — `src/lmpu/bench/energy.py`, per-trial idle metadata and corrected GPU joules, `docs/benchmarks.md`
 - [x] B4 Initial workloads — `matmul` and `text_stats` ops, `matmul` / `large_context` / `sleep` workload specs, `tests/unit/test_bench_workloads.py`, `tests/integration/test_bench_processor_ops.py`
-- [x] B5 C1–C5 report — `src/lmpu/bench/report.py`, `make report`, first artifacts in `benchmarks/reports/gate-b-initial/`; C2–C5 limitations recorded
+- [x] B5 C1–C5 report — `src/lmpu/bench/report.py`, `make report`, first artifacts in `benchmarks/reports/gate-b-initial/`
+- [x] B5a C2 sleep proof — `lmpu.sleep` S1 treatment; zero forward passes while parked; `test_lmpu_sleep_parks_in_s1_with_zero_forward_passes`
+- [x] B5b C3 context protection — `large_result` + `lmpu.slice`; 16 MiB buffer, 43 peak context tokens; `test_lmpu_slice_reads_16mib_with_bounded_context`
+- [x] B5c C4 batching — `lmpu.individual` vs `lmpu.batch`; 17x submission speedup; `test_batch_submission_uses_less_control_overhead`
+- [x] B5d C5 native baseline — in-process `native` timings per workload
+- [x] B5e Evidence report — `benchmarks/reports/gate-b-evidence/` (measured C2–C5; accepted partial C1)
 
 ### Gate C
 - [ ] C1 Three canonical demos
@@ -187,14 +195,14 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gate A is closed and the first B5 report is published. Continue Gate B evidence work:
+Gates A and B are closed. C2–C5 are measured; C1 is accepted as partial.
 
-1. Close C2 by wiring an `lmpu.sleep` S1 treatment and measuring zero forwards.
-2. Close C4 with a batched-vs-individual submission probe.
-3. Replace C3's 12k context probe with a 16 MiB result probe.
-4. Add a separately measured native baseline for C5.
+1. Start Gate C2: `lmpu trace` CLI (replay, gap detection, redaction, timeline).
+2. Start Gate C1: three canonical demos in assertion mode (kernel offload + recovery, S1 sleep proof, 16 MiB context protection).
+3. Start Gate C3: minimal read-only dashboard over live events, job board, and parked-host panel.
+4. Resolve or re-accept C1 before Gate D: either raise the model budget for a targeted C1 run or scope the claim to measured baselines.
 
-Keep Gate C closed until the partial claims are resolved or explicitly accepted.
+Gate C is now open because the C2–C5 evidence is measured and the C1 limitation is explicitly accepted.
 
 ---
 
