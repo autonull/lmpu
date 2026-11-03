@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any
 
 from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
@@ -19,6 +20,12 @@ class PureFunctionProcessor(Processor):
         ops=[
             {"name": "bigint_add", "inputs": ["a", "b"], "outputs": ["result"]},
             {"name": "bigint_mul", "inputs": ["a", "b"], "outputs": ["result"]},
+            {"name": "matmul", "inputs": ["size", "seed"], "outputs": ["shape", "checksum", "sum"]},
+            {
+                "name": "text_stats",
+                "inputs": ["text"],
+                "outputs": ["chars", "words", "checksum", "secret"],
+            },
             {"name": "mod_pow", "inputs": ["base", "exp", "mod"], "outputs": ["result"]},
             {"name": "sha256", "inputs": ["data"], "outputs": ["hash"]},
             {"name": "blake3", "inputs": ["data"], "outputs": ["hash"]},
@@ -56,6 +63,10 @@ class PureFunctionProcessor(Processor):
                 return await self._bigint_add(inputs)
             elif op == "bigint_mul":
                 return await self._bigint_mul(inputs)
+            elif op == "matmul":
+                return await self._matmul(inputs)
+            elif op == "text_stats":
+                return await self._text_stats(inputs)
             elif op == "mod_pow":
                 return await self._mod_pow(inputs)
             elif op == "sha256":
@@ -102,6 +113,39 @@ class PureFunctionProcessor(Processor):
             checksum=hashlib.sha256(str(result).encode()).hexdigest()[:16],
         )
 
+    async def _matmul(self, inputs: dict[str, Any]) -> Result:
+        import numpy as np
+
+        size = int(inputs.get("size", 256))
+        seed = int(inputs.get("seed", 0))
+        rng = np.random.default_rng(seed)
+        left = rng.standard_normal((size, size), dtype=np.float32)
+        right = rng.standard_normal((size, size), dtype=np.float32)
+        product = left @ right
+        return Result(
+            success=True,
+            data={
+                "shape": list(product.shape),
+                "checksum": hashlib.sha256(product.tobytes()).hexdigest()[:16],
+                "sum": float(product.sum(dtype=np.float64)),
+            },
+            checksum=hashlib.sha256(product.tobytes()).hexdigest()[:16],
+        )
+
+    async def _text_stats(self, inputs: dict[str, Any]) -> Result:
+        text = str(inputs.get("text", ""))
+        match = re.search(r"SECRET:\s*([A-Za-z0-9-]+)", text)
+        return Result(
+            success=True,
+            data={
+                "chars": len(text),
+                "words": len(text.split()),
+                "checksum": hashlib.sha256(text.encode()).hexdigest()[:16],
+                "secret": match.group(1) if match else None,
+            },
+            checksum=hashlib.sha256(text.encode()).hexdigest()[:16],
+        )
+
     async def _mod_pow(self, inputs: dict[str, Any]) -> Result:
         base = int(inputs.get("base", 0))
         exp = int(inputs.get("exp", 0))
@@ -132,6 +176,7 @@ class PureFunctionProcessor(Processor):
     async def _blake3(self, inputs: dict[str, Any]) -> Result:
         try:
             import blake3
+
             data = inputs.get("data", b"")
             if isinstance(data, str):
                 data = data.encode()
@@ -140,6 +185,7 @@ class PureFunctionProcessor(Processor):
         except ImportError:
             # Fallback to sha256
             import hashlib
+
             data = inputs.get("data", b"")
             if isinstance(data, str):
                 data = data.encode()
@@ -188,14 +234,15 @@ class PureFunctionProcessor(Processor):
         return Result(
             success=True,
             data={"value": value},
-            checksum=hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()[:16] if value else "",
+            checksum=hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()[:16]
+            if value
+            else "",
         )
 
     async def _batch(self, job: dict[str, Any], ctx: JobContext) -> Result:
         """Execute batch of operations."""
         batch = job.get("batch", {})
         items = batch.get("items", [])
-        max_parallel = batch.get("max_parallel", 10)
 
         results = []
         errors = []

@@ -13,15 +13,17 @@ import re
 import shutil
 import tempfile
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Protocol
 
 from lmpu.host.engine import HostStats
-from lmpu.host.metrics import HostMetrics
+from lmpu.host.metrics import EnergySampler, HostMetrics
 from lmpu.kernel.runtime import Runtime
 from lmpu.protocol.messages import ModelJobStatus
 
 from .config import BenchmarkConfig
+from .energy import EnergyProbe, IdleBaseline
 from .runner import TrialContext, TrialRecord, estimate_tokens
 from .workloads import WorkloadSpec
 
@@ -55,6 +57,8 @@ class HostModel(Protocol):
 
     async def count_tokens(self, text: str) -> int: ...
 
+    def take_energy(self) -> float: ...
+
     async def close(self) -> None: ...
 
 
@@ -67,13 +71,19 @@ class HFHost:
         self.config = config
         self.engine = HFEngine(model_name=config.model, device=config.device)
         self.decoder = HFDecoder(self.engine, max_tokens=config.max_tokens)
+        self._energy = EnergySampler()
+        self._trial_energy = 0.0
 
     async def start_trial(self) -> None:
         self.engine.stats_ = HostStats()
         self.decoder.reset()
+        self._energy.sample()
+        self._trial_energy = 0.0
 
     async def decode(self, prompt: str, max_tokens: int, stop: str = "") -> str:
-        return await self.decoder.decode_free(prompt, max_tokens, stop)
+        text = await self.decoder.decode_free(prompt, max_tokens, stop)
+        self._trial_energy += self._energy.sample().gpu_joules
+        return text
 
     async def count_tokens(self, text: str) -> int:
         if not text:
@@ -84,7 +94,13 @@ class HFHost:
             return estimate_tokens(text)
         return len(tokenizer.encode(text, add_special_tokens=False))
 
+    def take_energy(self) -> float:
+        energy = self._trial_energy
+        self._trial_energy = 0.0
+        return energy
+
     async def close(self) -> None:
+        self._energy.close()
         await self.engine.close()
 
 
@@ -114,6 +130,17 @@ def _request(
     job_id: str,
     mode: str | None,
 ) -> dict[str, Any]:
+    raw_inputs = program.get("inputs")
+    if raw_inputs == "$INPUTS":
+        inputs = dict(workload.inputs)
+    elif isinstance(raw_inputs, dict):
+        inputs = {
+            key: (workload.inputs[key] if value == "$CONTEXT" and key in workload.inputs else value)
+            for key, value in raw_inputs.items()
+        }
+    else:
+        inputs = raw_inputs
+
     config: dict[str, Any] = {"timeout_ms": 60_000} | workload.config
     if mode is not None:
         config["mode"] = mode
@@ -121,7 +148,7 @@ def _request(
         "job_id": job_id,
         "processor": program.get("processor", workload.processor),
         "op": program["op"],
-        "inputs": program["inputs"],
+        "inputs": inputs,
         "config": config,
     }
 
@@ -168,6 +195,7 @@ class BaselineRunner:
     def __init__(self, config: BenchmarkConfig, host: HostModel | None = None):
         self.config = config
         self._host = host
+        self._energy = EnergyProbe()
         self.runtime: Runtime | None = None
         self._runtime_dir: Path | None = None
 
@@ -202,18 +230,20 @@ class BaselineRunner:
         if handler is None:
             raise ValueError(f"Unknown baseline: {context.baseline}")
 
+        idle = await self._energy.measure_idle(self.config.idle_seconds)
         started_at = time.time()
         started = time.perf_counter()
         try:
-            return await handler(context, started_at)
+            record = await handler(context, started_at)
         except Exception as exc:
             wall = time.perf_counter() - started
-            logger.exception(
-                "benchmark trial failed",
+            logger.warning(
+                "baseline failed: %s",
+                exc,
                 extra={"baseline": context.baseline, "trial": context.trial},
             )
             metrics = HostMetrics(session_id=f"bench_{context.baseline}_{context.trial}")
-            return TrialRecord(
+            record = TrialRecord(
                 workload=context.workload.name,
                 baseline=context.baseline,
                 trial=context.trial,
@@ -225,6 +255,20 @@ class BaselineRunner:
                 metrics=_payload(metrics, wall),
                 error=str(exc),
             )
+        return self._with_idle(record, idle)
+
+    def _with_idle(self, record: TrialRecord, idle: IdleBaseline) -> TrialRecord:
+        metadata = dict(record.metadata)
+        metadata["idle"] = idle.to_dict()
+        measured = float(record.metrics.get("gpu_energy_joules", 0.0))
+        if measured > 0 and idle.average_watts is not None:
+            idle_joules = idle.average_watts * record.wall_time_seconds
+            metadata["energy"] = {
+                "measured_joules": measured,
+                "idle_joules": idle_joules,
+                "corrected_joules": max(0.0, measured - idle_joules),
+            }
+        return replace(record, metadata=metadata)
 
     def _host_model(self) -> HostModel:
         if self._host is None:
@@ -305,6 +349,7 @@ class BaselineRunner:
             await _record_prefill(metrics, host, context.workload.prompt)
             response = await host.decode(context.workload.prompt, self.config.max_tokens, "")
             await _record_generated(metrics, host, response)
+            metrics.record_energy(gpu_joules=host.take_energy())
             answer = context.workload.parse_answer(response)
         except Exception as exc:
             error = str(exc)
@@ -389,6 +434,7 @@ class BaselineRunner:
                 await _record_injected(metrics, host, followup[len(prefix) :])
                 response = await host.decode(followup, self.config.max_tokens, "")
                 await _record_generated(metrics, host, response)
+                metrics.record_energy(gpu_joules=host.take_energy())
                 final_answer = context.workload.parse_answer(response)
         finally:
             await self._close_session(session_id)
@@ -420,6 +466,7 @@ class BaselineRunner:
         polls = 0
         try:
             _, program, _ = await self._model_program(context, metrics)
+            metrics.record_energy(gpu_joules=host.take_energy())
             request = _request(program, context.workload, job_id, None)
             metrics.record_control_tokens(estimate_tokens(request))
             submitted = await runtime._submit(request, session_id)
@@ -474,6 +521,7 @@ class BaselineRunner:
         if self._host is not None:
             await self._host.close()
             self._host = None
+        self._energy.close()
         if self.runtime is not None:
             await self.runtime.stop()
             self.runtime = None

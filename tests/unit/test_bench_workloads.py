@@ -1,0 +1,36 @@
+"""Benchmark workload registration and energy helper."""
+
+from __future__ import annotations
+
+import pytest
+
+from lmpu.bench import get_workload, list_workloads
+from lmpu.bench.energy import EnergyProbe
+from lmpu.bench.workloads import _large_document, _matmul_expected
+
+pytestmark = pytest.mark.unit
+
+
+def test_initial_workload_set_is_registered() -> None:
+    assert set(list_workloads()) == {"bigint_mul", "matmul", "large_context", "sleep"}
+    assert get_workload("matmul").inputs == {"size": 2048, "seed": 7}
+    assert get_workload("sleep").inputs["program"].count("sleep(12)") == 1
+
+
+def test_large_context_and_matmul_helpers_are_deterministic() -> None:
+    document = _large_document()
+    assert len(document) >= 40_000
+    assert "SECRET: LMPU-2048-ALPHA" in document
+    assert _matmul_expected(32, 1) == _matmul_expected(32, 1)
+
+
+async def test_zero_second_idle_baseline_reports_availability() -> None:
+    probe = EnergyProbe()
+    try:
+        baseline = await probe.measure_idle(0)
+    finally:
+        probe.close()
+
+    assert baseline.seconds == 0.0
+    assert baseline.samples == 0
+    assert isinstance(baseline.available, bool)

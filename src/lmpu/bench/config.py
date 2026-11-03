@@ -27,6 +27,7 @@ class BenchmarkConfig:
     model: str = "Qwen/Qwen3.5-0.8B"
     max_tokens: int = 256
     poll_interval_ms: int = 50
+    idle_seconds: float = 0.0
     results_root: Path = Path("benchmarks/results")
     resume: bool = True
 
@@ -43,6 +44,8 @@ class BenchmarkConfig:
             raise ValueError("max_tokens must be positive")
         if self.poll_interval_ms < 1:
             raise ValueError("poll_interval_ms must be positive")
+        if self.idle_seconds < 0:
+            raise ValueError("idle_seconds must be non-negative")
         if not self.results_root:
             raise ValueError("results_root must not be empty")
 
@@ -102,6 +105,7 @@ class BenchmarkConfig:
             "model": self.model,
             "max_tokens": self.max_tokens,
             "poll_interval_ms": self.poll_interval_ms,
+            "idle_seconds": self.idle_seconds,
             "results_root": str(self.results_root),
             "resume": self.resume,
         }

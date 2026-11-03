@@ -43,6 +43,9 @@ class FakeHost:
     async def count_tokens(self, text: str) -> int:
         return estimate_tokens(text)
 
+    def take_energy(self) -> float:
+        return 0.0
+
     async def close(self) -> None:
         pass
 

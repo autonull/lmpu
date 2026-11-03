@@ -57,7 +57,7 @@ bench-smoke:
 	uv run python -m lmpu.bench.run_benchmark --workload smoke --trials 3
 
 bench:
-	uv run python -m lmpu.bench.run_benchmark --config configs/benchmarks.toml --workload all --trials 20
+	uv run python -m lmpu.bench.run_benchmark --config configs/benchmarks.toml --workload all
 
 soak:
 	pytest -m "soak" -v --timeout=3600
