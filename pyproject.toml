@@ -23,6 +23,8 @@ dependencies = [
     "pyyaml>=6.0,<7",
     "ulid-py>=1.1,<2",
     "psutil>=5.9,<7",
+    "typer>=0.15,<1",
+    "rich>=13,<16",
 ]
 
 [project.optional-dependencies]

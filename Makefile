@@ -72,7 +72,7 @@ release-build:
 	$(MAKE) release-checksums
 
 release-sbom:
-	uvx pip-audit -f cyclonedx -o dist/sbom.json
+	uvx pip-audit -f cyclonedx-json -o dist/sbom.json
 
 release-checksums:
 	cd dist && sha256sum *.whl *.tar.gz > SHA256SUMS

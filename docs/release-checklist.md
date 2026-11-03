@@ -2,6 +2,10 @@
 
 Run every step on a clean checkout at the release tag.
 
+> **Dry-run status — 2026-11-03.** Sections 1, 2 (doctor/demo), 4, and 5 pass
+> on the release commit. Signing and tagging stay unchecked until a valid
+> release key is available.
+
 ## 1. Freeze contracts
 
 - [ ] `docs/rfcs/0001-protocol-v1.md` matches `src/lmpu/schema/protocol-v1.schema.json`.

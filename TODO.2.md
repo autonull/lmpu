@@ -42,7 +42,7 @@
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
 - Dashboard is intentionally polling-based and read-only; scenario runner and rich filters remain deferred.
-- D3 release execution remains: SBOM generation needs `uvx pip-audit`, and the signed `v0.1.0` tag needs the release key.
+- D3 signing/tagging remains: release artifacts build, SBOM generation is clean, and the wheel installs in a base-only venv; GPG signing needs a valid release key.
 - C1 remains partial: the 64-token model budget makes `direct_cot`/`sync_tool`/`async_poll` fail program generation and answer extraction. Accepted as a model-budget limitation; `trace_token` and successful baselines still support the reduction claim.
 - Trace-token baseline is a labelled simulation; a small real-model trace run remains.
 - CPU RAPL energy is not measured; NVML GPU energy is the only energy path.
@@ -124,7 +124,7 @@
 
 ## 5. Gate D — Release surface
 
-**Status:** D1/D2 CLOSED 2026-11-03. D3 checklist staged; signing/tagging execute at release time.
+**Status:** D1/D2 CLOSED 2026-11-03. D3 artifacts, SBOM, and clean-install verification CLOSED; signing/tagging blocked on a valid release key.
 
 **Goal:** publish a coherent, reproducible artifact.
 
@@ -194,7 +194,7 @@ These items do not block A–D. Each has a kill criterion.
 ### Gate D
 - [x] D1 RFC 0001 + JSON Schema — `docs/rfcs/0001-protocol-v1.md`, `docs/adr/0001-v0.1-scope.md`, generated `src/lmpu/schema/{protocol,trace}-v1.schema.json`, `scripts/export_schema.py`, `tests/unit/test_schema.py` (examples validate; schema drift locked)
 - [x] D2 Docs + SDK + packaging — `docs/quickstart.md`, `src/lmpu/sdk.py` (`LMPUClient`), `src/lmpu/plugin.py` (`lmpu plugin`), package-data schemas; `uv build` produces wheel + sdist; `tests/integration/test_sdk.py`, `tests/unit/test_plugin.py`
-- [~] D3 Release checklist — `LICENSE`, `SECURITY.md`, `docs/release-checklist.md`, `make release-build/release-sbom/release-checksums`; GPG signature and `v0.1.0` tag execute at release
+- [~] D3 Release checklist — DONE: `LICENSE`, `SECURITY.md`, `docs/release-checklist.md`; `make release-build` (wheel + sdist + `SHA256SUMS`), `make release-sbom` (cyclonedx, no known vulnerabilities), base-only wheel install + `lmpu version`, and `lmpu doctor` pass. BLOCKED: GPG signature and `v0.1.0` tag need a valid release key.
 
 ### Gate E
 - [ ] E1 vLLM spike
@@ -207,14 +207,14 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gates A, B, and C are closed; Gate D1/D2 are closed.
+Gates A, B, and C are closed; Gate D1/D2 are closed; D3 artifact verification is closed.
 
-1. Execute D3 at release: run `make release-check`, `make release-build`, `make release-sbom`, then sign `dist/SHA256SUMS` and tag `v0.1.0`.
-2. Verify the wheel in a clean venv: `uv pip install dist/lmpu-0.1.0-py3-none-any.whl && lmpu version`.
+1. Remaining D3 release step: with a valid release key, sign `dist/SHA256SUMS` (`gpg --armor --detach-sign`), tag `v0.1.0`, and attach `dist/*.whl`, `dist/*.tar.gz`, `SHA256SUMS`, its signature, and `sbom.json`.
+2. Before tagging, run `make release-check` on the release commit (it was not run wholesale here because the full benchmark gate takes longer than the per-commit cell limit).
 3. Revisit C1 only if a targeted higher-budget model run becomes available; it does not block release.
 4. Keep Gate E optional. Deferred product work (full demo set, scenario runner, rich filters, buffer previews) stays out of scope.
 
-Release is blocked only on the D3 signing/SBOM/tag execution step.
+Release is blocked only on the D3 signing/tag step; no code work remains on the critical path.
 
 ---
 
