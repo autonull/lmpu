@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from lmpu.host.engine import HostStats
-from lmpu.host.metrics import EnergySampler, HostMetrics
+from lmpu.host.metrics import EnergySampler, HostMetrics, estimate_tokens
 from lmpu.kernel.runtime import Runtime
 from lmpu.protocol.messages import ModelJobStatus
 
 from .config import BenchmarkConfig
 from .energy import EnergyProbe, IdleBaseline
-from .runner import TrialContext, TrialRecord, estimate_tokens
+from .runner import TrialContext, TrialRecord
 from .workloads import WorkloadSpec
 
 logger = logging.getLogger(__name__)

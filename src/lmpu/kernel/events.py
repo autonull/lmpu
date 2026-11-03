@@ -134,5 +134,11 @@ class EventLog:
             total += log.trim_to_size(self.max_events_per_session)
         return total
 
+    def recent_events(self, limit: int = 100) -> list[Event]:
+        """Return the most recent events across sessions in time order."""
+        events = [event for log in self._sessions.values() for event in log.events]
+        events.sort(key=lambda event: (event.ts_monotonic, event.session, event.seq))
+        return events[-limit:]
+
     def get_session_ids(self) -> list[str]:
         return list(self._sessions.keys())

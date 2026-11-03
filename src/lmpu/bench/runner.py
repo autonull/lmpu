@@ -2,22 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 from .config import BenchmarkConfig
 from .workloads import WorkloadSpec
-
-
-def estimate_tokens(payload: object) -> int:
-    """Conservative token estimate for rendered benchmark payloads."""
-    if isinstance(payload, str):
-        text = payload
-    else:
-        text = json.dumps(payload, separators=(",", ":"), default=str)
-    return max(1, len(text) // 4)
 
 
 @dataclass(frozen=True, slots=True)

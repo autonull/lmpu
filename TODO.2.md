@@ -30,11 +30,15 @@
 - Workloads: `bigint_mul`, `matmul` (512²), `large_context` (12k-char secret lookup), `sleep` (3 s), `large_result` (16 MiB bounded slice), and `batch` (64 additions); all verified through measured artifacts.
 - C1–C5 report generator: `src/lmpu/bench/report.py`; first published artifacts in `benchmarks/reports/gate-b-initial/` with raw data, medians, CIs, CDFs, timeline, and explicit claim limitations.
 - Gate B evidence closure: `lmpu.sleep` parks in S1 with zero forward passes; `lmpu.slice` reads a 16 MiB buffer with 43 peak context tokens; `lmpu.individual` vs `lmpu.batch` measures a 17x submission-speedup; `native` measures in-process C5 timings. Published in `benchmarks/reports/gate-b-evidence/`.
+- Canonical demos: `lmpu demo canonical` runs kernel crash/recovery, S1 park/resume, and 16 MiB context protection with executable assertions; all pass headless.
+- Trace CLI: `lmpu trace` replays, detects per-session sequence gaps, redacts sensitive fields, and summarizes type timelines.
+- Dashboard: read-only Mission Control shows parked-host state, jobs, buffers, and live runtime events over SSE.
 - CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1–B5 add 15 targeted tests (10 unit, 5 integration); evidence closure adds 3 integration tests.
 
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
-- P1 exit gate is not closed: canonical demo assertions and the 16 MiB dashboard proof (Gate C).
+- Dashboard is intentionally polling-based and read-only; scenario runner and rich filters remain deferred.
+- Gate D is open: RFC/schema, packaging, and release checklist are not started.
 - C1 remains partial: the 64-token model budget makes `direct_cot`/`sync_tool`/`async_poll` fail program generation and answer extraction. Accepted as a model-budget limitation; `trace_token` and successful baselines still support the reduction claim.
 - Trace-token baseline is a labelled simulation; a small real-model trace run remains.
 - CPU RAPL energy is not measured; NVML GPU energy is the only energy path.
@@ -97,6 +101,8 @@
 ---
 
 ## 4. Gate C — Product surface
+
+**Status:** CLOSED 2026-11-03. Canonical demos, trace CLI, and read-only dashboard pass.
 
 **Goal:** make the evidence inspectable without expanding scope.
 
@@ -175,9 +181,9 @@ These items do not block A–D. Each has a kill criterion.
 - [x] B5e Evidence report — `benchmarks/reports/gate-b-evidence/` (measured C2–C5; accepted partial C1)
 
 ### Gate C
-- [ ] C1 Three canonical demos
-- [ ] C2 `lmpu trace` CLI
-- [ ] C3 Minimal dashboard
+- [x] C1 Three canonical demos — `src/lmpu/demos/canonical.py`, `lmpu demo canonical`, `tests/integration/test_canonical_demos.py`; offload+recovery, S1 sleep proof, 16 MiB context protection all pass headless
+- [x] C2 `lmpu trace` CLI — `lmpu trace --replay --gaps --redact --timeline --json`, `tests/unit/test_trace_cli.py`
+- [x] C3 Minimal dashboard — read-only `Parked Host`, `Jobs`, `Buffers`, `Live Events`; `tests/unit/test_dashboard.py`
 
 ### Gate D
 - [ ] D1 RFC 0001 + JSON Schema
@@ -195,14 +201,14 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gates A and B are closed. C2–C5 are measured; C1 is accepted as partial.
+Gates A, B, and C are closed.
 
-1. Start Gate C2: `lmpu trace` CLI (replay, gap detection, redaction, timeline).
-2. Start Gate C1: three canonical demos in assertion mode (kernel offload + recovery, S1 sleep proof, 16 MiB context protection).
-3. Start Gate C3: minimal read-only dashboard over live events, job board, and parked-host panel.
-4. Resolve or re-accept C1 before Gate D: either raise the model budget for a targeted C1 run or scope the claim to measured baselines.
+1. Start Gate D1: RFC 0001 and the frozen trace/event JSON Schema; validate protocol examples.
+2. Start Gate D2: quickstart/docs, SDK/plugin example, `lmpu==0.1.0` build.
+3. Start Gate D3: license, SBOM, pins, signed artifact, security notes, reproducible tag.
+4. Revisit C1 only if a targeted higher-budget model run becomes available; it does not block Gate D.
 
-Gate C is now open because the C2–C5 evidence is measured and the C1 limitation is explicitly accepted.
+Gate D is now open. Deferred product work (full demo set, scenario runner, rich filters, buffer previews) stays out of scope.
 
 ---
 

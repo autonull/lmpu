@@ -7,6 +7,7 @@ reporting, and benchmark harnesses.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,6 +15,16 @@ from typing import Any
 from lmpu.kernel.trace import get_trace_sink
 
 FORWARD_KINDS = ("prefill", "generated", "injected", "control")
+
+
+def estimate_tokens(payload: object) -> int:
+    """Conservative token estimate for rendered payloads."""
+    text = (
+        payload
+        if isinstance(payload, str)
+        else json.dumps(payload, separators=(",", ":"), default=str)
+    )
+    return max(1, len(text) // 4)
 
 
 @dataclass

@@ -11,7 +11,6 @@ from rich.table import Table
 
 from lmpu.doctor import run_doctor
 from lmpu.kernel.runtime import Runtime
-from lmpu.observability.dashboard import start_dashboard_server
 
 app = typer.Typer(name="lmpu", help="Language Model Processing Unit CLI")
 console = Console()
@@ -107,10 +106,10 @@ def demo(
     socket: str = typer.Option("/tmp/lmpu/run.sock", "--socket", "-s", help="Runtime socket"),
     gpu: bool = typer.Option(True, "--gpu/--no-gpu", help="Use GPU"),
 ):
-    """Run a demo."""
+    """Run a demo. Canonical names run with assertions."""
     from lmpu.demos import run_demo
 
-    asyncio.run(run_demo(name, socket, gpu))
+    raise typer.Exit(asyncio.run(run_demo(name, socket, gpu)))
 
 
 @app.command()
@@ -120,6 +119,8 @@ def mission_control(
     port: int = typer.Option(8080, "--port", "-p", help="Port"),
 ):
     """Start Mission Control dashboard."""
+    from lmpu.observability.dashboard import start_dashboard_server
+
     console.print(f"[cyan]Starting Mission Control on {bind}:{port}[/cyan]")
 
     async def _run():
@@ -150,33 +151,91 @@ def bench(
 def trace(
     trace_id: str = typer.Argument(..., help="Trace ID or 'latest'"),
     trace_dir: str = typer.Option("traces", "--dir", "-d", help="Trace directory"),
+    gaps: bool = typer.Option(False, "--gaps", help="Report per-session sequence gaps"),
+    redact_payloads: bool = typer.Option(False, "--redact", help="Redact sensitive fields"),
+    timeline: bool = typer.Option(False, "--timeline", help="Print a type timeline"),
+    replay: bool = typer.Option(False, "--replay", help="Replay records in monotonic order"),
+    speed: float = typer.Option(1000.0, "--speed", help="Replay speed; 0 disables sleeping"),
+    json_output: bool = typer.Option(False, "--json", help="Emit records as JSON"),
 ):
-    """View trace."""
+    """Replay a trace, detect gaps, redact payloads, and summarize the timeline."""
+    import json
+    import time
+
+    from lmpu.kernel.trace import redact, replay_trace
     from lmpu.observability.trace import TraceViewer
 
-    viewer = TraceViewer(trace_dir)
-
+    directory = Path(trace_dir)
     if trace_id == "latest":
-        traces = viewer.list_traces()
+        traces = TraceViewer(trace_dir).list_traces()
         if not traces:
             console.print("[red]No traces found[/red]")
             raise typer.Exit(1)
         trace_path = traces[-1]
     else:
-        trace_path = Path(trace_dir) / f"trace-{trace_id}.jsonl"
+        trace_path = directory / f"trace-{trace_id}.jsonl"
         if not trace_path.exists():
-            console.print(f"[red]Trace not found: {trace_path}[/red]")
-            raise typer.Exit(1)
+            matches = sorted(directory.glob(f"*{trace_id}*.jsonl"))
+            if not matches:
+                console.print(f"[red]Trace not found: {trace_id}[/red]")
+                raise typer.Exit(1)
+            trace_path = matches[-1]
 
-    records = viewer.load_trace(trace_path)
-    stats = viewer.compute_stats(records)
+    replay_result = replay_trace(trace_path)
+    records = (
+        [redact(record) for record in replay_result.records]
+        if redact_payloads
+        else replay_result.records
+    )
+    stats = TraceViewer(trace_dir).compute_stats(records)
+    ordered = sorted(records, key=lambda record: record.get("mono", 0))
 
-    console.print(f"[cyan]Trace: {trace_path.name}[/cyan]")
-    console.print(f"Records: {stats.get('total_records', 0)}")
-    console.print(f"Duration: {stats.get('duration_mono', 0):.2f}s")
-    console.print(f"Host forwards: {stats.get('host_forwards', 0)}")
-    console.print(f"Tokens: {stats.get('total_tokens_generated', 0)}")
-    console.print(f"Events: {stats.get('events', 0)}")
+    if json_output:
+        typer.echo(json.dumps(ordered, default=str))
+    elif replay:
+        if not ordered:
+            console.print("[yellow]Empty trace[/yellow]")
+        origin = ordered[0].get("mono", 0.0) if ordered else 0.0
+        previous = origin
+        for record in ordered:
+            mono = record.get("mono", previous)
+            if speed > 0 and mono > previous:
+                time.sleep((mono - previous) / speed)
+            previous = mono
+            console.print(
+                f"{mono - origin:8.3f}s {record.get('type', 'record')} {record.get('job_id', '')}"
+            )
+    else:
+        table = Table(title=f"Trace {trace_path.name}")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value")
+        table.add_row("Records", str(stats.get("total_records", 0)))
+        table.add_row("Duration (mono)", f"{stats.get('duration_mono', 0):.3f}s")
+        table.add_row("Host forwards", str(stats.get("host_forwards", 0)))
+        table.add_row("Generated tokens", str(stats.get("total_tokens_generated", 0)))
+        table.add_row("Events", str(stats.get("events", 0)))
+        console.print(table)
+
+    if timeline:
+        counts: dict[str, int] = {}
+        for record in ordered:
+            record_type = str(record.get("type", "record"))
+            counts[record_type] = counts.get(record_type, 0) + 1
+        timeline_table = Table(title="Timeline")
+        timeline_table.add_column("Type", style="cyan")
+        timeline_table.add_column("Count", justify="right")
+        for record_type, count in sorted(counts.items()):
+            timeline_table.add_row(record_type, str(count))
+        console.print(timeline_table)
+
+    if gaps:
+        if replay_result.is_contiguous():
+            console.print("[green]No sequence gaps[/green]")
+        else:
+            for session_id, session_gaps in replay_result.gaps.items():
+                for start, end in session_gaps:
+                    console.print(f"[red]Gap in {session_id}: missing {start}..{end - 1}[/red]")
+            raise typer.Exit(2)
 
 
 @app.command()

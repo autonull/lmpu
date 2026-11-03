@@ -18,7 +18,7 @@ from lmpu.bench import (
     resolve_baselines,
 )
 from lmpu.bench.baselines import _program_from_text
-from lmpu.bench.runner import estimate_tokens
+from lmpu.host.metrics import estimate_tokens
 
 pytestmark = pytest.mark.integration
 
