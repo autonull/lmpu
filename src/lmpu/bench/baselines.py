@@ -28,6 +28,7 @@ from .runner import TrialContext, TrialRecord
 from .taxonomy import (
     ALL_BASELINES,
     END_TO_END_BASELINES,
+    split_oracle,
 )
 from .workloads import WorkloadSpec
 
@@ -57,7 +58,9 @@ class HostModel(Protocol):
 
     async def start_trial(self) -> None: ...
 
-    async def decode(self, prompt: str, max_tokens: int, stop: str = "") -> str: ...
+    async def decode(
+        self, prompt: str, max_tokens: int, stop: str = "", session: int = 0
+    ) -> str: ...
 
     async def count_tokens(self, text: str) -> int: ...
 
@@ -69,7 +72,7 @@ class HostModel(Protocol):
 class HFHost:
     """Reference HF engine adapter with a fresh decoder state per trial."""
 
-    def __init__(self, config: BenchmarkConfig):
+    def __init__(self, config: BenchmarkConfig, sessions: int = 1):
         import os
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -90,18 +93,22 @@ class HFHost:
 
         self.config = config
         self.engine = HFEngine(model_name=config.model, device=config.device)
-        self.decoder = HFDecoder(self.engine, max_tokens=config.max_tokens)
+        self._decoders = [
+            HFDecoder(self.engine, max_tokens=config.max_tokens) for _ in range(sessions)
+        ]
+        self.decoder = self._decoders[0]
         self._energy = EnergySampler()
         self._trial_energy = 0.0
 
     async def start_trial(self) -> None:
         self.engine.stats_ = HostStats()
-        self.decoder.reset()
+        for decoder in self._decoders:
+            decoder.reset()
         self._energy.sample()
         self._trial_energy = 0.0
 
-    async def decode(self, prompt: str, max_tokens: int, stop: str = "") -> str:
-        text = await self.decoder.decode_free(prompt, max_tokens, stop)
+    async def decode(self, prompt: str, max_tokens: int, stop: str = "", session: int = 0) -> str:
+        text = await self._decoders[session].decode_free(prompt, max_tokens, stop)
         self._trial_energy += self._energy.sample().gpu_joules
         return text
 
@@ -184,6 +191,10 @@ def _result_text(result: Any) -> str:
 def _summary_text(result: Any, max_chars: int = 200) -> str:
     text = _result_text(result)
     return text if len(text) <= max_chars else text[:max_chars] + "…"
+
+
+def _tool_result_suffix(workload: WorkloadSpec, body: str) -> str:
+    return f'\nTOOL RESULT:\n{body}\nReply with a final line "{workload.answer_line}".'
 
 
 def score_answer(workload: WorkloadSpec, answer: str | None, error: str | None) -> bool:
@@ -324,7 +335,12 @@ class BaselineRunner:
         if self._host is None and any(
             baseline in MODEL_BASELINES for baseline in self.config.baselines
         ):
-            self._host = HFHost(self.config)
+            sessions = (
+                2
+                if any(self._is_two_session(baseline) for baseline in self.config.baselines)
+                else 1
+            )
+            self._host = HFHost(self.config, sessions=sessions)
 
     async def run(self, context: TrialContext) -> TrialRecord:
         handlers = {
@@ -342,7 +358,15 @@ class BaselineRunner:
             "session_reopen": self._run_session_reopen,
             "app_agent": self._run_app_agent,
             "engine_native": self._run_engine_native,
+            "lmpu.model_async": self._run_model_async,
+            "lmpu.model_sync": self._run_model_sync,
+            "lmpu.model_async_2session": self._run_model_async_2session,
+            "app_agent_2session": self._run_app_agent_2session,
         }
+        for name in END_TO_END_BASELINES:
+            stem, oracle = split_oracle(name)
+            if oracle and stem in handlers:
+                handlers[name] = handlers[stem]
         handler = handlers.get(context.baseline)
         if handler is None:
             raise ValueError(f"Unknown baseline: {context.baseline}")
@@ -399,6 +423,11 @@ class BaselineRunner:
         runtime = self._require_runtime()
         hello = await runtime._hello({"protocol": "lmpu/1"})
         return hello.session_id
+
+    @staticmethod
+    def _is_two_session(baseline: str) -> bool:
+        stem, _ = split_oracle(baseline)
+        return stem in ("lmpu.model_async_2session", "app_agent_2session")
 
     def _require_runtime(self) -> Runtime:
         if self.runtime is None:
@@ -617,6 +646,301 @@ class BaselineRunner:
             },
         )
 
+    async def _model_tool_run(
+        self,
+        context: TrialContext,
+        started_at: float,
+        holder: dict[str, Any],
+        *,
+        blocking: bool,
+    ) -> TrialRecord:
+        """Treatment arm: host model in the loop; LMPU runtime submits, parks, wakes.
+
+        ``blocking`` selects ``lmpu.model_sync`` (mode=sync submit); otherwise
+        ``lmpu.model_async`` parks in S1 with zero host decode while parked.
+        Bounded ingestion for both; the only delta is park vs block.
+        """
+        runtime = self._require_runtime()
+        host = self._host_model()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        phases = PhaseTimer()
+        holder["metrics"] = metrics
+        holder["phases"] = phases.phases
+        started = time.perf_counter()
+        job_id = self._job_id(context)
+        error: str | None = None
+        result: Any = None
+        program: dict[str, Any] | None = None
+        final_answer: str | None = None
+        sleep_id = ""
+        sleep_seconds = 0.0
+        timeout = context.workload.config.get("timeout_ms", 60_000) / 1000
+        try:
+            prefix, program, _ = await self._model_program(context, metrics, phases)
+            if blocking:
+                request = _request(program, context.workload, job_id, "sync")
+                metrics.record_control_tokens(estimate_tokens(request))
+                submit_started = time.perf_counter()
+                submitted = await runtime._submit(request, session_id)
+                phases.record("submit", time.perf_counter() - submit_started)
+                result = submitted.result
+                if submitted.error:
+                    error = json.dumps(submitted.error, default=str)
+            else:
+                request = _request(program, context.workload, job_id, None)
+                metrics.record_control_tokens(estimate_tokens(request))
+                submit_started = time.perf_counter()
+                await runtime._submit(request, session_id)
+                phases.record("submit", time.perf_counter() - submit_started)
+                sleep_result = await runtime._sleep(
+                    {"until": {"all": [job_id]}, "level": "S1"},
+                    session_id,
+                )
+                sleep_id = sleep_result.sleep_id
+                park_started = time.perf_counter()
+                finished = await runtime.job_table.wait_terminal(job_id, timeout=timeout)
+                sleep_seconds = time.perf_counter() - park_started
+                metrics.sleep_duration_seconds = sleep_seconds
+                phases.record("park", sleep_seconds)
+                wake_started = time.perf_counter()
+                await runtime._wake({}, session_id)
+                metrics.record_wake_latency(time.perf_counter() - wake_started)
+                phases.record("wake", metrics.wake_latency_seconds)
+                if finished is None:
+                    raise TimeoutError("sleep treatment exceeded the job timeout")
+                result = finished.result
+                if finished.error:
+                    error = json.dumps(finished.error, default=str)
+            if result is not None:
+                suffix = _tool_result_suffix(context.workload, _summary_text(result))
+                _, final_answer = await self._decode_answer(
+                    context, host, metrics, phases, prefix, suffix
+                )
+        finally:
+            await self._close_session(session_id)
+            try:
+                metrics.record_energy(gpu_joules=host.take_energy())
+            except Exception:
+                logger.exception("host energy collection failed")
+        wall = time.perf_counter() - started
+        tool_correct = result is not None and context.workload.verify(result)
+        _, oracle = split_oracle(context.baseline)
+        metadata: dict[str, Any] = {
+            "program": program,
+            "answer": final_answer,
+            "tool_correct": tool_correct,
+            "planner": "oracle" if oracle else "model",
+            "ingest_mode": "bounded_summary",
+            "phases": phases.as_dict(),
+        }
+        if not blocking:
+            metadata["park"] = {
+                "level": "S1",
+                "sleep_id": sleep_id,
+                "sleep_seconds": sleep_seconds,
+                "forward_passes_during_park": 0,
+            }
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=job_id,
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=score_answer(context.workload, final_answer, error),
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata=metadata,
+        )
+
+    async def _run_model_async(
+        self, context: TrialContext, started_at: float, holder: dict[str, Any]
+    ) -> TrialRecord:
+        return await self._model_tool_run(context, started_at, holder, blocking=False)
+
+    async def _run_model_sync(
+        self, context: TrialContext, started_at: float, holder: dict[str, Any]
+    ) -> TrialRecord:
+        return await self._model_tool_run(context, started_at, holder, blocking=True)
+
+    async def _two_session_run(
+        self,
+        context: TrialContext,
+        started_at: float,
+        holder: dict[str, Any],
+        *,
+        app_level: bool,
+    ) -> TrialRecord:
+        """Two concurrent sessions on the best-case workload; oracle-planned.
+
+        ``app_level=False``: two LMPU sessions parked in S1 on one runtime.
+        ``app_level=True``: two app-level in-process tasks on one shared engine
+        with two independent KV-warm decoders; no LMPU runtime.
+        """
+        host = self._host_model()
+        await host.start_trial()
+        runtime = None if app_level else self._require_runtime()
+        session_ids = (
+            [f"bench_{context.baseline}_{context.trial}_{i}" for i in (0, 1)]
+            if app_level
+            else [await self._open_session() for _ in range(2)]
+        )
+        metrics = HostMetrics(session_id="+".join(session_ids))
+        phases = PhaseTimer()
+        holder["metrics"] = metrics
+        holder["phases"] = phases.phases
+        started = time.perf_counter()
+        job_ids = [self._job_id(context, f"_s{i}") for i in (0, 1)]
+        program = context.workload.program
+        if program is None:
+            raise ValueError(
+                f"Two-session arms require a gold program for workload {context.workload.name}"
+            )
+        error: str | None = None
+        final_answers: list[str | None] = [None, None]
+        tool_oks = [False, False]
+        polls = [0, 0]
+        sleep_id = ""
+        timeout = context.workload.config.get("timeout_ms", 180_000) / 1000
+        try:
+            for _ in session_ids:
+                await _record_prefill(metrics, host, context.workload.prompt)
+            submit_started = time.perf_counter()
+            if app_level:
+
+                async def in_process_leg(index: int) -> tuple[Any, int]:
+                    task = asyncio.create_task(
+                        _execute_in_process(program, context.workload, job_ids[index])
+                    )
+                    deadline = time.monotonic() + timeout + 30
+                    count = 0
+                    while not task.done():
+                        count += 1
+                        if time.monotonic() > deadline:
+                            task.cancel()
+                            raise TimeoutError(
+                                "in-process tool execution exceeded the two-session deadline"
+                            )
+                        await asyncio.sleep(self.config.poll_interval_ms / 1000)
+                    return task.result(), count
+
+                async def app_leg(index: int) -> tuple[Any, int]:
+                    try:
+                        return await in_process_leg(index)
+                    except Exception as exc:
+                        return ({"error": str(exc)}, 0)
+
+                async with asyncio.TaskGroup() as group:
+                    leg_a = group.create_task(app_leg(0))
+                    leg_b = group.create_task(app_leg(1))
+                legs = [leg_a.result(), leg_b.result()]
+                results = [legs[0][0], legs[1][0]]
+                polls = [legs[0][1], legs[1][1]]
+                phases.record("execute", time.perf_counter() - submit_started)
+            else:
+                assert runtime is not None
+                for i, session_id in enumerate(session_ids):
+                    request = _request(program, context.workload, job_ids[i], None)
+                    metrics.record_control_tokens(estimate_tokens(request))
+                    await runtime._submit(request, session_id)
+                phases.record("submit", time.perf_counter() - submit_started)
+                for session_id in session_ids:
+                    result = await runtime._sleep(
+                        {"until": {"all": job_ids}, "level": "S1"},
+                        session_id,
+                    )
+                    sleep_id = result.sleep_id
+                park_started = time.perf_counter()
+                finished = [
+                    await runtime.job_table.wait_terminal(jid, timeout=timeout) for jid in job_ids
+                ]
+                sleep_seconds = time.perf_counter() - park_started
+                metrics.sleep_duration_seconds = sleep_seconds
+                phases.record("park", sleep_seconds)
+                wake_started = time.perf_counter()
+                for session_id in session_ids:
+                    await runtime._wake({}, session_id)
+                metrics.record_wake_latency(time.perf_counter() - wake_started)
+                phases.record("wake", metrics.wake_latency_seconds)
+                results = [
+                    item.result if item is not None and item.error is None else None
+                    for item in finished
+                ]
+                leg_errors = [
+                    json.dumps(item.error, default=str)
+                    for item in finished
+                    if item is not None and item.error
+                ]
+                if any(item is None for item in finished):
+                    leg_errors.append("two-session wait exceeded the job timeout")
+                if leg_errors:
+                    error = "; ".join(leg_errors)
+            for i in (0, 1):
+                result = results[i]
+                tool_oks[i] = result is not None and context.workload.verify(result)
+                if result is None:
+                    continue
+                suffix = _tool_result_suffix(context.workload, _summary_text(result))
+                ingest_started = time.perf_counter()
+                await _record_injected(metrics, host, suffix)
+                phases.record("ingest", time.perf_counter() - ingest_started)
+                conversation = context.workload.prompt + suffix
+                answer_started = time.perf_counter()
+                response = await host.decode(conversation, self.config.max_tokens, "", session=i)
+                phases.record("answer", time.perf_counter() - answer_started)
+                await _record_generated(metrics, host, response)
+                final_answers[i] = context.workload.parse_answer(response)
+            metrics.record_energy(gpu_joules=host.take_energy())
+        finally:
+            if not app_level and runtime is not None:
+                for session_id in session_ids:
+                    await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        answers_ok = [score_answer(context.workload, final_answers[i], error) for i in (0, 1)]
+        correct = error is None and all(answers_ok)
+        metadata = {
+            "program": program,
+            "answers": final_answers,
+            "answer": final_answers[0],
+            "tool_correct": tool_oks,
+            "planner": "oracle",
+            "ingest_mode": "bounded_summary",
+            "sessions": 2,
+            "polls": polls,
+            "phases": phases.as_dict(),
+        }
+        if not app_level:
+            metadata["park"] = {
+                "level": "S1",
+                "sleep_id": sleep_id,
+                "forward_passes_during_park": 0,
+            }
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=",".join(job_ids),
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=correct,
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata=metadata,
+        )
+
+    async def _run_model_async_2session(
+        self, context: TrialContext, started_at: float, holder: dict[str, Any]
+    ) -> TrialRecord:
+        return await self._two_session_run(context, started_at, holder, app_level=False)
+
+    async def _run_app_agent_2session(
+        self, context: TrialContext, started_at: float, holder: dict[str, Any]
+    ) -> TrialRecord:
+        return await self._two_session_run(context, started_at, holder, app_level=True)
+
     async def _run_lmpu_individual(
         self, context: TrialContext, started_at: float, holder: dict[str, Any]
     ) -> TrialRecord:
@@ -830,6 +1154,17 @@ class BaselineRunner:
     ) -> tuple[str, dict[str, Any], str]:
         host = self._host_model()
         await host.start_trial()
+        _, oracle = split_oracle(context.baseline)
+        if oracle:
+            gold = context.workload.program
+            if gold is None:
+                raise ValueError(
+                    f"Oracle planner requires a gold program for workload {context.workload.name}"
+                )
+            await _record_prefill(metrics, host, context.workload.prompt)
+            if phases is not None:
+                phases.record("plan", 0.0)
+            return context.workload.prompt, dict(gold), ""
         prompt = context.workload.program_prompt
         plan_started = time.perf_counter()
         await _record_prefill(metrics, host, prompt)
@@ -891,11 +1226,7 @@ class BaselineRunner:
                 error = json.dumps(submitted.error, default=str)
             if result is not None:
                 result_text = _result_text(result)
-                suffix = (
-                    "\nTOOL RESULT:\n"
-                    + result_text
-                    + '\nReply with a final line "ANSWER: <integer>".'
-                )
+                suffix = _tool_result_suffix(context.workload, result_text)
                 _, final_answer = await self._decode_answer(
                     context, host, metrics, phases, prefix, suffix
                 )
@@ -988,9 +1319,7 @@ class BaselineRunner:
                 error = json.dumps(waited.error, default=str)
             if result is not None:
                 summary = _summary_text(result)
-                suffix = (
-                    "\nTOOL RESULT:\n" + summary + '\nReply with a final line "ANSWER: <integer>".'
-                )
+                suffix = _tool_result_suffix(context.workload, summary)
                 _, final_answer = await self._decode_answer(
                     context, host, metrics, phases, prefix, suffix
                 )
@@ -1152,9 +1481,8 @@ class BaselineRunner:
             result_text = _result_text(result) if result is not None else "{}"
             full_prompt = (
                 context.workload.prompt
-                + "\n\nTOOL RESULT:\n"
-                + result_text
-                + '\nReply with a final line "ANSWER: <integer>".'
+                + f"\n\nTOOL RESULT:\n{result_text}\n"
+                + f'Reply with a final line "{context.workload.answer_line}".'
             )
             prefill_started = time.perf_counter()
             await _record_prefill(metrics, host, full_prompt)
@@ -1239,7 +1567,7 @@ class BaselineRunner:
                 result = await _execute_in_process(program, context.workload, job_id)
             phases.record("execute", time.perf_counter() - execute_started)
             summary = _summary_text(result)
-            suffix = "\nTOOL RESULT:\n" + summary + '\nReply with a final line "ANSWER: <integer>".'
+            suffix = _tool_result_suffix(context.workload, summary)
             _, final_answer = await self._decode_answer(
                 context, host, metrics, phases, prefix, suffix
             )

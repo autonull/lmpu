@@ -37,6 +37,7 @@ class WorkloadSpec:
     config: dict[str, Any] = field(default_factory=dict)
     baselines: tuple[str, ...] | None = None
     native: Callable[[], object] | None = None
+    answer_line: str = "ANSWER: <integer>"
 
 
 def _parse_integer_answer(text: str) -> str | None:
@@ -109,11 +110,23 @@ _BIGINT_MUL = WorkloadSpec(
         "direct_cot",
         "trace_token",
         "sync_tool_full_result",
+        "sync_tool_full_result_oracle",
         "async_poll_programmatic",
+        "async_poll_programmatic_oracle",
         "async_poll_model",
+        "async_poll_model_oracle",
         "session_reopen",
+        "session_reopen_oracle",
         "app_agent",
+        "app_agent_oracle",
         "engine_native",
+        "engine_native_oracle",
+        "lmpu.model_async",
+        "lmpu.model_sync",
+        "lmpu.model_async_oracle",
+        "lmpu.model_sync_oracle",
+        "lmpu.model_async_2session",
+        "app_agent_2session",
         "native",
     ),
     native=_native_bigint_mul,
@@ -463,6 +476,115 @@ _BATCH = WorkloadSpec(
 )
 
 
+def _parse_sha256_answer(text: str) -> str | None:
+    match = re.search(r"ANSWER:\s*([0-9a-fA-F]{64})", text)
+    return match.group(1).lower() if match else None
+
+
+# --- best_case --------------------------------------------------------------
+
+_BEST_CASE_BYTES = 16 * 1024 * 1024
+_BEST_CASE_SLEEP_SECONDS = 60
+_BEST_CASE_UNIT = b"lmpu-best-case-16mib-deterministic-unit\n"
+_BEST_CASE_DOCUMENT_LINES = 850  # ~32.8k tokens on Qwen/Qwen3.5-0.8B
+
+
+@lru_cache(maxsize=1)
+def _best_case_digest() -> str:
+    digest = hashlib.sha256()
+    written = 0
+    while written < _BEST_CASE_BYTES:
+        take = min(len(_BEST_CASE_UNIT), _BEST_CASE_BYTES - written)
+        digest.update(_BEST_CASE_UNIT[:take])
+        written += take
+    return digest.hexdigest()
+
+
+def _best_case_document() -> str:
+    return "".join(
+        f"SECTION {i:04d} | ledger entry {i} | deterministic filler payload {i * 7919} "
+        f"| checksum-block {(i * 104729) % 65536} | end-of-entry\n"
+        for i in range(_BEST_CASE_DOCUMENT_LINES)
+    )
+
+
+_BEST_CASE_PROGRAM = (
+    "import hashlib, json, time\n"
+    f"time.sleep({_BEST_CASE_SLEEP_SECONDS})\n"
+    "h = hashlib.sha256()\n"
+    "written = 0\n"
+    f"unit = {_BEST_CASE_UNIT!r}\n"
+    f"target = {_BEST_CASE_BYTES}\n"
+    "while written < target:\n"
+    "    take = min(len(unit), target - written)\n"
+    "    h.update(unit[:take])\n"
+    "    written += take\n"
+    'print(json.dumps({"bytes": written, "sha256": h.hexdigest()}))\n'
+)
+
+_BEST_CASE = WorkloadSpec(
+    name="best_case",
+    processor="python.vm",
+    op="run_program",
+    inputs={"program": _BEST_CASE_PROGRAM},
+    verify=lambda result: (
+        isinstance(result, dict)
+        and int(result.get("bytes", 0)) == _BEST_CASE_BYTES
+        and result.get("sha256") == _best_case_digest()
+    ),
+    answer=_best_case_digest(),
+    prompt=(
+        _best_case_document()
+        + "\nTASK: A long-running tool job (about 60 seconds) computes a 16 MiB "
+        "deterministic buffer and reports its size and SHA-256 digest. Call the "
+        'tool, then reply with a final line "ANSWER: <sha256 hex digest>".'
+    ),
+    program_prompt=(
+        "You have a Python tool. Reply with only one JSON object, no prose or fences: "
+        '{"processor":"python.vm","op":"run_program","inputs":{"program":"..."}}. '
+        f"The program must sleep {_BEST_CASE_SLEEP_SECONDS} seconds, compute the "
+        f"SHA-256 of {_BEST_CASE_BYTES} bytes of deterministic chunked data, and "
+        'print a JSON object with "bytes" and "sha256" keys.'
+    ),
+    program={
+        "processor": "python.vm",
+        "op": "run_program",
+        "inputs": {"program": _BEST_CASE_PROGRAM},
+    },
+    parse_answer=_parse_sha256_answer,
+    verify_answer=lambda value: isinstance(value, str) and value.lower() == _best_case_digest(),
+    trace=lambda: (
+        f"TRACE best_case\nSLEEP {_BEST_CASE_SLEEP_SECONDS}\nALLOC 16MiB\nSHA {_best_case_digest()}"
+    ),
+    description=(
+        "16 MiB result, 60 s job, ~32k-token context, exact oracle (pre-registered best case)"
+    ),
+    config={"timeout_ms": 180_000},
+    baselines=(
+        "lmpu.model_async",
+        "lmpu.model_sync",
+        "lmpu.model_async_oracle",
+        "lmpu.model_sync_oracle",
+        "app_agent",
+        "app_agent_oracle",
+        "engine_native_oracle",
+        "session_reopen_oracle",
+        "direct_cot",
+        "lmpu.model_async_2session",
+        "app_agent_2session",
+        "native",
+    ),
+    native=lambda: (
+        time.sleep(_BEST_CASE_SLEEP_SECONDS),
+        {
+            "bytes": _BEST_CASE_BYTES,
+            "sha256": _best_case_digest(),
+        },
+    )[1],
+    answer_line="ANSWER: <sha256 hex digest>",
+)
+
+
 _WORKLOADS = {
     "bigint_mul": _BIGINT_MUL,
     "matmul": _MATMUL,
@@ -470,6 +592,7 @@ _WORKLOADS = {
     "sleep": _SLEEP,
     "large_result": _LARGE_RESULT,
     "batch": _BATCH,
+    "best_case": _BEST_CASE,
 }
 
 _ALIASES = {

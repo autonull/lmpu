@@ -67,6 +67,22 @@ paper run.
   End-to-end.
 - **`engine_native`**: engine-native session reuse without the LMPU protocol;
   blocking in-process call, KV-warm session, bounded result. End-to-end.
+- **Oracle twins** (`<arm>_oracle`, V1.8): the gold program from the workload
+  spec is injected instead of a model-planned one; the host model only
+  decodes the final answer. Zero planning tokens; isolates architecture
+  from model planning. Every end-to-end arm except the two-session arms
+  (which are oracle-planned by construction) has a twin.
+- **`lmpu.model_async`**: treatment arm — host model in the loop; the runtime
+  submits, parks in S1 (zero host decode while parked), wakes, and ingests a
+  bounded result; one KV-warm session. End-to-end.
+- **`lmpu.model_sync`**: same model path with blocking `mode=sync` semantics
+  and bounded ingestion. End-to-end.
+- **`lmpu.model_async_2session`**: two concurrent LMPU sessions on one
+  runtime; both jobs submitted, both parked in S1, both woken; answers are
+  decoded per session. Oracle-planned. End-to-end.
+- **`app_agent_2session`**: two concurrent app-level in-process tasks on one
+  shared engine with two independent KV-warm decoders; no LMPU runtime.
+  Oracle-planned. End-to-end.
 
 Every model baseline decodes a final answer and is scored on it. A correct
 tool result with a wrong final answer is `correct=False`; both `tool_correct`
@@ -84,6 +100,11 @@ counts. Trial order is shuffled per trial with a seed derived from the base seed
 - `sleep`: a 3-second blocking `python.vm` job.
 - `large_result`: a 16 MiB buffer read through a bounded slice (C3).
 - `batch`: 64 small additions submitted individually and as one batch (C4).
+- `best_case`: the pre-registered L1 best case — a 60-second python.vm job
+  produces a 16 MiB deterministic buffer and its SHA-256 digest; the prompt
+  carries an ~32k-token deterministic document as distractor; the answer is
+  tool-derived with an exact sha256 oracle. Feasible arms only (bounded
+  ingest or no-ingest); full-result ingestion is excluded by construction.
 
 Each workload declares its applicable baselines, so a run never attempts a
 model baseline on a non-model workload. `native` runs the same computation

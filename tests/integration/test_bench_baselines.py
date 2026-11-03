@@ -33,11 +33,15 @@ class FakeHost:
     async def start_trial(self) -> None:
         pass
 
-    async def decode(self, prompt: str, max_tokens: int, stop: str = "") -> str:
+    async def decode(self, prompt: str, max_tokens: int, stop: str = "", session: int = 0) -> str:
+        if "STATUS" in prompt:
+            return f"ANSWER: {self.answer}"
         if "You have a tool" in prompt:
             if "TOOL RESULT" in prompt:
                 return f"ANSWER: {self.answer}"
             return json.dumps(self.program)
+        if "TOOL RESULT" in prompt:
+            return f"ANSWER: {self.answer}"
         return f"work\nANSWER: {self.answer}"
 
     async def count_tokens(self, text: str) -> int:
@@ -85,14 +89,7 @@ async def test_all_baselines_run_and_emit_canonical_metrics(tmp_path: Path) -> N
 
     records = read_raw(Path(summary["run_id"]) / "raw.jsonl")
     by_baseline = {record["baseline"]: record for record in records}
-    expected = {
-        "lmpu.sync",
-        "direct_cot",
-        "trace_token",
-        "sync_tool",
-        "async_poll",
-        "native",
-    }
+    expected = set(workload.baselines or ())
     assert set(by_baseline) == expected
     assert all(record["correct"] for record in records)
     assert all(record["metrics"]["schema"] == "lmpu.host_metrics.v1" for record in records)
@@ -100,8 +97,13 @@ async def test_all_baselines_run_and_emit_canonical_metrics(tmp_path: Path) -> N
     assert by_baseline["direct_cot"]["metrics"]["generated_tokens"] > 0
     assert by_baseline["trace_token"]["metadata"]["simulated"] is True
     assert by_baseline["trace_token"]["metrics"]["generated_tokens"] > 1000
-    assert by_baseline["sync_tool"]["metrics"]["injected_tokens"] > 0
-    assert by_baseline["async_poll"]["metadata"]["polls"] >= 1
+    assert by_baseline["sync_tool_full_result"]["metrics"]["injected_tokens"] > 0
+    assert by_baseline["sync_tool_full_result_oracle"]["metrics"]["injected_tokens"] > 0
+    assert by_baseline["async_poll_programmatic"]["metadata"]["polls"] >= 1
+    assert by_baseline["lmpu.model_async"]["metadata"]["park"]["level"] == "S1"
+    assert by_baseline["lmpu.model_async_oracle"]["metadata"]["planner"] == "oracle"
+    assert by_baseline["lmpu.model_async_2session"]["metadata"]["sessions"] == 2
+    assert by_baseline["app_agent_2session"]["metadata"]["sessions"] == 2
     assert by_baseline["lmpu.sync"]["metrics"]["control_tokens"] > 0
     assert by_baseline["native"]["metadata"]["native"] is True
     assert by_baseline["native"]["metrics"]["forward_passes"] == 0
