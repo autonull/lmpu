@@ -33,6 +33,15 @@ from ..protocol.messages import (
 _VALID_ERROR_CODES = frozenset(code.value for code in ErrorCode)
 
 
+def _safe_int(value: object, default: int = 0) -> int:
+    if isinstance(value, (int, float, str)):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 @dataclass
 class WorkerInfo:
     """Worker process information."""
@@ -240,8 +249,12 @@ class WorkerPool:
             job_id = msg.get("job_id")
             if job_id:
                 job = self.job_table.get(job_id)
-                if job:
-                    job.progress = msg.get("fraction", 0.0)
+                try:
+                    fraction = float(msg.get("fraction", 0.0))
+                except (TypeError, ValueError):
+                    return
+                if job and 0.0 <= fraction <= 1.0:
+                    job.progress = fraction
                     job.progress_message = msg.get("message")
                     self.event_log.append(
                         job.session_id,
@@ -254,7 +267,7 @@ class WorkerPool:
                             ts_monotonic=get_clock().monotonic(),
                             data=ProgressData(
                                 job_id=job_id,
-                                fraction=msg.get("fraction", 0.0),
+                                fraction=fraction,
                                 checkpoint=msg.get("checkpoint"),
                                 message=msg.get("message"),
                             ),
@@ -435,9 +448,16 @@ class WorkerPool:
             self._release_worker(worker_id)
             return
 
+        data = msg.get("result")
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            self._fail_job(job, "internal", "Worker returned a non-object result")
+            self._release_worker(worker_id)
+            return
+
         coalesced = (job.config or {}).get("_coalesced_job_ids")
         if coalesced:
-            data = msg.get("result") or {}
             results = data.get("results", [])
             errors = {e.get("index"): e.get("error") for e in data.get("errors", [])}
             for index, child_id in enumerate(coalesced):
@@ -458,11 +478,11 @@ class WorkerPool:
 
         self._complete_job(
             job,
-            msg.get("result") or {},
-            checksum=msg.get("checksum", ""),
-            cache_hit=msg.get("cache_hit", False),
-            copy_count=int(msg.get("copy_count", 0)),
-            mapped_bytes=int(msg.get("mapped_bytes", 0)),
+            data,
+            checksum=str(msg.get("checksum", "")),
+            cache_hit=bool(msg.get("cache_hit", False)),
+            copy_count=_safe_int(msg.get("copy_count", 0)),
+            mapped_bytes=_safe_int(msg.get("mapped_bytes", 0)),
         )
         self._release_worker(worker_id)
 

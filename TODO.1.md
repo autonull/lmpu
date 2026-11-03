@@ -81,7 +81,7 @@ not merely "a file exists".
 | `pure.func`, `python.vm`, `vector.engine`, `symbolic.planner`, `neural.summary`, `hardware.stub` | Partial | all register and return results; all six pass the representative contract suite (`tests/contract/test_processor_contract.py`); per-op coverage is incomplete |
 | `vector.engine` | Partial | fd-mapped 16 KiB matmul completes with `copy_count == 0` and refreshed output checksum; other ops still use placeholder paths |
 | Worker fd passing | Partial | `SCM_RIGHTS` works end-to-end; inline base64 fallback is implemented and tested |
-| Failure injection | Partial | `tests/failure/test_failure_injection.py`: timeout, OOM, worker crash + recovery, disconnect cleanup, duplicate event/completion, event-before-sleep. Fake-worker malformed/delayed cases remain |
+| Failure injection | Done | Real-worker timeout/OOM/crash/disconnect plus deterministic fake-worker delayed, duplicate, and malformed-message cases |
 | `python.vm` timeout and cancellation enforcement | Partial | parent-side hard cancel verified; child-side sandbox limits incomplete |
 | Host engine ABC, scripted engine, parser, grammar, session controller | Partial | scripted session loop, injection policy, context/event budgets, `ResultTooLarge`, parser-failure recovery, and forced wake are covered by `tests/scenario/test_session_loop.py`; HF engine still unverified |
 | HF engine and GPU path | Partial | Qwen3.5-0.8B loads via `Qwen3_5ForConditionalGeneration`; 23.8 tok/s decode, 1691.8 MiB peak VRAM. `HFDecoder` runs inside `SessionController`; per-turn prefill (no cross-turn KV reuse). 2B, vLLM, and Outlines unverified |
@@ -90,9 +90,9 @@ not merely "a file exists".
 
 **Immediate next work (in order).**
 
-1. Add deterministic fake-worker cases for delayed, duplicate, and malformed messages.
-2. Optimize `HFDecoder`: append injected text to the live KV cache instead of re-prefilling each turn.
-3. Finish P0-08 where the environment allows: Qwen3.5-2B load, vLLM 0.33, Outlines 0.1.14.
+1. Optimize `HFDecoder`: append injected text to the live KV cache instead of re-prefilling each turn.
+2. Finish P0-08 where the environment allows: Qwen3.5-2B load, vLLM 0.33, Outlines 0.1.14.
+3. Wire trace token/energy metrics into the HF session path.
 
 **Completed in this pass (2026-11-03).**
 
@@ -107,6 +107,7 @@ not merely "a file exists".
 - All remaining `vector.engine` ops write mapped outputs through one `_finalize` path; 16 MiB bounded-slice and mapped-softmax acceptance tests added.
 - P0-08 baseline for Qwen3.5-0.8B on RTX 3080: Transformers 5.22.1, Python 3.14, `Qwen3_5ForConditionalGeneration`, 23.8 tok/s decode, 1691.8 MiB peak VRAM. Command: `python scripts/bench_hf.py`. Fixed `AutoModelForCausalLM` → `AutoModelForImageTextToText` and the decode attention mask; this raised decode from 6.1 to 23.8 tok/s.
 - `HFDecoder` adapter wires the reference engine into `SessionController`; CLI `run --engine hf` now uses it. Opt-in test proves prefill/decode inside the session loop.
+- Deterministic fake-worker suite: delayed result, duplicate terminal delivery, error-then-late-result, invalid JSON, unknown type, malformed progress, and non-object results. Hardened worker-message handling against malformed payloads.
 
 **P1 exit gate — still open.**
 
@@ -1524,7 +1525,7 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [x] P2-08 Batching coalescer + batch API (M)
 - [~] P2-09 Progress events, throttling, observe-only injection, bounded event injection (S)
 - [~] P2-10 Demos 3, 4 (scripted), 6, 9, 10 (L)
-- [~] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate, deterministic fake-worker cases (M) — real-worker cases done; fake-worker delayed/malformed cases remain
+- [x] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate, deterministic fake-worker cases (M)
 - [ ] P2-12 Sandbox profiles: nsjail and Docker templates, public-mode guard, profile tests (M)
 
 **Exit gate:** cancellation and timeout tests pass under race injection; a 16 MiB matmul completes with `copy_count == 0` on the data path; 1,000 batched adds complete in one control round-trip; nsjail/Docker profile tests pass; no orphan workers or shm after tests.
@@ -1810,7 +1811,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (All current suites pass: 112 tests, 4 skipped in 70 s; two opt-in GPU tests skip unless `LMPU_RUN_GPU=1`.)
+- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (All current suites pass: 119 tests, 4 skipped in 68 s; two opt-in GPU tests skip unless `LMPU_RUN_GPU=1`.)
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.
@@ -1970,7 +1971,7 @@ These restate and tighten §0.2. They are not new promises.
 3. Close P1 exit gate: contract suite, property tests, trace/replay tests **(done)**; demo 1/2 assertion mode remains.
 4. Complete the scripted session loop: injection, context budget, `ResultTooLarge`, parser failure, forced wake. **Done.**
 5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`. **Done for matmul.**
-6. Add the failure-injection suite. **Done for real workers; fake-worker cases remain.**
+6. Add the failure-injection suite. **Done: real and fake-worker cases.**
 7. Verify P0-08 on the reference GPU. **0.8B done; 2B/vLLM/Outlines remain.**
 8. Wire `HFEngine` into the session loop. **Done via `HFDecoder`; cross-turn KV reuse remains.**
 6. Verify P0-08 on the reference GPU and start P3.
