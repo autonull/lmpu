@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from lmpu.doctor import run_doctor
 from lmpu.kernel.runtime import Runtime
 from lmpu.observability.dashboard import start_dashboard_server
-from lmpu.doctor import run_doctor
 
 app = typer.Typer(name="lmpu", help="Language Model Processing Unit CLI")
 console = Console()
@@ -26,19 +23,19 @@ def doctor(
 ):
     """Run environment diagnostics."""
     results = run_doctor(verbose=verbose)
-    
+
     table = Table(title="LMPU Doctor Results")
     table.add_column("Check", style="cyan")
     table.add_column("Status", style="green")
     table.add_column("Details", style="yellow")
-    
+
     for check, result in results.items():
         status = "✓ PASS" if result.get("ok", False) else "✗ FAIL"
         style = "green" if result.get("ok", False) else "red"
         table.add_row(check, f"[{style}]{status}[/{style}]", result.get("details", ""))
-    
+
     console.print(table)
-    
+
     if not all(r.get("ok", False) for r in results.values()):
         raise typer.Exit(1)
 
@@ -52,28 +49,29 @@ def run(
     trace: bool = typer.Option(True, "--trace/--no-trace", help="Enable tracing"),
 ):
     """Run a session with the given prompt."""
-    from lmpu.host.hf import HFEngine
-    from lmpu.host.session import SessionController, SessionConfig
-    from lmpu.host.grammar import create_decoder
-    
+    from lmpu.host.hf import HFDecoder, HFEngine
+    from lmpu.host.scripted import ScriptedDecoder, free_segment
+    from lmpu.host.session import SessionConfig, SessionController
+
     async def _run():
         # Start runtime
         runtime = Runtime(socket_path=socket)
         await runtime.start()
-        
+
+        controller = None
         try:
-            # Create engine
+            # Create engine and decoder
             if engine == "hf":
                 hf_engine = HFEngine(model_name=model)
+                decoder = HFDecoder(hf_engine)
             elif engine == "scripted":
                 from lmpu.host.engine import ScriptedEngine
-                hf_engine = ScriptedEngine([{"type": "free", "text": prompt}])
+
+                hf_engine = ScriptedEngine([])
+                decoder = ScriptedDecoder([free_segment(prompt)])
             else:
                 raise ValueError(f"Unknown engine: {engine}")
-            
-            # Create decoder
-            decoder = create_decoder("fallback", hf_engine._model, hf_engine._tokenizer)
-            
+
             # Create session controller
             config = SessionConfig()
             controller = SessionController(
@@ -83,21 +81,23 @@ def run(
                 decoder=decoder,
                 config=config,
             )
-            
+
             # Initialize and run
             await controller.initialize(prompt)
-            
+
             # Run turns until completion
             for _ in range(10):  # Max 10 turns for CLI
                 should_continue = await controller.run_turn()
                 if not should_continue:
                     break
-            
+
             console.print("[green]Session completed[/green]")
-            
+
         finally:
+            if controller is not None:
+                await controller.close()
             await runtime.stop()
-    
+
     asyncio.run(_run())
 
 
@@ -109,7 +109,7 @@ def demo(
 ):
     """Run a demo."""
     from lmpu.demos import run_demo
-    
+
     asyncio.run(run_demo(name, socket, gpu))
 
 
@@ -121,16 +121,16 @@ def mission_control(
 ):
     """Start Mission Control dashboard."""
     console.print(f"[cyan]Starting Mission Control on {bind}:{port}[/cyan]")
-    
+
     async def _run():
         runtime = Runtime(socket_path=socket)
         await runtime.start()
-        
+
         try:
             await start_dashboard_server(runtime, bind, port)
         finally:
             await runtime.stop()
-    
+
     asyncio.run(_run())
 
 
@@ -142,7 +142,7 @@ def bench(
 ):
     """Run benchmarks."""
     from lmpu.bench import run_benchmark
-    
+
     asyncio.run(run_benchmark(workload, trials, output))
 
 
@@ -153,9 +153,9 @@ def trace(
 ):
     """View trace."""
     from lmpu.observability.trace import TraceViewer
-    
+
     viewer = TraceViewer(trace_dir)
-    
+
     if trace_id == "latest":
         traces = viewer.list_traces()
         if not traces:
@@ -167,10 +167,10 @@ def trace(
         if not trace_path.exists():
             console.print(f"[red]Trace not found: {trace_path}[/red]")
             raise typer.Exit(1)
-    
+
     records = viewer.load_trace(trace_path)
     stats = viewer.compute_stats(records)
-    
+
     console.print(f"[cyan]Trace: {trace_path.name}[/cyan]")
     console.print(f"Records: {stats.get('total_records', 0)}")
     console.print(f"Duration: {stats.get('duration_mono', 0):.2f}s")
@@ -182,11 +182,13 @@ def trace(
 @app.command()
 def plugin(
     name: str = typer.Argument(..., help="Plugin name"),
-    template: str = typer.Option("basic", "--template", "-t", help="Template: basic, python, vector"),
+    template: str = typer.Option(
+        "basic", "--template", "-t", help="Template: basic, python, vector"
+    ),
 ):
     """Create a new processor plugin."""
     from lmpu.plugin import create_plugin
-    
+
     create_plugin(name, template)
     console.print(f"[green]Created plugin: {name}[/green]")
 
@@ -195,6 +197,7 @@ def plugin(
 def version():
     """Show version."""
     from lmpu import __version__
+
     console.print(f"LMPU {__version__}")
 
 

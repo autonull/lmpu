@@ -7,6 +7,7 @@ from typing import Any
 import torch
 
 from .engine import HostEngine, HostState, HostStats, SleepLevel
+from .grammar import ConstrainedDecoder
 
 
 class HFEngine(HostEngine):
@@ -248,3 +249,37 @@ class HFEngine(HostEngine):
             del self._tokenizer
             self._tokenizer = None
         torch.cuda.empty_cache()
+
+
+class HFDecoder(ConstrainedDecoder):
+    """Session decoder adapter for the reference HF engine.
+
+    Each call regenerates from the supplied full prompt, so injected events are
+    always visible to the model. KV reuse is within one generation call.
+    """
+
+    def __init__(self, engine: HFEngine, max_tokens: int = 1024):
+        self.engine = engine
+        self.max_tokens = max_tokens
+
+    async def decode_free(
+        self,
+        prompt: str,
+        max_tokens: int,
+        stop_sequence: str,
+    ) -> str:
+        state = await self.engine.prefill(prompt)
+        return await self.engine.decode(
+            state,
+            max_tokens=min(max_tokens, self.max_tokens),
+            stop_sequences=[stop_sequence] if stop_sequence else [],
+        )
+
+    async def decode_constrained(
+        self,
+        prompt: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        stop_sequence: str,
+    ) -> str:
+        return await self.decode_free(prompt, max_tokens, stop_sequence)

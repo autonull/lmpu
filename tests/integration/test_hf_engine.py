@@ -6,7 +6,9 @@ import os
 
 import pytest
 
-from lmpu.host.hf import HFEngine
+from lmpu.host.hf import HFDecoder, HFEngine
+from lmpu.host.session import SessionConfig, SessionController
+from lmpu.kernel.runtime import Runtime
 
 pytestmark = [
     pytest.mark.gpu,
@@ -31,3 +33,31 @@ async def test_qwen3_5_0_8b_prefill_decode_baseline() -> None:
         assert text is not None
     finally:
         await engine.close()
+
+
+async def test_hf_engine_runs_inside_session_loop(tmp_path) -> None:
+    runtime = Runtime(
+        socket_path=str(tmp_path / "run.sock"),
+        shm_dir=str(tmp_path / "shm"),
+        config={"trace_dir": str(tmp_path / "traces"), "reaper_interval_ms": 10},
+    )
+    await runtime.start()
+    engine = HFEngine(model_name="Qwen/Qwen3.5-0.8B", device="cuda", dtype="bfloat16")
+    controller = SessionController(
+        session_id="gpu_session",
+        runtime=runtime,
+        engine=engine,
+        decoder=HFDecoder(engine, max_tokens=8),
+        config=SessionConfig(max_context_tokens=4096),
+    )
+    try:
+        await controller.initialize("Write a list of numbers: 1, 2, 3,")
+        assert engine.stats_.total_prefill_tokens > 0
+
+        await controller.run_turn()
+
+        assert engine.stats_.total_generated_tokens > 0
+        assert controller.generated_buffer
+    finally:
+        await controller.close()
+        await runtime.stop()

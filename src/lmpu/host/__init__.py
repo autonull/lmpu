@@ -1,12 +1,24 @@
 """LMPU Host - Host integration layer."""
 
 from .engine import HostEngine, HostState, HostStats, SleepLevel
-from .hf import HFEngine
-from .session import SessionController, SessionConfig, ControllerState, SleepAuthority, InjectionPolicy
-from .parser import SentinelScanner, ControlBlockParser, IncrementalScanner
-from .grammar import ConstrainedDecoder, OutlinesDecoder, LMFormatEnforcerDecoder, FallbackDecoder, create_decoder
-from .scripted import ScriptedDecoder
+from .grammar import (
+    ConstrainedDecoder,
+    FallbackDecoder,
+    LMFormatEnforcerDecoder,
+    OutlinesDecoder,
+    create_decoder,
+)
+from .hf import HFDecoder, HFEngine
 from .metrics import HostMetrics, MetricsCollector, get_metrics_collector
+from .parser import ControlBlockParser, IncrementalScanner, SentinelScanner
+from .scripted import ScriptedDecoder
+from .session import (
+    ControllerState,
+    InjectionPolicy,
+    SessionConfig,
+    SessionController,
+    SleepAuthority,
+)
 
 __all__ = [
     "HostEngine",
@@ -14,6 +26,7 @@ __all__ = [
     "HostStats",
     "SleepLevel",
     "HFEngine",
+    "HFDecoder",
     "SessionController",
     "SessionConfig",
     "ControllerState",
