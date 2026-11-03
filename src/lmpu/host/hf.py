@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
-from typing import Any, Optional
+from typing import Any
 
-import numpy as np
 import torch
 
 from .engine import HostEngine, HostState, HostStats, SleepLevel
@@ -14,7 +11,7 @@ from .engine import HostEngine, HostState, HostStats, SleepLevel
 
 class HFEngine(HostEngine):
     """Hugging Face reference engine with manual decode loop."""
-    
+
     def __init__(
         self,
         model_name: str = "Qwen/Qwen3.5-0.8B",
@@ -28,7 +25,7 @@ class HFEngine(HostEngine):
         self.dtype = getattr(torch, dtype) if isinstance(dtype, str) else dtype
         self.trust_remote_code = trust_remote_code
         self.max_context = max_context
-        
+
         self._model = None
         self._tokenizer = None
         self._device_obj = torch.device(device)
@@ -39,36 +36,35 @@ class HFEngine(HostEngine):
         """Lazy initialization of model and tokenizer."""
         if self._initialized:
             return
-        
+
         # Import here to avoid dependency if not used
-        from transformers import AutoTokenizer, AutoModelForCausalLM
-        
+        from transformers import AutoModelForImageTextToText, AutoTokenizer
+
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
             trust_remote_code=self.trust_remote_code,
         )
-        
-        self._model = AutoModelForCausalLM.from_pretrained(
+
+        # Qwen3.5 is multimodal; AutoModelForCausalLM maps to the wrong class.
+        self._model = AutoModelForImageTextToText.from_pretrained(
             self.model_name,
-            torch_dtype=self.dtype,
-            device_map=self.device if self.device != "cuda" else None,
+            dtype=self.dtype,
             trust_remote_code=self.trust_remote_code,
         )
-        
-        if self.device == "cuda":
-            self._model = self._model.to(self._device_obj)
-        
+
+        self._model = self._model.to(self._device_obj)
+
         self._model.eval()
         self._initialized = True
 
     async def prefill(self, prompt: str) -> HostState:
         await self._initialize()
-        
+
         # Tokenize
         inputs = self._tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
         input_ids = inputs["input_ids"].to(self._device_obj)
         attention_mask = inputs["attention_mask"].to(self._device_obj)
-        
+
         # Prefill forward pass
         with torch.inference_mode():
             outputs = self._model(
@@ -77,11 +73,11 @@ class HFEngine(HostEngine):
                 use_cache=True,
                 return_dict=True,
             )
-        
+
         past_key_values = outputs.past_key_values
         self.stats_.total_prefill_tokens = input_ids.shape[1]
         self.stats_.total_forward_passes = 1
-        
+
         return HostState(
             tokens=input_ids[0].tolist(),
             attention_mask=attention_mask[0],
@@ -99,39 +95,36 @@ class HFEngine(HostEngine):
     ) -> str:
         if state.parked:
             return ""
-        
+
         await self._initialize()
-        
+
         generated_text = ""
-        tokens_generated = 0
-        
-        # Prepare input for first decode step
-        if state.generated_tokens == 0:
-            # First decode after prefill - use last token
-            input_ids = torch.tensor(
-                [[state.tokens[-1]]],
-                device=self._device_obj,
-                dtype=torch.long,
-            )
+
+        # First decode after prefill: attend to the last prompt token using the
+        # full cached attention mask (past + current), not a mask of length 1.
+        input_ids = torch.tensor(
+            [[state.tokens[-1]]],
+            device=self._device_obj,
+            dtype=torch.long,
+        )
+        if state.attention_mask is not None:
+            attention_mask = state.attention_mask.to(self._device_obj).unsqueeze(0)
         else:
-            input_ids = torch.tensor(
-                [[state.tokens[-1]]],
+            attention_mask = torch.ones(
+                (1, len(state.tokens)),
                 device=self._device_obj,
                 dtype=torch.long,
             )
-        
-        # Attention mask for new token
-        attention_mask = torch.ones_like(input_ids)
-        
+
         stop_token_ids = set()
         for seq in stop_sequences:
             stop_ids = self._tokenizer.encode(seq, add_special_tokens=False)
             stop_token_ids.update(stop_ids)
-        
+
         # Also stop on EOS
         if self._tokenizer.eos_token_id is not None:
             stop_token_ids.add(self._tokenizer.eos_token_id)
-        
+
         for _ in range(max_tokens):
             with torch.inference_mode():
                 outputs = self._model(
@@ -141,10 +134,10 @@ class HFEngine(HostEngine):
                     use_cache=True,
                     return_dict=True,
                 )
-            
+
             logits = outputs.logits[:, -1, :]
             next_token_id = torch.argmax(logits, dim=-1).item()
-            
+
             # Update state
             state.tokens.append(next_token_id)
             state.past_key_values = outputs.past_key_values
@@ -152,37 +145,41 @@ class HFEngine(HostEngine):
             state.forward_passes += 1
             self.stats_.total_forward_passes += 1
             self.stats_.total_generated_tokens += 1
-            
+
             # Check stop conditions
             if next_token_id in stop_token_ids:
                 break
-            
+
             # Decode new token
             token_text = self._tokenizer.decode([next_token_id], skip_special_tokens=True)
             generated_text += token_text
-            
+
             # Check stop sequences in generated text
             for seq in stop_sequences:
                 if seq in generated_text:
                     # Return up to the stop sequence
                     idx = generated_text.index(seq)
                     return generated_text[:idx]
-            
+
             # Prepare next input
             input_ids = torch.tensor(
                 [[next_token_id]],
                 device=self._device_obj,
                 dtype=torch.long,
             )
-            attention_mask = torch.cat([
-                attention_mask,
-                torch.ones(1, 1, device=self._device_obj, dtype=torch.long),
-            ], dim=1)
-            
+            attention_mask = torch.cat(
+                [
+                    attention_mask,
+                    torch.ones(1, 1, device=self._device_obj, dtype=torch.long),
+                ],
+                dim=1,
+            )
+            state.attention_mask = attention_mask[0]
+
             # Context length check
             if len(state.tokens) >= self.max_context:
                 break
-        
+
         return generated_text
 
     async def park(self, state: HostState, level: str) -> None:
@@ -208,39 +205,35 @@ class HFEngine(HostEngine):
         """Resume the host engine."""
         if not state.parked:
             return
-        
+
         if state.sleep_level == SleepLevel.S2 and state.kv_cache_cpu is not None:
             # Restore KV cache from CPU
             state.past_key_values = self._restore_kv_cache(state.kv_cache_cpu)
             state.kv_cache_cpu = None
-        
+
         state.parked = False
         state.sleep_level = None
 
     def _offload_kv_cache(self, past_key_values) -> Any:
         """Offload KV cache to CPU memory."""
         # For DynamicCache or tuple format
-        if hasattr(past_key_values, 'to_legacy_cache'):
+        if hasattr(past_key_values, "to_legacy_cache"):
             # New DynamicCache format
             legacy = past_key_values.to_legacy_cache()
-            return tuple(
-                (k.cpu(), v.cpu()) for k, v in legacy
-            )
+            return tuple((k.cpu(), v.cpu()) for k, v in legacy)
         elif isinstance(past_key_values, tuple):
-            return tuple(
-                (k.cpu(), v.cpu()) for k, v in past_key_values
-            )
+            return tuple((k.cpu(), v.cpu()) for k, v in past_key_values)
         return past_key_values
 
     def _restore_kv_cache(self, cpu_kv_cache) -> Any:
         """Restore KV cache from CPU to GPU."""
         if isinstance(cpu_kv_cache, tuple):
             restored = tuple(
-                (k.to(self._device_obj), v.to(self._device_obj))
-                for k, v in cpu_kv_cache
+                (k.to(self._device_obj), v.to(self._device_obj)) for k, v in cpu_kv_cache
             )
             # Convert back to DynamicCache if needed
             from transformers.cache_utils import DynamicCache
+
             return DynamicCache.from_legacy_cache(restored)
         return cpu_kv_cache
 

@@ -84,14 +84,14 @@ not merely "a file exists".
 | Failure injection | Partial | `tests/failure/test_failure_injection.py`: timeout, OOM, worker crash + recovery, disconnect cleanup, duplicate event/completion, event-before-sleep. Fake-worker malformed/delayed cases remain |
 | `python.vm` timeout and cancellation enforcement | Partial | parent-side hard cancel verified; child-side sandbox limits incomplete |
 | Host engine ABC, scripted engine, parser, grammar, session controller | Partial | scripted session loop, injection policy, context/event budgets, `ResultTooLarge`, parser-failure recovery, and forced wake are covered by `tests/scenario/test_session_loop.py`; HF engine still unverified |
-| HF engine and GPU path | Not verified | code exists; model/toolchain gate P0-08 is open |
+| HF engine and GPU path | Partial | Qwen3.5-0.8B loads via `Qwen3_5ForConditionalGeneration`; 23.8 tok/s decode, 1691.8 MiB peak VRAM on RTX 3080. 2B, vLLM, and Outlines are unverified |
 | Trace sink and metrics | Partial | JSONL sink, redaction, and replay tests exist (`tests/unit/test_trace.py`); host token/energy metrics missing |
 | Benchmarks, Mission Control, RFC/SDK/docs | Not started | directories exist only |
 
 **Immediate next work (in order).**
 
-1. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
-2. Extend fd mapping to the remaining `vector.engine` ops and the 16 MiB acceptance case.
+1. Finish P0-08: verify Qwen3.5-2B load, vLLM 0.33, and Outlines 0.1.14; record baselines.
+2. Wire `HFEngine` into the session/constrained-decoder loop (it currently exposes `decode(state, ...)`, not `decode_free`).
 3. Add deterministic fake-worker cases for delayed, duplicate, and malformed messages.
 
 **Completed in this pass (2026-11-03).**
@@ -104,6 +104,8 @@ not merely "a file exists".
 - Scenario suite `tests/scenario/test_session_loop.py` covers nine model-free controller cases.
 - `SCM_RIGHTS` fd passing over a per-worker socketpair, worker-side mmap, output-buffer checksum refresh, inline base64 fallback, and `copy_count`/`mapped_bytes` evidence in `JobCompleted`. End-to-end matmul test: `tests/integration/test_zero_copy_matmul.py`.
 - Failure-injection suite: real-worker timeout, OOM, crash/recovery, disconnect cleanup; event-id dedupe and duplicate-completion guards; event-before-sleep returns `already_satisfied`.
+- All remaining `vector.engine` ops write mapped outputs through one `_finalize` path; 16 MiB bounded-slice and mapped-softmax acceptance tests added.
+- P0-08 baseline for Qwen3.5-0.8B on RTX 3080: Transformers 5.22.1, Python 3.14, `Qwen3_5ForConditionalGeneration`, 23.8 tok/s decode, 1691.8 MiB peak VRAM. Command: `python scripts/bench_hf.py`. Fixed `AutoModelForCausalLM` → `AutoModelForImageTextToText` and the decode attention mask; this raised decode from 6.1 to 23.8 tok/s.
 
 **P1 exit gate — still open.**
 
@@ -115,8 +117,8 @@ not merely "a file exists".
 **Known red items.**
 
 - `make check` is not green: `mypy` still reports pre-existing annotation errors; `ruff` is runnable but not yet clean.
-- P0-08 (toolchain/model proof) is blocked on a model download and a Transformers 5.x environment.
-- The HF/vLLM/GPU paths have not been executed in this environment.
+- P0-08 remaining: Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified; 0.8B is verified.
+- The HF engine is not yet wired into the session constrained-decoder loop.
 
 ---
 
@@ -1486,7 +1488,7 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [x] P0-05 Implement `lmpu doctor` checks: Python, shm, UDS, GPU, model cache, sandbox (S)
 - [ ] P0-06 Record accepted ADRs for D-01/D-03/D-06/D-12; no decision freeze needed (S)
 - [~] P0-07 Define trace schema and example trace fixture (S)
-- [!] P0-08 Create a Python 3.12/3.13 environment if 3.14 wheels are missing; upgrade Transformers 5.x, vLLM 0.33, Outlines 0.1.14; verify Qwen3.5-0.8B/2B load, tokenizer, VRAM, and tokens/sec; record the baseline (M)
+- [~] P0-08 Create a Python 3.12/3.13 environment if 3.14 wheels are missing; upgrade Transformers 5.x, vLLM 0.33, Outlines 0.1.14; verify Qwen3.5-0.8B/2B load, tokenizer, VRAM, and tokens/sec; record the baseline (M) — 0.8B verified on Python 3.14/Transformers 5.22.1; 2B, vLLM, Outlines remain
 
 **Exit gate:** `make check` is green; the protocol RFC skeleton is reviewed; naming is frozen; no runtime behavior is claimed yet.
 
@@ -1807,7 +1809,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (All current suites pass: 110 tests, 2 skipped; failure suite is 28 s.)
+- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (All current suites pass: 112 tests, 3 skipped; the opt-in GPU test is skipped unless `LMPU_RUN_GPU=1`.)
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.
@@ -1968,7 +1970,7 @@ These restate and tighten §0.2. They are not new promises.
 4. Complete the scripted session loop: injection, context budget, `ResultTooLarge`, parser failure, forced wake. **Done.**
 5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`. **Done for matmul.**
 6. Add the failure-injection suite. **Done for real workers; fake-worker cases remain.**
-7. Verify P0-08 on the reference GPU. **Next.**
+7. Verify P0-08 on the reference GPU. **0.8B done; 2B/vLLM/Outlines remain.**
 6. Verify P0-08 on the reference GPU and start P3.
 7. Keep P5.5 benchmarks behind a working P3 sleep/wake proof.
 
