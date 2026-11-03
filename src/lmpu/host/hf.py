@@ -84,6 +84,7 @@ class HFEngine(HostEngine):
                 attention_mask=attention_mask,
                 past_key_values=state.past_key_values,
                 use_cache=True,
+                logits_to_keep=1,
                 return_dict=True,
             )
         state.past_key_values = outputs.past_key_values
