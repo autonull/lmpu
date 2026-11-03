@@ -109,11 +109,7 @@ class SessionConfig:
     def quota_config(self) -> dict[str, Any]:
         """Return only the fields accepted by ``QuotaConfig``."""
         fields = set(QuotaConfig.__dataclass_fields__)
-        return {
-            key: value
-            for key, value in self.__dict__.items()
-            if key in fields
-        }
+        return {key: value for key, value in self.__dict__.items() if key in fields}
 
 
 class SessionController:
@@ -189,12 +185,9 @@ class SessionController:
             parts.append("Available processors:")
             for processor in caps_result.processors:
                 op_names = [
-                    op.get("name", "") if isinstance(op, dict) else str(op)
-                    for op in processor.ops
+                    op.get("name", "") if isinstance(op, dict) else str(op) for op in processor.ops
                 ]
-                parts.append(
-                    f"  - {processor.name} v{processor.version}: {', '.join(op_names)}"
-                )
+                parts.append(f"  - {processor.name} v{processor.version}: {', '.join(op_names)}")
 
         parts.extend(
             [
@@ -306,6 +299,7 @@ class SessionController:
         """Submit a job to the runtime."""
         from lmpu.protocol.messages import SubmitMessage
 
+        assert isinstance(message, SubmitMessage)
         msg: SubmitMessage = message
         result = await self.runtime._submit(
             {
@@ -326,6 +320,7 @@ class SessionController:
         """Register a sleep condition and park the host."""
         from lmpu.protocol.messages import SleepMessage
 
+        assert isinstance(message, SleepMessage)
         msg: SleepMessage = message
         condition = msg.until
         level = msg.level or self.config.sleep_level
@@ -356,9 +351,8 @@ class SessionController:
             return
 
         now = time.monotonic()
-        self._sleep_deadline_monotonic = (
-            now + (deadline_ms / 1000) if deadline_ms else None
-        )
+        self._sleep_deadline_monotonic = now + (deadline_ms / 1000) if deadline_ms else None
+        assert self.host_state is not None
         await self.engine.park(self.host_state, level)
         self.state = ControllerState.PARKED
         self._wake_event = asyncio.Event()
@@ -375,6 +369,7 @@ class SessionController:
         """Read a bounded result view and queue it for injection."""
         from lmpu.protocol.messages import ReadResultMessage
 
+        assert isinstance(message, ReadResultMessage)
         msg: ReadResultMessage = message
         result = await self.runtime._read(
             {
@@ -390,6 +385,7 @@ class SessionController:
         """Write interactive input through the runtime."""
         from lmpu.protocol.messages import WriteInputMessage
 
+        assert isinstance(message, WriteInputMessage)
         msg: WriteInputMessage = message
         await self.runtime._write(
             {
@@ -404,6 +400,7 @@ class SessionController:
         """Cancel a job."""
         from lmpu.protocol.messages import CancelMessage
 
+        assert isinstance(message, CancelMessage)
         msg: CancelMessage = message
         await self.runtime._cancel(
             {"job_id": msg.job_id, "reason": msg.reason},
@@ -414,6 +411,7 @@ class SessionController:
         """Poll a job and queue the status for injection."""
         from lmpu.protocol.messages import PollMessage
 
+        assert isinstance(message, PollMessage)
         msg: PollMessage = message
         result = await self.runtime._poll({"job_id": msg.job_id}, self.session_id)
         self._queue_summary_event(EventKind.PROGRESS, msg.job_id, result)
@@ -422,6 +420,7 @@ class SessionController:
         """Wait for a job and queue the result for injection."""
         from lmpu.protocol.messages import WaitMessage
 
+        assert isinstance(message, WaitMessage)
         msg: WaitMessage = message
         result = await self.runtime._wait(
             {"job_id": msg.job_id, "timeout_ms": msg.timeout_ms},
@@ -433,10 +432,9 @@ class SessionController:
         """Queue a capability summary for injection."""
         from lmpu.protocol.messages import QueryCapabilitiesMessage
 
+        assert isinstance(message, QueryCapabilitiesMessage)
         msg: QueryCapabilitiesMessage = message
-        result = await self.runtime._capabilities(
-            {"op": msg.op, "processor": msg.processor}
-        )
+        result = await self.runtime._capabilities({"op": msg.op, "processor": msg.processor})
         self._queue_summary_event(EventKind.PROGRESS, None, result)
 
     async def _handle_parked(self) -> bool:
@@ -459,6 +457,7 @@ class SessionController:
         statuses = dict(self._wake_job_statuses)
 
         self.state = ControllerState.WAKING
+        assert self.host_state is not None
         await self.engine.resume(self.host_state)
         await self._inject_wake_event(
             {
@@ -492,10 +491,7 @@ class SessionController:
         if self.host_state is None:
             return False
         buffered_tokens = len(self.generated_buffer) // 4
-        return (
-            len(self.host_state.tokens) + buffered_tokens
-            >= self.config.max_context_tokens
-        )
+        return len(self.host_state.tokens) + buffered_tokens >= self.config.max_context_tokens
 
     def _handle_context_full(self) -> None:
         """Report context exhaustion instead of silently truncating."""
@@ -557,10 +553,7 @@ class SessionController:
                 self._trace_inject(event)
 
             token_estimate = max(1, len(rendered) // 4)
-            if (
-                self._injected_this_turn + token_estimate
-                > self.config.max_injected_tokens_per_turn
-            ):
+            if self._injected_this_turn + token_estimate > self.config.max_injected_tokens_per_turn:
                 break
 
             self._pending_injections.pop(0)
@@ -589,9 +582,7 @@ class SessionController:
                 "original_event": event.event.value,
                 "bytes": encoded_size,
                 "max_bytes": self.config.max_injected_bytes_per_event,
-                "suggested_slice": [
-                    [0, self.config.max_injected_bytes_per_event, 1]
-                ],
+                "suggested_slice": [[0, self.config.max_injected_bytes_per_event, 1]],
             },
         )
 
@@ -606,11 +597,7 @@ class SessionController:
         job_id: str | None,
         payload: Any,
     ) -> None:
-        summary = (
-            payload.model_dump(mode="json")
-            if hasattr(payload, "model_dump")
-            else payload
-        )
+        summary = payload.model_dump(mode="json") if hasattr(payload, "model_dump") else payload
         self.enqueue_event(
             InjectedEvent(
                 version=1,

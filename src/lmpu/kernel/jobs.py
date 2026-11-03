@@ -19,6 +19,7 @@ from ..protocol.messages import (
 
 class TransitionError(Exception):
     """Invalid state transition."""
+
     pass
 
 
@@ -37,7 +38,7 @@ VALID_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.WAITING_EVENT: {JobStatus.RUNNING, JobStatus.CANCEL_REQUESTED, JobStatus.CANCELLED},
     JobStatus.CANCEL_REQUESTED: {JobStatus.CANCELLED, JobStatus.COMPLETED, JobStatus.FAILED},
     JobStatus.COMPLETED: set(),  # Terminal
-    JobStatus.FAILED: set(),     # Terminal
+    JobStatus.FAILED: set(),  # Terminal
     JobStatus.CANCELLED: set(),  # Terminal
 }
 
@@ -61,6 +62,7 @@ def transition(from_status: JobStatus, to_status: JobStatus) -> None:
 @dataclass
 class JobRecord:
     """Complete job record."""
+
     job_id: str
     session_id: str
     processor: str
@@ -82,6 +84,8 @@ class JobRecord:
     request_hash: str | None = None
     result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
+    copy_count: int = 0
+    mapped_bytes: int = 0
     buffer_refs: list[BufferRef] = field(default_factory=list)
     grants: list[str] = field(default_factory=list)  # grant IDs
     progress: float = 0.0
@@ -129,6 +133,7 @@ class JobTable:
     def _compute_request_hash(self, params: dict[str, Any]) -> str:
         import hashlib
         import json
+
         canonical = json.dumps(params, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode()).hexdigest()[:32]
 
@@ -145,20 +150,22 @@ class JobTable:
         job_id: str | None = None,
     ) -> tuple[JobRecord, bool]:
         """Create a new job or return existing idempotent job.
-        
+
         Returns:
             Tuple of (job_record, is_new)
         """
         config = config or {}
-        request_hash = self._compute_request_hash({
-            "processor": processor,
-            "op": op,
-            "inputs": inputs,
-            "outputs": outputs,
-            "program": program,
-            "batch": batch,
-            "config": config,
-        })
+        request_hash = self._compute_request_hash(
+            {
+                "processor": processor,
+                "op": op,
+                "inputs": inputs,
+                "outputs": outputs,
+                "program": program,
+                "batch": batch,
+                "config": config,
+            }
+        )
 
         # Check idempotency
         if job_id and job_id in self._jobs:

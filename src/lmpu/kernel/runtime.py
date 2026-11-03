@@ -22,6 +22,7 @@ from ..kernel.trace import TraceConfig, init_trace_sink
 from ..kernel.worker_pool import WorkerPool
 from ..memory.buffers import BufferManager
 from ..memory.grants import GrantManager
+from ..memory.shm import SHMBackend
 from ..processors.base import Processor
 from ..protocol.errors import (
     BufferError,
@@ -31,6 +32,7 @@ from ..protocol.errors import (
     ValidationError,
 )
 from ..protocol.messages import (
+    PROTOCOL_VERSION,
     AckParams,
     AckResult,
     BufferChecksumParams,
@@ -54,7 +56,6 @@ from ..protocol.messages import (
     HealthResult,
     HelloParams,
     HelloResult,
-    PROTOCOL_VERSION,
     JobCancelledData,
     JobsListParams,
     JobStartedData,
@@ -64,9 +65,9 @@ from ..protocol.messages import (
     PollResult,
     ReadParams,
     RPCError,
-    RPCResponse,
-    RPCRequest,
     RPCNotification,
+    RPCRequest,
+    RPCResponse,
     SleepParams,
     SleepResult,
     SubmitParams,
@@ -93,6 +94,7 @@ def _to_jsonable(value: Any) -> Any:
 @dataclass
 class SessionState:
     """Per-session state."""
+
     session_id: str
     config: QuotaConfig
     sleep_registration: dict[str, Any] | None = None
@@ -118,6 +120,7 @@ class Runtime:
         # Core components
         self.grant_manager = GrantManager()
         self.buffer_manager = BufferManager(
+            backend=SHMBackend(self.shm_dir),
             grant_manager=self.grant_manager,
             default_ttl_ms=self.config.get("buffer_ttl_ms", 3600000),
         )
@@ -143,10 +146,13 @@ class Runtime:
             event_log=self.event_log,
         )
         self.worker_pool.set_terminal_callback(self._on_job_terminal)
-        self.trace_sink = init_trace_sink(TraceConfig(
-            trace_dir=self.config.get("trace_dir", "traces"),
-            trace_token_events=self.config.get("trace_token_events", "sampled"),
-        ))
+        self.worker_pool.set_buffer_provider(self._buffer_specs_for_job)
+        self.trace_sink = init_trace_sink(
+            TraceConfig(
+                trace_dir=self.config.get("trace_dir", "traces"),
+                trace_token_events=self.config.get("trace_token_events", "sampled"),
+            )
+        )
 
         # Session management
         self._sessions: dict[str, SessionState] = {}
@@ -185,7 +191,7 @@ class Runtime:
         manifest = processor.manifest
         registration = ProcessorRegistration(
             manifest=manifest,
-            executor=manifest.executor if hasattr(manifest, 'executor') else "process",
+            executor=manifest.executor if hasattr(manifest, "executor") else "process",
             is_builtin=True,
         )
         self.capability_registry.register(registration)
@@ -196,8 +202,59 @@ class Runtime:
 
     def _on_job_terminal(self, job: JobRecord) -> None:
         """Release job-owned resources exactly once."""
+        if job.status == JobStatus.COMPLETED:
+            self._refresh_output_checksums(job)
         self.job_table.release_grants(job.job_id)
+        self.buffer_manager.release_grants(job.job_id)
         self.quota_manager.on_job_complete(job.session_id)
+
+    def _refresh_output_checksums(self, job: JobRecord) -> None:
+        """Recompute cached checksums for buffers written directly by a worker."""
+        for name, spec in job.outputs.items():
+            if not isinstance(spec, dict) or not spec.get("buffer"):
+                continue
+            buffer_id = spec["buffer"]
+            meta = self.buffer_manager._metadata.get(buffer_id)
+            if meta is None:
+                continue
+            meta.checksum = self.buffer_manager.backend.compute_checksum(
+                meta.session_id,
+                buffer_id,
+            )
+
+    def _buffer_specs_for_job(self, job: JobRecord) -> list[dict[str, Any]]:
+        """Resolve declared input/output buffers into fd-passable specs."""
+        specs: list[dict[str, Any]] = []
+
+        def add(name: str, spec: Any, writable: bool) -> None:
+            if not isinstance(spec, dict):
+                return
+            buffer_id = spec.get("buffer")
+            if not buffer_id:
+                return
+            meta = self.buffer_manager._metadata.get(buffer_id)
+            if meta is None:
+                raise BufferError(
+                    f"Buffer not found: {buffer_id}",
+                    code=ErrorCode.BUFFER_NOT_FOUND.value,
+                )
+            specs.append(
+                {
+                    "name": name,
+                    "buffer_id": buffer_id,
+                    "dtype": meta.dtype,
+                    "shape": meta.shape,
+                    "bytes": meta.bytes,
+                    "writable": writable,
+                    "path": self.buffer_manager.get_buffer_path(buffer_id),
+                }
+            )
+
+        for name, spec in job.inputs.items():
+            add(name, spec, writable=False)
+        for name, spec in job.outputs.items():
+            add(name, spec, writable=True)
+        return specs
 
     async def start(self) -> None:
         """Start the runtime."""
@@ -497,7 +554,7 @@ class Runtime:
             )
             for m in self.capability_registry.list_processors()
         ]
-        
+
         matches = None
         recommended = None
         if caps_params.op:
@@ -505,7 +562,7 @@ class Runtime:
             matches = [c.manifest.name for c in candidates]
             if candidates:
                 recommended = candidates[0].manifest.name
-        
+
         return CapabilitiesResult(
             processors=processors,
             matches=matches,
@@ -589,19 +646,22 @@ class Runtime:
         job.queue_position = self.scheduler.get_queue_depth(processor) + 1
 
         # Emit submitted event
-        self.event_log.append(session_id, Event(
-            event_id=str(ulid.new()),
-            seq=0,
-            session=session_id,
-            job_id=job.job_id,
-            type=EventKind.JOB_SUBMITTED,
-            ts_monotonic=get_clock().monotonic(),
-            data=JobSubmittedData(
+        self.event_log.append(
+            session_id,
+            Event(
+                event_id=str(ulid.new()),
+                seq=0,
+                session=session_id,
                 job_id=job.job_id,
-                processor=job.processor,
-                queue_position=job.queue_position,
+                type=EventKind.JOB_SUBMITTED,
+                ts_monotonic=get_clock().monotonic(),
+                data=JobSubmittedData(
+                    job_id=job.job_id,
+                    processor=job.processor,
+                    queue_position=job.queue_position,
+                ),
             ),
-        ))
+        )
 
         # Enqueue for scheduling
         await self.scheduler.enqueue(job)
@@ -719,6 +779,7 @@ class Runtime:
 
         # Convert data to numpy array
         import numpy as np
+
         data = np.array(write_params.data)
 
         ref = self.buffer_manager.write_view(
@@ -897,7 +958,9 @@ class Runtime:
                 shape=tuple(import_params.shape),
             )
         else:
-            raise ValidationError("Either data or path required", code=ErrorCode.INVALID_SCHEMA.value)
+            raise ValidationError(
+                "Either data or path required", code=ErrorCode.INVALID_SCHEMA.value
+            )
 
         self.quota_manager.on_buffer_create(session_id, ref.bytes)
         return ref
@@ -909,6 +972,7 @@ class Runtime:
     async def _buffer_checksum(self, params: dict, session_id: str) -> str:
         checksum_params = BufferChecksumParams(**params)
         from ..memory.checksum import ChecksumAlgorithm
+
         return self.buffer_manager.checksum(
             checksum_params.buffer,
             ChecksumAlgorithm(checksum_params.algorithm),

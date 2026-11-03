@@ -381,6 +381,13 @@ class BufferManager:
             raise BufferError(f"Buffer not found: {buffer_id}")
         return meta.to_ref()
 
+    def get_buffer_path(self, buffer_id: str) -> str:
+        """Return the shm path for a known buffer."""
+        meta = self._metadata.get(buffer_id)
+        if not meta:
+            raise BufferError(f"Buffer not found: {buffer_id}")
+        return self.backend.get_buffer_path(meta.session_id, buffer_id)
+
     def checksum(
         self,
         buffer_id: str,

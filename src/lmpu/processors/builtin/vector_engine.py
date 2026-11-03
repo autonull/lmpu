@@ -93,18 +93,22 @@ class VectorEngineProcessor(Processor):
                 os.environ["MKL_NUM_THREADS"] = str(self._blas_threads)
 
     def _get_buffer(self, ctx: JobContext, name: str) -> np.ndarray:
-        """Get buffer as numpy array."""
-        buffer_id = ctx._buffers.get(name)
-        if buffer_id is None:
+        """Return a mapped NumPy array for a logical buffer name."""
+        value = ctx._buffers.get(name)
+        if value is None:
             raise KeyError(f"Buffer {name} not found")
-        # In real implementation, this would map the shared memory
-        # For now, return a placeholder
+        if isinstance(value, np.ndarray):
+            return value
+        if isinstance(value, dict) and isinstance(value.get("data"), np.ndarray):
+            return value["data"]
+        # Inline unit/contract contexts may pass a buffer identifier. Keep the
+        # placeholder path so those callers still run without shm.
         return np.array([])
 
     async def _matmul(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
-        # Get input buffers
         A = self._get_buffer(ctx, "A")
         B = self._get_buffer(ctx, "B")
+        output = ctx._buffers.get("C")
 
         ctx.progress(0.0, "matmul started")
         if A.size == 0 or B.size == 0:
@@ -112,26 +116,48 @@ class VectorEngineProcessor(Processor):
             shape = (64, 64)
             C = np.arange(shape[0] * shape[1], dtype=np.float32).reshape(shape) / 4096.0
         else:
+            if A.ndim != 2 or B.ndim != 2 or A.shape[1] != B.shape[0]:
+                return Result(
+                    success=False,
+                    error_code="shape_mismatch",
+                    error_message=f"matmul shape mismatch: {A.shape} @ {B.shape}",
+                )
             C = A @ B
         ctx.progress(1.0, "matmul complete")
 
+        buffer_refs: list[str] = []
+        if isinstance(output, np.ndarray):
+            if output.shape != C.shape:
+                return Result(
+                    success=False,
+                    error_code="output_shape_mismatch",
+                    error_message=f"output shape {output.shape} != {C.shape}",
+                )
+            np.copyto(output, C, casting="same_kind")
+            result_array = output
+            buffer_refs = ["C"]
+        else:
+            result_array = C
+
         # Compute summary statistics
         summary = {
-            "shape": list(C.shape),
-            "dtype": str(C.dtype),
-            "mean": float(C.mean()),
-            "std": float(C.std()),
-            "min": float(C.min()),
-            "max": float(C.max()),
+            "shape": list(result_array.shape),
+            "dtype": str(result_array.dtype),
+            "mean": float(result_array.mean()),
+            "std": float(result_array.std()),
+            "min": float(result_array.min()),
+            "max": float(result_array.max()),
         }
 
-        checksum = compute_checksum(C.tobytes())
+        checksum = compute_checksum(result_array.tobytes())
 
         return Result(
             success=True,
             data={"summary": summary},
-            buffer_refs=["C"],
+            buffer_refs=buffer_refs,
             checksum=checksum,
+            copy_count=ctx.copy_count,
+            mapped_bytes=ctx.mapped_bytes,
         )
 
     async def _dot(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
@@ -183,7 +209,8 @@ class VectorEngineProcessor(Processor):
             result = np.zeros(64, dtype=np.float32)
         else:
             from scipy.signal import convolve
-            result = convolve(input_arr, kernel, mode='same')
+
+            result = convolve(input_arr, kernel, mode="same")
 
         summary = {
             "shape": list(result.shape),

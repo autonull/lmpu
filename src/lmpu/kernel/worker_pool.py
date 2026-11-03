@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import os
+import socket
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import ulid
@@ -13,6 +17,7 @@ import ulid
 from ..kernel.clock import get_clock
 from ..kernel.events import EventLog
 from ..kernel.jobs import JobRecord, JobStatus, JobTable
+from ..memory.fdpass import FDPassingError, send_fds
 from ..protocol.messages import (
     Event,
     EventKind,
@@ -28,6 +33,7 @@ from ..protocol.messages import (
 @dataclass
 class WorkerInfo:
     """Worker process information."""
+
     worker_id: str
     processor: str
     process: asyncio.subprocess.Process
@@ -37,6 +43,7 @@ class WorkerInfo:
     last_heartbeat: float
     current_job: str | None = None
     crash_count: int = 0
+    fd_socket: socket.socket | None = None
 
 
 class WorkerPool:
@@ -68,10 +75,18 @@ class WorkerPool:
         self._lock = asyncio.Lock()
         self._job_workers: dict[str, str] = {}  # job_id -> worker_id
         self._on_terminal: Callable[[JobRecord], None] | None = None
+        self._buffer_provider: Callable[[JobRecord], list[dict[str, Any]]] | None = None
 
     def set_terminal_callback(self, callback: Callable[[JobRecord], None]) -> None:
         """Register a callback invoked once after a job reaches a terminal state."""
         self._on_terminal = callback
+
+    def set_buffer_provider(
+        self,
+        provider: Callable[[JobRecord], list[dict[str, Any]]],
+    ) -> None:
+        """Register a callable that resolves job buffers to fd-passable specs."""
+        self._buffer_provider = provider
 
     def _after_terminal(self, job: JobRecord) -> None:
         self._job_workers.pop(job.job_id, None)
@@ -104,30 +119,43 @@ class WorkerPool:
         # Build command
         cmd = [
             self.python_executable,
-            "-m", self.worker_module,
-            "--processor", processor,
-            "--worker-id", worker_id,
+            "-m",
+            self.worker_module,
+            "--processor",
+            processor,
+            "--worker-id",
+            worker_id,
         ]
         if plugin_path:
             cmd.extend(["--plugin", plugin_path])
 
+        parent_sock, child_sock = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        cmd.extend(["--fd-fd", str(child_sock.fileno())])
+
         # Start process
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
+                pass_fds=(child_sock.fileno(),),
+            )
+        finally:
+            child_sock.close()
 
         # Wait for ready message
         ready_line = await process.stdout.readline()
         if not ready_line:
+            parent_sock.close()
             raise RuntimeError(f"Worker {worker_id} failed to start")
 
         import orjson
+
         ready_msg = orjson.loads(ready_line)
         if ready_msg.get("type") != "ready":
+            parent_sock.close()
             raise RuntimeError(f"Worker {worker_id} sent invalid ready: {ready_msg}")
 
         worker = WorkerInfo(
@@ -138,6 +166,7 @@ class WorkerPool:
             manifest=manifest,
             started_at=get_clock().monotonic(),
             last_heartbeat=get_clock().monotonic(),
+            fd_socket=parent_sock,
         )
 
         self._workers[worker_id] = worker
@@ -178,6 +207,7 @@ class WorkerPool:
     async def _handle_worker_message(self, worker_id: str, line: bytes) -> None:
         """Handle message from worker."""
         import orjson
+
         try:
             msg = orjson.loads(line)
         except Exception:
@@ -261,23 +291,70 @@ class WorkerPool:
         """Assign a job to a worker and send the execute command."""
         worker.current_job = job.job_id
         self._job_workers[job.job_id] = worker.worker_id
-        await self.send_command(
-            worker.worker_id,
-            {
-                "type": "execute",
-                "session_id": job.session_id,
-                "job": {
-                    "job_id": job.job_id,
-                    "processor": job.processor,
-                    "op": job.op,
-                    "inputs": job.inputs,
-                    "outputs": job.outputs,
-                    "program": job.program,
-                    "batch": job.batch,
-                    "config": job.config,
-                },
+        command = {
+            "type": "execute",
+            "session_id": job.session_id,
+            "job": {
+                "job_id": job.job_id,
+                "processor": job.processor,
+                "op": job.op,
+                "inputs": job.inputs,
+                "outputs": job.outputs,
+                "program": job.program,
+                "batch": job.batch,
+                "config": job.config,
             },
-        )
+        }
+        await self._attach_job_buffers(worker, job, command)
+        await self.send_command(worker.worker_id, command)
+
+    async def _attach_job_buffers(
+        self,
+        worker: WorkerInfo,
+        job: JobRecord,
+        command: dict[str, Any],
+    ) -> None:
+        """Pass buffer fds over SCM_RIGHTS, or fall back to inline copies."""
+        specs = self._buffer_provider(job) if self._buffer_provider else []
+        if not specs:
+            command["buffers"] = []
+            return
+
+        metadata = [
+            {
+                "name": spec["name"],
+                "buffer_id": spec["buffer_id"],
+                "dtype": spec["dtype"],
+                "shape": list(spec["shape"]),
+                "bytes": spec["bytes"],
+                "writable": bool(spec.get("writable", False)),
+            }
+            for spec in specs
+        ]
+        command["buffers"] = metadata
+
+        if worker.fd_socket is not None:
+            fds: list[int] = []
+            try:
+                for spec in specs:
+                    flags = os.O_RDWR if spec.get("writable") else os.O_RDONLY
+                    fds.append(os.open(spec["path"], flags))
+                header = {"job_id": job.job_id, "buffers": metadata}
+                await asyncio.to_thread(send_fds, worker.fd_socket, fds, header)
+                command["buffer_transfer"] = "scm_rights"
+                return
+            except (OSError, FDPassingError):
+                command["buffer_transfer"] = "inline_fallback"
+            finally:
+                for fd in fds:
+                    os.close(fd)
+
+        # Portable fallback: base64 inline copies.
+        command["buffer_transfer"] = "inline_fallback"
+        command["buffers_inline"] = {
+            spec["name"]: base64.b64encode(Path(spec["path"]).read_bytes()).decode("ascii")
+            for spec in specs
+        }
 
     def _complete_job(
         self,
@@ -285,6 +362,8 @@ class WorkerPool:
         result: dict[str, Any],
         checksum: str = "",
         cache_hit: bool = False,
+        copy_count: int = 0,
+        mapped_bytes: int = 0,
     ) -> None:
         """Move a job to COMPLETED and emit exactly one terminal event."""
         if job.is_terminal():
@@ -293,6 +372,8 @@ class WorkerPool:
             self.job_table.transition(job.job_id, JobStatus.RUNNING)
         self.job_table.transition(job.job_id, JobStatus.COMPLETED)
         job.result = result
+        job.copy_count = copy_count
+        job.mapped_bytes = mapped_bytes
         self.event_log.append(
             job.session_id,
             Event(
@@ -308,6 +389,8 @@ class WorkerPool:
                     buffer_refs=job.buffer_refs,
                     checksum=checksum,
                     cache_hit=cache_hit,
+                    copy_count=copy_count,
+                    mapped_bytes=mapped_bytes,
                 ),
             ),
         )
@@ -374,6 +457,8 @@ class WorkerPool:
             msg.get("result") or {},
             checksum=msg.get("checksum", ""),
             cache_hit=msg.get("cache_hit", False),
+            copy_count=int(msg.get("copy_count", 0)),
+            mapped_bytes=int(msg.get("mapped_bytes", 0)),
         )
         self._release_worker(worker_id)
 
@@ -402,6 +487,10 @@ class WorkerPool:
         worker = self._workers.pop(worker_id, None)
         if not worker:
             return
+
+        if worker.fd_socket is not None:
+            worker.fd_socket.close()
+            worker.fd_socket = None
 
         self._available_workers.get(worker.processor, set()).discard(worker_id)
 
@@ -472,6 +561,7 @@ class WorkerPool:
             # Send shutdown command
             if worker.process.stdin:
                 import orjson
+
                 worker.process.stdin.write(orjson.dumps({"type": "shutdown"}) + b"\n")
                 await worker.process.stdin.drain()
 
@@ -489,6 +579,9 @@ class WorkerPool:
                 await worker.process.wait()
 
         self._available_workers.get(worker.processor, set()).discard(worker_id)
+        if worker.fd_socket is not None:
+            worker.fd_socket.close()
+            worker.fd_socket = None
         self._workers.pop(worker_id, None)
 
     async def _quarantine_processor(self, processor: str) -> None:
@@ -514,7 +607,10 @@ class WorkerPool:
                 return worker
 
             # Need to spawn new worker
-            if len([w for w in self._workers.values() if w.processor == processor]) >= self.max_workers_per_processor:
+            if (
+                len([w for w in self._workers.values() if w.processor == processor])
+                >= self.max_workers_per_processor
+            ):
                 # Wait for available worker
                 while True:
                     available = self._available_workers.get(processor, set())
@@ -537,6 +633,7 @@ class WorkerPool:
             raise RuntimeError(f"Worker {worker_id} not available")
 
         import orjson
+
         worker.process.stdin.write(orjson.dumps(command) + b"\n")
         await worker.process.stdin.drain()
 
@@ -567,8 +664,6 @@ class WorkerPool:
     def get_stats(self) -> dict[str, Any]:
         return {
             "total_workers": len(self._workers),
-            "by_processor": {
-                p: len(ids) for p, ids in self._available_workers.items()
-            },
+            "by_processor": {p: len(ids) for p, ids in self._available_workers.items()},
             "busy_workers": sum(1 for w in self._workers.values() if w.current_job),
         }

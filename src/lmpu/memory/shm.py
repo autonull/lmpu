@@ -37,6 +37,10 @@ class SHMBackend:
         """Get buffer file path."""
         return self._session_dir(session_id) / buffer_id
 
+    def get_buffer_path(self, session_id: str, buffer_id: str) -> str:
+        """Return the filesystem path for a buffer, without opening it."""
+        return str(self._buffer_path(session_id, buffer_id))
+
     def create_buffer(
         self,
         session_id: str,

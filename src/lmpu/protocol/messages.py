@@ -6,8 +6,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Union
 
-import ulid
 import orjson
+import ulid
 from pydantic import BaseModel, ConfigDict, Field
 
 from .sentinels import PROTOCOL_VERSION
@@ -16,8 +16,10 @@ from .sentinels import PROTOCOL_VERSION
 # Enums and constants
 # =============================================================================
 
+
 class JobStatus(str, Enum):
     """Internal job states."""
+
     CREATED = "created"
     PENDING = "pending"
     RUNNING = "running"
@@ -31,6 +33,7 @@ class JobStatus(str, Enum):
 
 class ModelJobStatus(str, Enum):
     """Model-facing job statuses (subset of internal states)."""
+
     PENDING = "pending"
     RUNNING = "running"
     SLEEPING = "sleeping"  # Maps to WAITING_INPUT, WAITING_EVENT
@@ -42,6 +45,7 @@ class ModelJobStatus(str, Enum):
 
 class EventKind(str, Enum):
     """Event types for the event log."""
+
     JOB_SUBMITTED = "JobSubmitted"
     JOB_STARTED = "JobStarted"
     PROGRESS = "Progress"
@@ -61,15 +65,17 @@ class EventKind(str, Enum):
 
 class InjectionPolicy(str, Enum):
     """Event injection policies."""
-    INTERRUPT = "interrupt"      # Interrupt generation at next token boundary
-    NEXT_TURN = "next_turn"      # Inject at next generation turn
-    WAKE = "wake"                # Wake host immediately
-    INJECT = "inject"            # Inject immediately
-    OBSERVE = "observe"          # Observe only, don't inject
+
+    INTERRUPT = "interrupt"  # Interrupt generation at next token boundary
+    NEXT_TURN = "next_turn"  # Inject at next generation turn
+    WAKE = "wake"  # Wake host immediately
+    INJECT = "inject"  # Inject immediately
+    OBSERVE = "observe"  # Observe only, don't inject
 
 
 class SleepLevel(str, Enum):
     """Sleep/park levels."""
+
     S1 = "S1"  # KV resident in VRAM
     S2 = "S2"  # KV offloaded to CPU
     S3 = "S3"  # Checkpointed to disk (deferred)
@@ -77,6 +83,7 @@ class SleepLevel(str, Enum):
 
 class ExecutionMode(str, Enum):
     """Job execution modes."""
+
     SYNC = "sync"
     ASYNC = "async"
     INTERRUPT = "interrupt"
@@ -84,12 +91,14 @@ class ExecutionMode(str, Enum):
 
 class DeterminismLevel(str, Enum):
     """Determinism requirements."""
+
     STRICT = "strict"
     BEST_EFFORT = "best_effort"
 
 
 class ErrorCode(str, Enum):
     """Canonical error codes."""
+
     INVALID_SCHEMA = "invalid_schema"
     UNKNOWN_METHOD = "unknown_method"
     UNKNOWN_PROCESSOR = "unknown_processor"
@@ -116,8 +125,10 @@ class ErrorCode(str, Enum):
 # Base models
 # =============================================================================
 
+
 class LMPUBaseModel(BaseModel):
     """Base model with common configuration."""
+
     model_config = ConfigDict(
         extra="forbid",
         frozen=False,
@@ -130,6 +141,7 @@ class LMPUBaseModel(BaseModel):
 
 class RPCError(LMPUBaseModel):
     """JSON-RPC 2.0 error object."""
+
     code: ErrorCode
     message: str
     job_id: str | None = None
@@ -139,6 +151,7 @@ class RPCError(LMPUBaseModel):
 
 class RPCRequest(LMPUBaseModel):
     """JSON-RPC 2.0 request."""
+
     jsonrpc: Literal["2.0"] = "2.0"
     id: str | int | None = None
     method: str
@@ -147,6 +160,7 @@ class RPCRequest(LMPUBaseModel):
 
 class RPCResponse(LMPUBaseModel):
     """JSON-RPC 2.0 response."""
+
     jsonrpc: Literal["2.0"] = "2.0"
     id: str | int | None = None
     result: Any | None = None
@@ -155,6 +169,7 @@ class RPCResponse(LMPUBaseModel):
 
 class RPCNotification(LMPUBaseModel):
     """JSON-RPC 2.0 notification (no id)."""
+
     jsonrpc: Literal["2.0"] = "2.0"
     method: str
     params: dict[str, Any] = Field(default_factory=dict)
@@ -164,8 +179,10 @@ class RPCNotification(LMPUBaseModel):
 # Model-plane message kinds (inside <|proc|> sentinels)
 # =============================================================================
 
+
 class ModelMessageKind(str, Enum):
     """Model-plane message kinds."""
+
     SUBMIT = "submit"
     POLL = "poll"
     WAIT = "wait"
@@ -179,12 +196,14 @@ class ModelMessageKind(str, Enum):
 
 class ModelMessageBase(LMPUBaseModel):
     """Base for all model-plane messages."""
+
     version: int = 1
     kind: ModelMessageKind
 
 
 class SubmitMessage(ModelMessageBase):
     """Submit a job or batch."""
+
     kind: Literal[ModelMessageKind.SUBMIT] = ModelMessageKind.SUBMIT
     job_id: str | None = None
     processor: str | None = None
@@ -198,12 +217,14 @@ class SubmitMessage(ModelMessageBase):
 
 class PollMessage(ModelMessageBase):
     """Poll job status."""
+
     kind: Literal[ModelMessageKind.POLL] = ModelMessageKind.POLL
     job_id: str
 
 
 class WaitMessage(ModelMessageBase):
     """Wait for job completion with timeout."""
+
     kind: Literal[ModelMessageKind.WAIT] = ModelMessageKind.WAIT
     job_id: str
     timeout_ms: int | None = None
@@ -211,6 +232,7 @@ class WaitMessage(ModelMessageBase):
 
 class ReadResultMessage(ModelMessageBase):
     """Read a bounded buffer view."""
+
     kind: Literal[ModelMessageKind.READ_RESULT] = ModelMessageKind.READ_RESULT
     job_id: str
     buffer: str
@@ -220,6 +242,7 @@ class ReadResultMessage(ModelMessageBase):
 
 class WriteInputMessage(ModelMessageBase):
     """Write interactive input to a waiting job."""
+
     kind: Literal[ModelMessageKind.WRITE_INPUT] = ModelMessageKind.WRITE_INPUT
     job_id: str
     field: str
@@ -228,6 +251,7 @@ class WriteInputMessage(ModelMessageBase):
 
 class CancelMessage(ModelMessageBase):
     """Request job cancellation."""
+
     kind: Literal[ModelMessageKind.CANCEL] = ModelMessageKind.CANCEL
     job_id: str
     reason: str | None = None
@@ -235,6 +259,7 @@ class CancelMessage(ModelMessageBase):
 
 class SleepCondition(LMPUBaseModel):
     """Sleep wake condition."""
+
     all: list[str] = Field(default_factory=list)
     any: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
@@ -244,6 +269,7 @@ class SleepCondition(LMPUBaseModel):
 
 class SleepMessage(ModelMessageBase):
     """Request host sleep/park."""
+
     kind: Literal[ModelMessageKind.SLEEP] = ModelMessageKind.SLEEP
     until: SleepCondition
     level: SleepLevel | None = None
@@ -251,12 +277,14 @@ class SleepMessage(ModelMessageBase):
 
 class WakeMessage(ModelMessageBase):
     """Force wake or cancel sleep."""
+
     kind: Literal[ModelMessageKind.WAKE] = ModelMessageKind.WAKE
     session_id: str | None = None
 
 
 class QueryCapabilitiesMessage(ModelMessageBase):
     """Query available processors and operations."""
+
     kind: Literal[ModelMessageKind.QUERY_CAPABILITIES] = ModelMessageKind.QUERY_CAPABILITIES
     op: str | None = None
     processor: str | None = None
@@ -278,6 +306,7 @@ ModelMessage = Union[
 # =============================================================================
 # Control-plane method parameters and results
 # =============================================================================
+
 
 class HelloParams(LMPUBaseModel):
     protocol: str = PROTOCOL_VERSION
@@ -496,8 +525,10 @@ class CloseResult(LMPUBaseModel):
 # Event definitions
 # =============================================================================
 
+
 class EventData(LMPUBaseModel):
     """Base event data."""
+
     pass
 
 
@@ -527,6 +558,8 @@ class JobCompletedData(EventData):
     buffer_refs: list[str] = Field(default_factory=list)
     checksum: str
     cache_hit: bool = False
+    copy_count: int = 0
+    mapped_bytes: int = 0
 
 
 class JobFailedData(EventData):
@@ -614,6 +647,7 @@ EventPayload = Union[
 
 class Event(LMPUBaseModel):
     """Event log entry."""
+
     event_id: str = Field(default_factory=lambda: str(ulid.new()))
     seq: int
     session: str
@@ -628,8 +662,10 @@ class Event(LMPUBaseModel):
 # Model-plane event wrapper (for injection into model context)
 # =============================================================================
 
+
 class InjectedEvent(LMPUBaseModel):
     """Event as injected into model context via <|proc_event|>."""
+
     version: int = 1
     kind: Literal["event"] = "event"
     event: EventKind
@@ -667,20 +703,27 @@ def parse_model_message(data: dict[str, Any]) -> ModelMessage:
 # JSON-RPC codec
 # =============================================================================
 
+
 class JSONRPCCodec:
     """JSON-RPC 2.0 codec using orjson for performance."""
 
     @staticmethod
     def encode_request(request: RPCRequest) -> bytes:
-        return orjson.dumps(request.model_dump(exclude_none=True), option=orjson.OPT_SERIALIZE_NUMPY)
+        return orjson.dumps(
+            request.model_dump(exclude_none=True), option=orjson.OPT_SERIALIZE_NUMPY
+        )
 
     @staticmethod
     def encode_response(response: RPCResponse) -> bytes:
-        return orjson.dumps(response.model_dump(exclude_none=True), option=orjson.OPT_SERIALIZE_NUMPY)
+        return orjson.dumps(
+            response.model_dump(exclude_none=True), option=orjson.OPT_SERIALIZE_NUMPY
+        )
 
     @staticmethod
     def encode_notification(notification: RPCNotification) -> bytes:
-        return orjson.dumps(notification.model_dump(exclude_none=True), option=orjson.OPT_SERIALIZE_NUMPY)
+        return orjson.dumps(
+            notification.model_dump(exclude_none=True), option=orjson.OPT_SERIALIZE_NUMPY
+        )
 
     @staticmethod
     def decode_request(data: bytes) -> RPCRequest:

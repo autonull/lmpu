@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
 
-from ..protocol.messages import CapabilityDescriptor
+from pydantic import BaseModel, ConfigDict, Field
 
 
 @dataclass
 class Manifest:
     """Processor manifest / capability descriptor."""
+
     name: str
     version: str = "0.1.0"
     protocol: str = "lmpu/1"
@@ -32,7 +32,7 @@ class Manifest:
 
 class ProcessorContext:
     """Context provided to processor during setup."""
-    
+
     def __init__(self, runtime_config: dict[str, Any]):
         self.runtime_config = runtime_config
         self._resources: dict[str, Any] = {}
@@ -46,7 +46,7 @@ class ProcessorContext:
 
 class JobContext:
     """Context provided to processor during job execution."""
-    
+
     def __init__(
         self,
         job_id: str,
@@ -58,6 +58,8 @@ class JobContext:
         log: callable,
         trace: callable,
         cancelled: callable,
+        copy_count: int = 0,
+        mapped_bytes: int = 0,
     ):
         self.job_id = job_id
         self.session_id = session_id
@@ -68,6 +70,8 @@ class JobContext:
         self._log = log
         self._trace = trace
         self._cancelled = cancelled
+        self.copy_count = copy_count
+        self.mapped_bytes = mapped_bytes
 
     def read_buffer(self, name: str) -> Any:
         """Read a buffer by logical name."""
@@ -84,7 +88,7 @@ class JobContext:
         # Implementation depends on buffer manager
         pass
 
-    def progress(self, fraction: float, message: Optional[str] = None) -> None:
+    def progress(self, fraction: float, message: str | None = None) -> None:
         """Report progress."""
         self._send_progress(fraction, message)
 
@@ -97,7 +101,7 @@ class JobContext:
         processor: str,
         op: str,
         inputs: dict[str, Any],
-        config: Optional[dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ) -> Any:
         """Submit a child job."""
         return await self._submit_child(processor, op, inputs, config)
@@ -117,25 +121,28 @@ class JobContext:
 
 class Result(BaseModel):
     """Job execution result."""
+
     model_config = ConfigDict(extra="allow")
-    
+
     success: bool = True
     data: dict[str, Any] = Field(default_factory=dict)
     buffer_refs: list[str] = Field(default_factory=list)
     checksum: str = ""
     cache_hit: bool = False
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    copy_count: int = 0
+    mapped_bytes: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
     retriable: bool = False
 
 
 class Processor(ABC):
     """Base processor class."""
-    
+
     manifest: Manifest
-    
+
     def __init__(self):
-        if not hasattr(self, 'manifest') or self.manifest is None:
+        if not hasattr(self, "manifest") or self.manifest is None:
             raise NotImplementedError("Processor must define manifest class attribute")
 
     @abstractmethod
