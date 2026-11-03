@@ -481,12 +481,12 @@ def _parse_sha256_answer(text: str) -> str | None:
     return match.group(1).lower() if match else None
 
 
-# --- best_case --------------------------------------------------------------
+# --- best_case (8k context, largest feasible subset on 10 GB) ---------------
 
 _BEST_CASE_BYTES = 16 * 1024 * 1024
 _BEST_CASE_SLEEP_SECONDS = 60
 _BEST_CASE_UNIT = b"lmpu-best-case-16mib-deterministic-unit\n"
-_BEST_CASE_DOCUMENT_LINES = 850  # ~32.8k tokens on Qwen/Qwen3.5-0.8B
+_BEST_CASE_DOCUMENT_LINES_8K = 200  # ~8.2k tokens on Qwen/Qwen3.5-0.8B
 
 
 @lru_cache(maxsize=1)
@@ -500,11 +500,11 @@ def _best_case_digest() -> str:
     return digest.hexdigest()
 
 
-def _best_case_document() -> str:
+def _best_case_document_8k() -> str:
     return "".join(
         f"SECTION {i:04d} | ledger entry {i} | deterministic filler payload {i * 7919} "
         f"| checksum-block {(i * 104729) % 65536} | end-of-entry\n"
-        for i in range(_BEST_CASE_DOCUMENT_LINES)
+        for i in range(_BEST_CASE_DOCUMENT_LINES_8K)
     )
 
 
@@ -534,7 +534,7 @@ _BEST_CASE = WorkloadSpec(
     ),
     answer=_best_case_digest(),
     prompt=(
-        _best_case_document()
+        _best_case_document_8k()
         + "\nTASK: A long-running tool job (about 60 seconds) computes a 16 MiB "
         "deterministic buffer and reports its size and SHA-256 digest. Call the "
         'tool, then reply with a final line "ANSWER: <sha256 hex digest>".'
@@ -557,7 +557,7 @@ _BEST_CASE = WorkloadSpec(
         f"TRACE best_case\nSLEEP {_BEST_CASE_SLEEP_SECONDS}\nALLOC 16MiB\nSHA {_best_case_digest()}"
     ),
     description=(
-        "16 MiB result, 60 s job, ~32k-token context, exact oracle (pre-registered best case)"
+        "16 MiB result, 60 s job, ~8k-token context, exact oracle (largest feasible subset)"
     ),
     config={"timeout_ms": 180_000},
     baselines=(
@@ -565,13 +565,12 @@ _BEST_CASE = WorkloadSpec(
         "lmpu.model_sync",
         "lmpu.model_async_oracle",
         "lmpu.model_sync_oracle",
-        "app_agent",
         "app_agent_oracle",
         "engine_native_oracle",
         "session_reopen_oracle",
-        "direct_cot",
         "lmpu.model_async_2session",
         "app_agent_2session",
+        "direct_cot",
         "native",
     ),
     native=lambda: (

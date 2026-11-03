@@ -14,9 +14,12 @@ Workload: `best_case` (`src/lmpu/bench/workloads.py`) —
   16 MiB buffer (repeated `lmpu-best-case-16mib-deterministic-unit\n` chunks)
   and prints `{"bytes": 16777216, "sha256": "<hex>"}`.
 - **60 s job**: the program sleeps 60 s before hashing; wall per trial ≥ 60 s.
-- **~32k-token context**: the prompt carries an 850-line deterministic ledger
-  document (32,761 tokens measured with the Qwen/Qwen3.5-0.8B tokenizer) as a
-  read-only distractor; the answer is tool-derived, never document-derived.
+- **~8k-token context** (largest feasible subset on 10 GB): the prompt carries
+  a 200-line deterministic ledger document (~7.6k tokens with
+  Qwen/Qwen3.5-0.8B tokenizer) as a read-only distractor; the answer is
+  tool-derived, never document-derived. (The 32k variant was an arithmetic
+  error: 32,818 tokens exceeded `HFEngine.max_context=32768` and every model
+  arm generated 1–2 tokens before the context-full guard fired.)
 - **Exact oracle**: sha256 of the deterministic buffer is known in advance;
   `verify` checks `bytes == 16 MiB` and the digest; `verify_answer` checks the
   decoded `ANSWER: <sha256 hex digest>` line.
@@ -38,16 +41,19 @@ model planner is Batch 2 and remains known-void until V2.1 calibration):
 Excluded with reasons:
 
 - `sync_tool_full_result` / `sync_tool_full_result_oracle` — full ingestion of
-  the result is infeasible: the tool result is 16 MiB, the context is 32k.
-  This is the capability boundary V1.9 will record.
+  the result is infeasible: the tool result is 16 MiB. This is the capability
+  boundary V1.9 will record.
 - Model-planner arms (`lmpu.model_async`, `app_agent`, …) — Batch 2 (L2),
-  gated on V2.1 calibration (the 0.8B model cannot emit a parseable plan at
-  this budget today; see `benchmarks/reports/l0-pilot` and
-  `docs/viability/ceiling-analysis.md`).
+  gated on V2.1 calibration.
 - `async_poll_model` — model-in-the-loop polling; model planning is not
   calibrated; excluded until Batch 2.
 - Streaming ingestion — strictly dominated by bounded ingestion at any result
   size (pre-registration Batch 0, §4 exclusions).
+
+**Revision (2026-11-03):** Reduced context from 32k to 8k (200 lines) to fit
+`HFEngine.max_context=32768` with answer headroom on a 10 GB card. This is
+the "largest feasible subset" per the plan §1. The 32k variant was never
+measured; no prior data is invalidated.
 
 ## 2. Metrics and analysis
 
