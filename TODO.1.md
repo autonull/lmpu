@@ -17,7 +17,7 @@ This is an execution plan, not a second specification. It defines:
 - the contracts that must remain stable;
 - the order of work and the gate that closes each phase;
 - the test and benchmark strategy that keeps the project honest;
-- the decisions that still need your input.
+- the decisions that are accepted and how changes are controlled.
 
 Checkbox conventions:
 
@@ -45,8 +45,20 @@ Measured on 2026-11-03:
 | Python | 3.14.8 | Use 3.12/3.13 if vLLM or a decoder lacks 3.14 wheels |
 | Libraries | PyTorch 2.15.0, Transformers 4.57.6, tokenizers 0.22.2, NumPy 2.5.4 | Transformers 4.57.6 rejects `qwen3_5`; latest is 5.22.1. vLLM 0.33.0 and Outlines 0.1.14 are available but not installed |
 | HF cache | Qwen3.5-0.8B tokenizer/config present; weights must be downloaded | First run needs network and ~1.6 GB |
+| Dependency policy | See Appendix D | Optional extras keep the core CPU-only |
 
 This table is part of the plan: benchmark results must record the actual host, not the reference host.
+
+### 0.2 Non-goals for 0.1
+
+- No multi-tenant isolation, fair-share scheduling, or remote authentication.
+- No remote processors, GPU buffers, CUDA IPC, or S3 checkpoint/migration.
+- No production-grade sandbox; public mode uses a safe profile, but the threat model is still limited.
+- No end-to-end fine-tuned control policy; constrained decoding and prompting are the 0.1 path.
+- No formal verification, hardware attestation, or exactly-once execution.
+- No full OS, hypervisor, or distributed scheduler claim.
+
+These are scoped out so the PoC can prove the execution model without turning into an infrastructure project.
 
 ---
 
@@ -60,14 +72,14 @@ This table is part of the plan: benchmark results must record the actual host, n
 | Runtime | **LMPU Runtime** or **LMPU Kernel** | Avoid calling the PoC a full OS; it is an OS-like kernel |
 | Protocol | **LMPU Protocol v1** | Wire version string `lmpu/1` |
 | Python package / CLI | `lmpu` | One package, one CLI |
-| Model-facing sentinels | `<|proc|> ... <|/proc|>` and `<|proc_event|> ... <|/proc_event|>` | Recommended; see §1.3 |
+| Model-facing sentinels | `<\|proc\|> ... <\|/proc\|>` and `<\|proc_event\|> ... <\|/proc_event\|>` | Recommended; see §1.2 |
 | Unit of work | **job** | Never “coproc call” in code |
 | Execution backend | **processor** | Replaces `coprocessor` in wire messages; shorter and clearer |
 | Host suspension | **park / resume** internally; **sleep / wake** in the model protocol | Avoids collision with vLLM’s global `sleep()` |
 
 `LMPU` describes the execution unit; the contribution is the *runtime and protocol* around it. Documentation should say “LMPU architecture” and “LMPU Runtime,” not imply that a new chip is required.
 
-### 1.2 Why not bare `<proc>`
+### 1.2 Sentinel selection
 
 `<proc>` is short, but it collides with:
 
@@ -82,12 +94,12 @@ This table is part of the plan: benchmark results must record the actual host, n
 
 | Sentinel | Tokenization | Token count |
 |---|---|---|
-| `<|p|>` | `<`, `|`, `p`, `|`, `>` | 5 |
-| `<|proc|>` | `<`, `|`, `proc`, `|`, `>` | 5 |
-| `<|process|>` | `<`, `|`, `process`, `|`, `>` | 5 |
-| `<|/p|>` | `<`, `|`, `/`, `p`, `|`, `>` | 6 |
-| `<|/proc|>` | `<`, `|`, `/`, `proc`, `|`, `>` | 6 |
-| `<|/process|>` | `<`, `|`, `/`, `process`, `|`, `>` | 6 |
+| `<\|p\|>` | `<`, `\|`, `p`, `\|`, `>` | 5 |
+| `<\|proc\|>` | `<`, `\|`, `proc`, `\|`, `>` | 5 |
+| `<\|process\|>` | `<`, `\|`, `process`, `\|`, `>` | 5 |
+| `<\|/p\|>` | `<`, `\|`, `/`, `p`, `\|`, `>` | 6 |
+| `<\|/proc\|>` | `<`, `\|`, `/`, `proc`, `\|`, `>` | 6 |
+| `<\|/process\|>` | `<`, `\|`, `/`, `process`, `\|`, `>` | 6 |
 
 The shortest string does **not** produce fewer tokens. `<|p|>` becomes a one-token win only if it is added as a special token, which resizes the embedding matrix and requires the model to learn a new token. Constrained decoding can force the token, but free-generation validity and model likelihood suffer. Recommendation: keep `<|proc|>` as a string sentinel for 0.1; revisit special-token training only after the free-generation baseline exists.
 
@@ -95,7 +107,7 @@ The shortest string does **not** produce fewer tokens. `<|p|>` becomes a one-tok
 
 | ID | Decision | Choice | Status |
 |---|---|---|---|
-| D-01 | Architecture and protocol name | LMPU; `lmpu/1`; `<|proc|>` string; P3-13 tests `<|p|>` as a special token | Accepted |
+| D-01 | Architecture and protocol name | LMPU; `lmpu/1`; `<\|proc\|>` string; P3-13 tests `<\|p\|>` as a special token | Accepted |
 | D-02 | Core language and tooling | Python 3.12+, asyncio, `uv`, `pydantic` v2, `orjson`, NumPy | Accepted |
 | D-03 | Control-plane transport | JSON-RPC 2.0 over Unix domain socket; WebSocket later | Accepted |
 | D-04 | Buffer plane | POSIX shared memory + `mmap`; `SCM_RIGHTS` fd passing; BLAKE3 | Accepted |
@@ -227,7 +239,7 @@ docs/
 These are test targets, not aspirations.
 
 - **I1.** Every job emits exactly one terminal event (`JobCompleted`, `JobFailed`, or `JobCancelled`).
-- **I2.** Per-session event sequence numbers are strictly increasing; retained logs have no gaps.
+- **I2.** Per-session event sequence numbers are strictly increasing. Retained events form a contiguous suffix; any eviction gap is reported on resume, never hidden.
 - **I3.** Buffer bytes enter model context only through an explicit read, bounded by `max_inline_bytes`.
 - **I4.** A job cannot read or write a buffer without a matching grant.
 - **I5.** During S1 park, host forward passes and generated tokens are exactly zero.
@@ -278,8 +290,29 @@ Methods:
 | `lmpu.ack` | Advance the client’s event cursor |
 | `lmpu.buffer.*` | Create/import/export/stat/checksum/delete (admin) |
 | `lmpu.jobs.list` | Dashboard and diagnostics |
+| `lmpu.configure` | Update session limits or runtime policy (admin) |
 | `lmpu.health` | Liveness, queue depth, worker health |
 | `lmpu.close` | Close session; cancel or detach jobs |
+
+Response shapes:
+
+```json
+{"job_id":"job_01H...","status":"pending","queue_position":3}
+{"job_id":"job_01H...","status":"running","progress":0.42,"elapsed_ms":812}
+{"status":"completed","result":{"summary":{"shape":[2048,2048],"dtype":"float32","bytes":16777216},"buffer":"buf_C","checksum":"blake3:..."}}
+{"buffer":"buf_C","view":{"slices":[[0,4],[0,4]]},"dtype":"float32","data":[[...]]}
+{"matches":["vector.engine","hardware.stub"],"recommended":"vector.engine","details":[...]}
+```
+
+`lmpu.configure` accepts session quotas and policy overrides:
+
+```json
+{"max_outstanding_jobs":32,"max_buffer_bytes":2147483648,
+ "max_sleep_seconds":300,"sleep_level":"S1",
+ "injection":{"generating":{"JobCompleted":"next_turn"}}}
+```
+
+It is admin-only and cannot exceed runtime maxima. A rejected override returns `quota_exceeded` with the limiting field.
 
 ### 3.3 Model-plane message kinds
 
@@ -319,6 +352,42 @@ Example submit:
 
 `job_id` is optional; if omitted, the kernel allocates one and returns it. If supplied, it doubles as the idempotency key.
 
+Job-spec fields:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `processor` | No | Explicit processor; omit to route by capability |
+| `op` | Yes | Operation name |
+| `inputs` | No | Mapping of name to a JSON value or `{"buffer": "..."}` |
+| `outputs` | No | Mapping of name to a buffer ref; runtime allocates if absent |
+| `program` | python.vm only | Program text or path; hashed into the request |
+| `batch` | No | `{op, items: [{inputs, config?}], max_parallel?}` for batch jobs |
+| `config.mode` | No | `sync`, `async` (default), `interrupt` |
+| `config.timeout_ms` | No | Wall-clock timeout; starts at submission |
+| `config.deadline_ms` | No | Absolute deadline from submission |
+| `config.priority` | No | Integer 0–9; higher runs first |
+| `config.memory_limit_bytes` | No | Hard memory limit for the worker |
+| `config.determinism` | No | `strict` or `best_effort` |
+| `config.progress_interval_ms` | No | Minimum spacing for progress events |
+| `config.idempotent` | No | Whether automatic retry is allowed |
+| `config.ttl_ms` | No | Result retention after terminal state |
+
+Batch example:
+
+```json
+{"version":1,"kind":"submit","processor":"pure.func","op":"bigint_add",
+ "batch":{"items":[{"inputs":{"a":1,"b":2}},{"inputs":{"a":3,"b":4}}]},
+ "config":{"mode":"async"}}
+```
+
+Interactive input:
+
+```json
+{"version":1,"kind":"write_input","job_id":"job_plan_002","field":"goal","value":"D"}
+```
+
+`write_input` is valid only while the job is `WAITING_INPUT`. It is idempotent for the same field and value. It can also write a bounded buffer slice for an interactive processor, but the target must be declared in the job’s inputs or fields.
+
 Execution modes:
 
 | Mode | Behavior |
@@ -333,18 +402,22 @@ Execution modes:
 CREATED
   └─> PENDING ──> RUNNING ──> COMPLETED
          │           ├──────> FAILED
-         │           ├──────> CANCELLED
-         │           └──────> WAITING_INPUT ──> RUNNING
-         └──────────> CANCELLED
+         │           ├──────> WAITING_INPUT ──> RUNNING
+         │           ├──────> WAITING_EVENT ──> RUNNING
+         │           └──────> CANCEL_REQUESTED ──> CANCELLED
+         └──────────> CANCEL_REQUESTED ──> CANCELLED
 ```
 
 - `PENDING` maps to the model-facing status `pending`.
 - `RUNNING` maps to `running`.
 - `WAITING_INPUT` and `WAITING_EVENT` map to `sleeping` in the model-facing status.
+- `CANCEL_REQUESTED` is internal; it becomes `CANCELLED` when the worker stops or the hard-kill completes.
 - Terminal states are `COMPLETED`, `FAILED`, `CANCELLED`.
+- `WAITING_INPUT` and `WAITING_EVENT` may transition to `CANCEL_REQUESTED`.
+- `WAITING_EVENT` is used when a processor explicitly waits for an external event. The job record stores the predicate. It is distinct from a parked host.
 - A transition table in code is the single source of truth. Unit tests exhaustively cover allowed and forbidden transitions.
 
-Cancellation rule: `cancel` performs an atomic compare-and-set from a non-terminal state to `CANCELLED`. If the worker wins the race with `COMPLETED`, the job stays completed and the cancel response says `already_terminal`. A cancellation test asserts that no terminal event is emitted twice and that no completed event follows a cancelled event.
+Cancellation rule: `cancel` performs an atomic compare-and-set from a non-terminal state to `CANCEL_REQUESTED`, then signals the worker. If the worker wins the race with `COMPLETED`, the job stays completed and the cancel response says `already_terminal`. If cancellation wins, the terminal event is `JobCancelled` and no `JobCompleted` is emitted. A cancellation test asserts that no terminal event is emitted twice and that no completed event follows a cancelled event.
 
 ### 3.5 Events
 
@@ -353,9 +426,9 @@ Cancellation rule: `cancel` performs an atomic compare-and-set from a non-termin
 | `JobSubmitted` | observe | job id, processor, queue position |
 | `JobStarted` | observe | worker, start time |
 | `Progress` | observe (throttled) | fraction, checkpoint, message |
-| `JobCompleted` | inject | status, result summary, buffer refs, checksum |
+| `JobCompleted` | inject at next turn | status, result summary, buffer refs, checksum |
 | `JobFailed` | inject + interrupt | error code, retriable, detail |
-| `JobCancelled` | inject | reason |
+| `JobCancelled` | inject at next turn | reason |
 | `NeedsMoreInput` | inject + interrupt | prompt, fields, job id |
 | `Sleeping` | observe | session, sleep id, conditions |
 | `Woken` | inject | reason, satisfied jobs, statuses |
@@ -368,9 +441,18 @@ Cancellation rule: `cancel` performs an atomic compare-and-set from a non-termin
 
 Injection policy is configured per session, not hard-coded in the event bus. Defaults:
 
-- `JobCompleted`, `JobFailed`, `JobCancelled`, `NeedsMoreInput`, `Woken`, `ControlError`, `ResultTooLarge`: inject.
+- `JobCompleted`, `JobFailed`, `JobCancelled`, `NeedsMoreInput`, `Woken`, `ControlError`, `ResultTooLarge`: inject (next turn or wake, as configured).
 - `Progress`, `JobSubmitted`, `JobStarted`, `Buffer*`, `Heartbeat`: observe only.
 - `JobFailed` and `NeedsMoreInput` may interrupt a generating segment; `Progress` never does.
+- The controller renders injected events as `<|proc_event|> ... <|/proc_event|>` blocks with a compact summary. The model never receives raw worker stdout.
+
+```text
+<|proc_event|>
+{"version":1,"kind":"event","event":"Woken","job_id":"job_vec_001",
+ "status":"completed","summary":{"output_buffer":"buf_C","shape":[2048,2048],
+ "dtype":"float32","bytes":16777216,"checksum":"blake3:..."}}
+<|/proc_event|>
+```
 
 ### 3.6 Ordering, delivery, and resume
 
@@ -399,8 +481,11 @@ Canonical codes:
 ```text
 invalid_schema, unknown_method, unknown_processor, unknown_op,
 capability_mismatch, buffer_not_found, buffer_too_large, access_denied,
-quota_exceeded, timeout, cancelled, worker_crashed, oom,
+quota_exceeded, backpressure, timeout, cancelled,
+worker_crashed, oom, checksum_mismatch, runtime_restarted,
 protocol_version, idempotency_conflict, already_terminal, internal
+
+`cancel_requested` is a job status, not an error. `cancelled` is the terminal error/status after the worker stops.
 ```
 
 ### 3.8 Versioning
@@ -427,8 +512,8 @@ Two-phase decoding:
 
 | Phase | Decoder |
 |---|---|
-| `FREE` | Normal sampling with stop sequence `<|proc|>` |
-| `CONTROL` | JSON-schema-constrained decoding; hard stop at `<|/proc|>`; max 512 tokens |
+| `FREE` | Normal sampling with stop sequence `<\|proc\|>` |
+| `CONTROL` | JSON-schema-constrained decoding; hard stop at `<\|/proc\|>`; max 512 tokens |
 | `FREE` | Resume normal sampling |
 
 Implementation choices, to be settled in a Phase 3 spike:
@@ -482,7 +567,7 @@ Evidence policy: report both constrained and unconstrained control-block validit
 ```text
 create(name, dtype, shape, persist=False) -> BufferRef
 import_bytes(name, data, dtype, shape) -> BufferRef
-import_file(name, path, dtype, shape) -> BufferRef
+import_file(name, path, dtype, shape) -> BufferRef  # path under import_roots, symlink-checked
 export_bytes(ref, offset, length) -> bytes        # bounded, admin
 export_file(ref, path) -> None                    # bounded, admin
 read_view(ref, slices, max_inline_bytes) -> View | BufferRef
@@ -538,6 +623,7 @@ Views use per-axis `start:stop:step`. A view either returns inline JSON (≤ `ma
 - Batching coalescer: same `(processor, op, config-compatible)` jobs within a 2 ms window, up to the processor’s declared max batch. Individual jobs still get individual results.
 - Admission control before queueing: outstanding jobs per session (default 32), buffer bytes per session (default 2 GiB), sleep registrations per session (1), GPU KV budget (when applicable).
 - Reject early with `quota_exceeded`; do not accept a job that cannot be scheduled within its deadline.
+- 0.1 quota dimensions: outstanding jobs, buffer bytes, CPU seconds, GPU seconds, wall time, and sleeping registrations. Token and FLOP accounting are metrics only; token/FLOP quotas are deferred.
 
 ### 5.3 Executors
 
@@ -626,6 +712,14 @@ cancelled
 
 Capabilities are claims, and the contract suite tests them. A processor that declares `progress: true` but never emits progress fails conformance.
 
+Registration and routing:
+
+- Built-in processors register at kernel startup; external processors register through an entry point or an explicit manifest file.
+- An explicit `processor` bypasses routing but is validated against the capability manifest.
+- Auto-routing filters by `op`, input/output constraints, memory limit, determinism requirement, and sandbox profile.
+- Surviving processors are scored by explicit preference, current load, latency class, and locality. Ties break by name for reproducibility.
+- A route decision is recorded in the trace with the candidate set and the chosen reason.
+
 ### 6.3 Worker protocol
 
 - Parent launches a worker: `python -m lmpu.worker --plugin <module> --socket <path>`.
@@ -662,7 +756,7 @@ def double(x): return {"y": 2 * x}
 
 - Ops: `run_program`, `run_file`.
 - Program string or path; helper module `lmpu` with `read_buffer`, `write_buffer`, `progress`, `request_input`, `finish`, `log`.
-- Runs with `python -I -S` in a fresh temp cwd; minimal environment; no inherited secrets.
+- Runs with `python -I` in a fresh temp cwd; minimal environment; no inherited secrets. Do not use `-S` unless the worker bootstraps an explicit, audited `sys.path` for the helper and NumPy.
 - Default limits: wall timeout, CPU seconds, address space, file size, open files, no network namespace (`unshare -n` when available).
 - `NeedsMoreInput` parks the job in `WAITING_INPUT`; `write_input` resumes it.
 - Persistent state via an explicit `state` buffer; not automatic in 0.1.
@@ -671,7 +765,7 @@ def double(x): return {"y": 2 * x}
 #### `vector.engine`
 
 - Ops: `matmul`, `dot`, `fft`, `conv1d`, `softmax`, `layer_norm`.
-- NumPy/SciPy; BLAS thread count configurable. `determinism: strict` sets BLAS threads to 1 and fixes seeds where relevant; `best_effort` may use multithreaded BLAS.
+- NumPy/SciPy; BLAS thread count configurable. `determinism: strict` sets BLAS threads to 1 and fixes seeds where relevant. Strict means reproducible on the same processor version, dtype, shape, host, BLAS build, and thread count; cross-machine bit-exactness is not promised. `best_effort` may use multithreaded BLAS.
 - Validates dtype, shape, contiguity; returns a checksum and a compact summary (mean/std/min/max for floats).
 - Reads and writes shm buffers directly; records `copy_count`.
 - GPU path via CuPy is optional and off by default; the capability manifest says whether it is active.
@@ -696,7 +790,7 @@ def double(x): return {"y": 2 * x}
 
 - Simulated device latency and deterministic output; demonstrates latency classes, async completion, and capability descriptors.
 - Later replaced by a CUDA kernel, FPGA endpoint, or DSP worker without changing the interface.
-- Used for concurrency demo 9 and capability demos.
+- Used for capability and latency demos; optional fourth job in concurrency demo 9.
 
 ### 6.6 Composition
 
@@ -724,7 +818,7 @@ Portability scope: the **interface** is model-agnostic; the 0.1 **implementation
 
 ### 7.2 Hugging Face reference engine
 
-- `AutoModelForCausalLM` + `AutoTokenizer`; `torch.inference_mode()`.
+- Use the class selected by Transformers 5.x for `qwen3_5` (`AutoModelForImageTextToText` or `Qwen3_5ForConditionalGeneration`) and `AutoTokenizer`; run the text-only decode path. `AutoModelForCausalLM` is not sufficient for Qwen3.5. Use `torch.inference_mode()`.
 - Manual decode loop, not `generate()`: one forward per token; `DynamicCache` (or the model’s cache object) retained.
 - Stop conditions: sentinel string, max tokens, EOS, context budget.
 - Forward-pass counter increments once per model call; tests assert the exact count.
@@ -777,9 +871,9 @@ Loop, simplified:
 ```python
 while not closed:
     if parked:
-        wake = await runtime.wait_for_wake(session)
-        inject(wake)
+        wake_event = await runtime.wait_for_wake(session)
         await engine.resume(state)
+        inject(wake_event)
         parked = False
         continue
 
@@ -792,13 +886,19 @@ while not closed:
     result = await runtime.dispatch(session, control)
 
     if control.kind == "sleep":
-        await engine.park(state, level=config.sleep_level)
+        wake_event = await runtime.register_sleep(session, control)
+        if wake_event is not None:          # condition already satisfied
+            inject(wake_event)
+            continue
+        await engine.park(state, level=resolve_level(control, config))
         parked = True
-    elif wake_policy.allows_injection(wake):
-        inject(wake)
+        continue
+
+    for event in runtime.take_injectable_events(session):
+        inject(event)
 ```
 
-The real loop must handle: event arrives while generating, `NeedsMoreInput` while parked, forced wake, cancel, parser failure, context budget exhaustion, engine error, and session close. Each is a test case.
+`resolve_level` clamps the requested sleep level to `session.sleep_level` and the configured maximum; the model cannot pin unlimited KV. The real loop must handle: event arrives while generating, `NeedsMoreInput` while parked, forced wake, cancel, parser failure, context budget exhaustion, engine error, and session close. Each is a test case.
 
 Sleep authority is configurable. The model does not have to own the decision:
 
@@ -861,6 +961,7 @@ The headline claim must name the level. “Sleep” with S1 still holds KV memor
 
 ```json
 {
+  "version": 1,
   "kind": "sleep",
   "until": {
     "all": ["job_vec_001"],
@@ -881,6 +982,10 @@ Semantics:
 - A failed job satisfies `all`; include per-job statuses in `Woken`. Optionally set `success_only: true` to wake only on successful completion of all.
 - Only one active sleep registration per session. A second `sleep` returns the current registration; `wake` cancels it.
 - `wake` is also called on session close and on engine error.
+- `level` is optional. The controller resolves it against `session.sleep_level` and the configured maximum; the model cannot demand S3 or pin unlimited KV.
+- Empty `all` and `any` with no `events` means “wait for external wake or deadline.” A `sleep` with no conditions and no deadline is rejected.
+- `wake` is idempotent: waking an already-awake session is a no-op, not an error.
+- A session-global sleep has no job ids and waits on `events` or `deadline_ms`. A job-scoped sleep lists jobs in `all`/`any`; `wake` targets the active registration. To wake only for one job, use `any: [job_id]`.
 
 ### 8.3 Race handling
 
@@ -933,6 +1038,9 @@ Rules:
 - Large payloads are referenced by buffer ID, never inlined.
 - Redact environment variables and secrets; worker stderr is bounded and marked `untrusted`.
 - Rotation by size and age; `lmpu trace show` renders a timeline; `lmpu trace export` produces a portable archive.
+- Token-level `host_forward` records are sampled and aggregated by default (`trace.token_events: sampled`, 1-in-N or per-segment). Full per-token tracing is a debug flag, because a long generation otherwise dominates the trace.
+- Trace event taxonomy: `session_*`, `host_*`, `control_*`, `job_*`, `worker_*`, `buffer_*`, `sleep_*`, `wake_*`, `inject_*`, `quota_*`, `error_*`. The dashboard and replay tool consume only this taxonomy.
+- Buffer access is auditable: `buffer_create`, `buffer_import`, `buffer_read`, `buffer_write`, `grant_granted`, and `grant_denied` carry buffer id, job id, and byte range.
 
 ### 9.2 Metrics
 
@@ -964,7 +1072,7 @@ Panels:
 
 - **Host:** model phase (`GENERATING`, `PARKED`, `WAKING`), sleep level, forward-pass counter, token counters, context bytes;
 - **Sleep proof:** a live timeline showing zero `host_forward` events between `park_enter` and `wake`, plus GPU power and wake latency;
-- **Jobs:** a task board with status, progress, duration, processor, priority, and cancellation controls;
+- **Jobs:** a task board with status, progress, duration, processor, priority, and cancel-request state;
 - **Buffers:** dtype, shape, bytes, checksum, grants, and a slice preview;
 - **Events:** the sequenced event stream with injection/observe markers;
 - **Energy:** GPU power/energy, CPU energy when available, and idle baseline;
@@ -972,6 +1080,8 @@ Panels:
 - **Trace:** download and timeline replay.
 
 The dashboard is read-only for the model and for viewers. The scenario launcher runs in a trusted CLI/service process and uses the same public protocol as any host; the dashboard never executes arbitrary code. The model cannot trigger a scenario or mutate the runtime through the dashboard.
+
+A separate `--admin` mode may expose cancel and close actions. It is off by default, binds to localhost, requires a bearer token, and is not part of the public demo. If the dashboard binds to a non-loopback address, authentication is mandatory regardless of mode.
 
 `demos/12_mission_control.py` starts the runtime, the host session, the dashboard, and a multi-task scenario. `demos/scenarios/*.yaml` defines each task so the demo is reproducible. The killer demo is one screen with multiple processors active, one host asleep, buffers filling, progress moving, and the forward-pass counter frozen.
 
@@ -1010,7 +1120,7 @@ The suite must stay fast, deterministic, and change-tolerant. It tests contracts
 | Performance | Microbenchmarks and regression budgets | `perf` | 10 min | nightly; non-gating unless budget exceeded twice |
 | Soak | 1-hour mixed workload, memory and fd leaks | `soak` | 1 h | weekly and release |
 
-Default command: `pytest -m "not gpu and not model and not soak and not perf"`.
+Default command: `pytest -m "unit or property or contract or integration or scenario"`. Nightly adds `failure`, `security`, `fuzz`, `perf`, and `soak`.
 
 ### 10.3 What each layer proves
 
@@ -1053,6 +1163,21 @@ TinyModel              Qwen3.5-0.8B, lazily loaded, GPU-marked
 | Session disconnect | jobs cancelled or detached per policy; no orphan shm |
 | Kernel restart (Phase 6) | non-terminal jobs failed; event log replays |
 | Context oversized result | `ResultTooLarge`; no silent truncation |
+| Invalid `write_input` state | structured error; job state unchanged |
+| Wake with no active sleep | idempotent no-op |
+| Sleep with no conditions or deadline | rejected before parking |
+| Batch item failure | per-item error; other items complete |
+| Route has no capable processor | `capability_mismatch`; no job record |
+| Unsupported vLLM version | adapter fails closed with a clear error |
+
+Concurrency and isolation tests:
+
+- many jobs from one session complete without state cross-talk;
+- cancelling one job does not corrupt another job’s buffers or events;
+- events from two sessions route only to their owner;
+- batch results preserve input order, and per-item failures do not reorder successes;
+- two jobs completing in one scheduler tick still wake a parked host exactly once;
+- a worker crash during a batch leaves the other jobs intact.
 
 ### 10.6 Model E2E policy
 
@@ -1077,6 +1202,9 @@ Group tests by sandbox profile so a CPU-only contributor is not forced to instal
 - `test_oversized_message_rejected`
 - `test_buffer_bounds_checked`
 - `test_secret_env_not_inherited`
+- `test_public_mode_rejects_subprocess_profile`
+- `test_unsupported_vllm_version_fails_closed`
+- `test_dashboard_public_bind_requires_token`
 
 The default subprocess profile is explicitly **not** a security boundary. Tests assert best-effort limits; the threat model states the gap.
 
@@ -1084,10 +1212,10 @@ The default subprocess profile is explicitly **not** a security boundary. Tests 
 
 | Lane | Hardware | Commands | Trigger |
 |---|---|---|---|
-| `core` | CPU | `make check`, `pytest -m "not gpu and not model"` | every push/PR |
-| `gpu` | 1× GPU, 16 GB+ | `make test-gpu`, demo smoke | nightly and release |
+| `core` | CPU | `make check`, `pytest -m "unit or property or contract or integration or scenario"` | every push/PR |
+| `gpu` | 1× GPU, 10 GB+ (reference RTX 3080); 16 GB recommended | `make test-gpu`, demo smoke | nightly and release |
 | `bench` | fixed GPU runner | `make bench-smoke` | nightly |
-| `release` | GPU runner | full demos, failure suite, 1 h soak | tag/release |
+| `release` | GPU runner | full demos, failure/security/fuzz suites, 1 h soak | tag/release |
 
 GPU jobs are required for release, not for every PR. This honors the “GPU + small HF model required” decision for the official demo path while keeping day-to-day iteration fast.
 
@@ -1135,7 +1263,9 @@ The strong baseline is the async polling agent with a *summary-only* result, not
 | B7 | Summarize 50k-character document | context bytes, tokens |
 | B8 | Scan 1 GB (CI) / 5 GB (paper) synthetic dataset for a pattern | peak context, correctness, wall |
 | B9 | 1,000 small adds in one batch | throughput, control messages |
-| B10 | Mixed concurrent: matmul + Python + hash | makespan, event ordering |
+| B10 | Mixed concurrent: matmul + Python + hash | makespan, event ordering, correctness |
+| B11 | Iterative Python optimization, 100 iterations | progress, wall, CPU, correctness |
+| B12 | Interactive planner with `NeedsMoreInput` | wake latency, tokens, correctness |
 
 ### 11.4 Metrics
 
@@ -1151,9 +1281,14 @@ peak_context_tokens
 context_bytes_injected
 result_bytes
 gpu_energy_joules
-cpu_energy_joules
+cpu_energy_joules          # optional; GPU-only in 0.1
 gpu_seconds
 processor_wall_seconds
+processor_cpu_seconds
+peak_rss_bytes
+peak_gpu_memory_bytes
+latency_p50_ms
+latency_p95_ms
 correctness
 wake_latency_seconds
 sleep_duration_seconds
@@ -1185,7 +1320,7 @@ Derived metrics:
 - Use the same prompt and capability summary for tool-call and LMPU modes; count all host tokens, including schema and error-repair tokens.
 - Report constrained-decoding overhead separately, then include it in the total.
 - Publish raw JSONL, a hardware manifest, seeds, and the exact commit.
-- Include an ablation: sleep vs no-sleep, S1 vs S2, summary vs full result, batching on/off, routing vs fixed processor.
+- Include an ablation: sleep vs no-sleep, S1 vs S2, summary vs full result, batching on/off, routing vs fixed processor, and constrained vs unconstrained decoding.
 
 ### 11.7 Context-bloat demonstration
 
@@ -1253,9 +1388,11 @@ Controls in 0.1:
 - no network by default (`unshare -n` where available);
 - rlimits for CPU, memory, file size, open files, processes;
 - temp cwd per job; minimal environment; no inherited secrets;
-- per-session buffer grants; no cross-session reads;
-- dashboard bound to localhost; no auth;
-- audit trace for every job and buffer access.
+- per-session buffer grants; no cross-session reads; grants are advisory against malicious workers, so process isolation is the real boundary;
+- control-plane UDS mode `0600`, peer credentials checked, no network listener;
+- dashboard bound to localhost; public bind requires a bearer token;
+- audit trace for every job and buffer access (`buffer_read`, `buffer_write`, `grant_denied`);
+- public dashboard bind requires a bearer token; default is loopback-only.
 
 Explicit non-goals for 0.1: hostile multi-tenant isolation, kernel-level sandboxing, side-channel resistance, remote authentication, supply-chain verification of plugins, hardware attestation. The default subprocess sandbox is **not** a security boundary; `lmpu doctor` and the README say so.
 
@@ -1276,9 +1413,11 @@ Explicit non-goals for 0.1: hostile multi-tenant isolation, kernel-level sandbox
 
 ## 13. Roadmap
 
-Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7–9 weeks by parallelizing host and kernel work. Each phase ends with a gate. Do not start the next phase with a red gate.
+Assumptions: one senior engineer, 12–16 weeks; two engineers can compress to 8–10 weeks by parallelizing host and kernel work. The estimate is optimistic; model integration, the vLLM spike, and benchmark debugging are the main variance. Each phase ends with a gate. Do not start the next phase with a red gate.
 
-**Critical path:** P0 → P1 → P2 → P3 → P5 → P6 → P7. P4 can overlap with P3/P5. P5.5 (benchmark) starts after P3 and runs alongside P4/P6.
+**Critical path:** P0 → P1 → P2 → P3 → P5 → P5.5 → P6 → P7. P4 can overlap with P3/P5. P5.5 (benchmark) starts after P3 and runs alongside P4/P6.
+
+Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drops the adapter, keeps the SGLang fallback, and the schedule does not extend past the 14-week target.
 
 ### Phase 0 — Foundations (week 1)
 
@@ -1287,9 +1426,9 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 - [ ] P0-03 CI: CPU `core` lane; GPU lane stub with self-hosted runner docs (M)
 - [ ] P0-04 Write `docs/rfcs/0001-lmpu-protocol.md` skeleton and JSON Schema location (M)
 - [ ] P0-05 Implement `lmpu doctor` checks: Python, shm, UDS, GPU, model cache, sandbox (S)
-- [ ] P0-06 Freeze D-01/D-03/D-06/D-12 with the owner; record ADRs (S)
+- [ ] P0-06 Record accepted ADRs for D-01/D-03/D-06/D-12; no decision freeze needed (S)
 - [ ] P0-07 Define trace schema and example trace fixture (S)
-- [ ] P0-08 Upgrade the toolchain (Transformers 5.x, vLLM 0.33, Outlines 0.1.14), verify Qwen3.5-0.8B/2B load, tokenizer, VRAM, and tokens/sec; record the baseline (M)
+- [ ] P0-08 Create a Python 3.12/3.13 environment if 3.14 wheels are missing; upgrade Transformers 5.x, vLLM 0.33, Outlines 0.1.14; verify Qwen3.5-0.8B/2B load, tokenizer, VRAM, and tokens/sec; record the baseline (M)
 
 **Exit gate:** `make check` is green; the protocol RFC skeleton is reviewed; naming is frozen; no runtime behavior is claimed yet.
 
@@ -1306,8 +1445,11 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 - [ ] P1-09 Scripted host + minimal session loop (M)
 - [ ] P1-10 Demos 1 and 2, headless assertion mode (S)
 - [ ] P1-11 Property tests: buffer slices, protocol round-trip (M)
+- [ ] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close (M)
+- [ ] P1-13 TraceSink implementation and trace/replay schema tests (M)
+- [ ] P1-14 Buffer import from bytes/files plus provenance metadata (M)
 
-**Exit gate:** `pytest -m "unit or property or integration"` green; buffer round-trip and checksum verified; demo 1/2 pass CPU-only; a 16 MiB buffer can be created and read as a 4×4 slice without copying the whole payload into the process that reads it.
+**Exit gate:** `pytest -m "unit or property or integration"` green; all RPC methods are covered; trace replay works; buffer round-trip, checksum, import, and provenance verified; demo 1/2 pass CPU-only; a 16 MiB buffer can be created and read as a 4×4 slice without copying the whole payload into the process that reads it.
 
 ### Phase 2 — Isolation, long jobs, batching (weeks 3–5)
 
@@ -1322,8 +1464,9 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 - [ ] P2-09 Progress events, throttling, observe-only injection (S)
 - [ ] P2-10 Demos 3, 4 (scripted), 6, 9, 10 (L)
 - [ ] P2-11 Failure-injection suite: crash, OOM, timeout, disconnect, duplicate (M)
+- [ ] P2-12 Sandbox profiles: nsjail and Docker templates, public-mode guard, profile tests (M)
 
-**Exit gate:** cancellation and timeout tests pass under race injection; a 16 MiB matmul completes with `copy_count == 0` on the data path; 1,000 batched adds complete in one control round-trip; no orphan workers or shm after tests.
+**Exit gate:** cancellation and timeout tests pass under race injection; a 16 MiB matmul completes with `copy_count == 0` on the data path; 1,000 batched adds complete in one control round-trip; nsjail/Docker profile tests pass; no orphan workers or shm after tests.
 
 ### Phase 3 — HF host, constrained decoding, sleep/wake (weeks 5–7)
 
@@ -1340,8 +1483,9 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 - [ ] P3-11 Trace and metrics for host forwards/tokens/energy (M)
 - [ ] P3-12 E2E GPU tests marked `gpu`/`model` (M)
 - [ ] P3-13 Sentinel experiment: `<|p|>` vs `<|proc|>` with and without special-token registration; measure token cost and free-generation validity (M)
+- [ ] P3-14 Prompt templates with generated capability summary; version and regression tests (M)
 
-**Exit gate:** flagship demo runs on GPU; trace shows zero `host_forward` between `park_enter` and `wake`; injected result metadata ≤64 tokens for a 16 MiB matrix; wake latency p99 <50 ms; one canonical model scenario passes deterministically.
+**Exit gate:** flagship demo runs on GPU; trace shows zero `host_forward` between `park_enter` and `wake`; injected result metadata ≤64 tokens for a 16 MiB matrix; wake latency p99 <50 ms; prompt templates and capability summary are versioned; one canonical model scenario passes deterministically.
 
 ### Phase 4 — Processor ecosystem and interactivity (weeks 7–8)
 
@@ -1374,8 +1518,8 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 
 - [ ] P5.5-01 Benchmark harness: config, seeds, trials, artifacts (L)
 - [ ] P5.5-02 Baseline adapters: direct CoT, trace-token, sync tool, async polling (L)
-- [ ] P5.5-03 Energy sampling: NVML, RAPL, idle baseline, calibration (M)
-- [ ] P5.5-04 Workloads B1–B10 and correctness checks (L)
+- [ ] P5.5-03 Energy sampling: NVML, optional RAPL, idle baseline, calibration (M)
+- [ ] P5.5-04 Workloads B1–B12 and correctness checks (L)
 - [ ] P5.5-05 Statistics and plots: medians, CIs, CDFs, timelines (M)
 - [ ] P5.5-06 Context-bloat demo: 1 GB CI scan and 5 GB paper run (M)
 - [ ] P5.5-07 Pre-registration document; final run; raw artifact (M)
@@ -1385,8 +1529,8 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 
 ### Phase 6 — vLLM adapter, durability, hardening (weeks 10–11)
 
-- [ ] P6-01 vLLM feasibility spike: request parking, KV retention, scheduler changes (L)
-- [ ] P6-02 Minimal scheduler patch or adapter; upstream design note (L)
+- [ ] P6-01 vLLM feasibility spike: request parking, KV retention, and monkey-patch hook points (L)
+- [ ] P6-02 Monkey-patch adapter and upstream design note; fork only if the gate proves it necessary (L)
 - [ ] P6-03 Admission control for pinned/swapped KV; sleeping-session caps (M)
 - [ ] P6-04 S2 swap path on vLLM, if supported (M)
 - [ ] P6-05 SQLite journal for jobs/events; restart reconciliation (L)
@@ -1406,8 +1550,10 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 - [ ] P7-06 Paper draft: Token Tax, CDR, sleep proof, context protection (L)
 - [ ] P7-07 Manifesto/engineering post with trace comparison (M)
 - [ ] P7-08 External-contributor test: a new processor in <10 minutes (S)
+- [ ] P7-09 Release checklist: license, SBOM, dependency pins, signed artifact, security notes (S)
+- [ ] P7-10 Publish two example processors (`jq`, `sqlite`) and their contract tests (S)
 
-**Exit gate:** a new contributor can install, run a demo on a GPU, and write a processor using the docs; RFC and benchmark artifacts are public; release tag is reproducible.
+**Exit gate:** a new contributor can install, run a demo on a GPU, and write a processor using the docs; RFC and benchmark artifacts are public; release checklist, SBOM, license, and signed artifact are complete; release tag is reproducible.
 
 ### Phase 8 — Deferred research (post-0.1)
 
@@ -1419,6 +1565,10 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 - [ ] P8-06 Fine-tuned control policy and synthetic trace training
 - [ ] P8-07 Formal execution traces/proofs
 - [ ] P8-08 MCP bridge and LangChain/LlamaIndex executor adapters
+- [ ] P8-09 Second runtime adapter (llama.cpp, MLX, or Mamba) to validate the portability claim
+- [ ] P8-10 Speculative jobs with cancel-on-stale results
+- [ ] P8-11 Multimodal buffer adapter for image/audio tensors
+- [ ] P8-12 Real accelerator backend (CUDA kernel or FPGA endpoint)
 
 ---
 
@@ -1427,7 +1577,8 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Model will not emit valid control blocks | Medium | High | Constrained decoding; scripted fallback for tests; fine-tune only if needed |
-| vLLM parking patch is invasive or rejected upstream | High | High | HF reference is authoritative; SGLang fallback; keep the engine ABC narrow |
+| vLLM parking patch is invasive or rejected upstream | High | High | HF reference is authoritative; version-pinned monkey-patch; SGLang fallback; keep the engine ABC narrow |
+| Monkey-patch breaks on vLLM upgrade | High | Medium | Pin supported versions; `lmpu doctor` fail-closed; contract tests per version; upstream design note |
 | “Sleep” does not save energy because KV stays resident | Medium | High | Define S1/S2/S3; measure against idle baseline; report honestly; offer S2 |
 | Zero-copy claim is false on some path | Medium | Medium | Record `copy_count`; test fd mapping; state the fallback path |
 | Cancellation/terminal-event races | High | High | Atomic state transition; race-injection tests; single terminal event invariant |
@@ -1465,6 +1616,10 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 | F13 Capability discovery | P1 | demo 1; registry tests |
 | F14 Progress events | P2 | demo 6; monotonic progress contract |
 | F15 Interactive input | P4 | demo 7; `NeedsMoreInput` resume |
+| F16 Configure session/resource limits | P1/P2 | admin API and quota tests |
+| F17 Import buffer from file/bytes with provenance | P1 | import and provenance tests |
+| F18 Batch per-item success and failure | P2 | batch contract tests |
+| F19 Mission Control live activity | P5 | demo 12 and trace assertions |
 
 ### 15.2 Efficiency criteria
 
@@ -1487,6 +1642,40 @@ Assumptions: one senior engineer, 12–14 weeks; two engineers can compress to 7
 | C4 Cancelled jobs never complete | P2 | race-injection tests |
 | C5 Timeouts produce failures | P2 | failure suite |
 | C6 Events reach the correct session | P1/P6 | multi-session isolation tests |
+
+### 15.4 Specification primitive coverage
+
+| README primitive | Plan surface | Phase |
+|---|---|---|
+| `Submit(job_spec)` | `lmpu.submit` / model `submit` | P1 |
+| `Poll(JobHandle)` | `lmpu.poll` / model `poll` | P1 |
+| `Wait(JobHandle, timeout)` | `lmpu.wait` / model `wait` | P1 |
+| `ReadResult(...)` | `lmpu.read` / model `read_result` | P1 |
+| `WriteInput(...)` | `lmpu.write` / model `write_input` | P2/P4 |
+| `Cancel(JobHandle)` | `lmpu.cancel` / model `cancel` | P2 |
+| `Sleep(until_event)` | `lmpu.sleep` / model `sleep` | P3 |
+| `Wake(JobHandle)` | `lmpu.wake` / model `wake` | P3 |
+| `Configure(...)` | `lmpu.configure` (admin) | P1 |
+| Capability query | `lmpu.capabilities` / model `query_capabilities` | P1 |
+| Status `sleeping` | `WAITING_INPUT` / `WAITING_EVENT` mapping | P1/P2 |
+| Events | `lmpu.event` notifications | P1/P3 |
+
+### 15.5 Demo inventory
+
+| Demo | Subject | Gate |
+|---|---|---|
+| 01 | Capability query and routing | P1 |
+| 02 | Synchronous exact arithmetic | P1 |
+| 03 | Asynchronous Python job, poll/wait | P2 |
+| 04 | Sleep/wake matrix multiplication | P3 |
+| 05 | Large-buffer partial read | P3 |
+| 06 | Progress, polling, cancellation | P2 |
+| 07 | Interactive `NeedsMoreInput` | P4 |
+| 08 | Neural summarization | P4 |
+| 09 | Concurrent processors | P2/P4 |
+| 10 | Batched small jobs | P2 |
+| 11 | Benchmark vs token compute | P5.5 |
+| 12 | Mission Control dashboard | P5 |
 
 ---
 
@@ -1535,7 +1724,7 @@ All design questions are closed for 0.1. A change requires an ADR; a protocol ch
 |---|---|
 | Primary claim | Zero host forwards plus O(1) context; GPU energy is secondary |
 | Tenancy | Single-tenant 0.1; admission hooks only |
-| Naming | LMPU; `lmpu/1`; `<|proc|>` string; P3-13 tests `<|p|>` as a special token |
+| Naming | LMPU; `lmpu/1`; `<\|proc\|>` string; P3-13 tests `<\|p\|>` as a special token |
 | Sleep level | S1 default; S2 under memory pressure |
 | Sleep authority | Configurable: `model`, `controller`, `model_with_policy`; default `model_with_policy` |
 | vLLM | Version-pinned monkey-patch adapter; no fork by default; SGLang fallback |
@@ -1558,7 +1747,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [ ] `pytest -m "not gpu and not model"` passes on CPU in <5 minutes.
+- [ ] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes.
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.
@@ -1571,6 +1760,36 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 - [ ] Benchmark report contains C1–C5, raw data, strong baselines, and limitations.
 - [ ] A new contributor can write and run a processor using only the docs.
 - [ ] Release tag `v0.1.0` is reproducible.
+
+---
+
+## 19. Plan review record (2026-11-03)
+
+**Scope.** Reviewed against `README.md`, `TODO.md`, and `compared.md`, plus internal consistency of protocol, buffers, kernel, processors, host integration, sleep/wake, observability, testing, benchmarks, security, roadmap, and appendices.
+
+**Fixed in this review.**
+
+- Completed the job state machine with `WAITING_EVENT` and `CANCEL_REQUESTED`; aligned cancellation semantics across protocol and kernel.
+- Added explicit RPC response shapes, job-spec fields, batch schema, and `write_input` semantics.
+- Aligned event-injection defaults between the event table, session controller, and config.
+- Added the missing `lmpu.configure` surface and specification-primitive coverage table.
+- Replaced the vLLM “patch or adapter” ambiguity with the accepted monkey-patch strategy and a fail-closed compatibility gate.
+- Fixed the Qwen3.5 model-class assumption, Transformers 5.x requirement, and GPU-lane memory mismatch.
+- Removed the read-only dashboard contradiction; cancellation is admin-only and public binds require a token.
+- Added failure cases for invalid input, wake/no-sleep, empty sleep, batch item errors, unroutable jobs, and unsupported vLLM versions.
+- Added dependency policy, demo/test runbook, demo inventory, release checklist, and second-adapter deferral.
+- Tightened energy/context-bloat claims and added token/memory/CPU metrics.
+
+**Residual risks.**
+
+1. **vLLM parking may not be achievable by monkey-patch alone.** P6 is a go/no-go spike; the HF reference remains authoritative.
+2. **Qwen3.5 tooling is new.** Transformers 4.57.6 rejects `qwen3_5`; P0-08 must prove the 5.x path, VRAM, and tokens/sec.
+3. **The 10 GB GPU limits demo model size.** 2B is the practical demo default; 4B needs quantization.
+4. **Energy is secondary.** S1 still retains KV and draws idle power; do not market it as zero energy.
+5. **Benchmark credibility depends on strong baselines.** The trace-token and polling baselines must be implemented fairly, not as strawmen.
+6. **The schedule is optimistic.** 12–16 weeks assumes focused work and a successful vLLM spike.
+
+**Review outcome.** The plan is complete enough to start Phase 0. It is not evidence of production readiness. Do not start Phase 1 until P0-08 proves the toolchain and model path.
 
 ---
 
@@ -1627,11 +1846,26 @@ lpu/
 │   │   ├── session.py
 │   │   ├── metrics.py
 │   │   └── prompts/
-│   └── observability/
-│       ├── trace.py
-│       ├── metrics.py
-│       └── dashboard/
+│   ├── observability/
+│   │   ├── trace.py
+│   │   ├── metrics.py
+│   │   └── dashboard/
+│   ├── bench/
+│   └── synth/
 ├── demos/
+│   ├── 01_capability_query.py
+│   ├── 02_sync_arithmetic.py
+│   ├── 03_async_python_job.py
+│   ├── 04_sleep_wake_matrix.py
+│   ├── 05_large_buffer_read_slice.py
+│   ├── 06_progress_and_cancel.py
+│   ├── 07_needs_more_input.py
+│   ├── 08_neural_summary.py
+│   ├── 09_multi_processor_concurrent.py
+│   ├── 10_batch_small_jobs.py
+│   ├── 11_benchmark_vs_token_compute.py
+│   ├── 12_mission_control.py
+│   └── scenarios/
 ├── tests/
 │   ├── unit/
 │   ├── property/
@@ -1641,15 +1875,24 @@ lpu/
 │   ├── failure/
 │   ├── security/
 │   ├── fuzz/
+│   ├── perf/
 │   └── e2e/
 ├── benchmarks/
+│   ├── run_benchmark.py
+│   ├── metrics.py
+│   └── plots.py
 ├── docs/
 │   ├── rfcs/
 │   ├── adr/
 │   ├── architecture.md
 │   ├── threat-model.md
-│   └── benchmarks.md
+│   ├── benchmarks.md
+│   ├── dependencies.md
+│   └── demo-runbook.md
 └── scripts/
+    ├── run_dashboard.py
+    ├── run_all_demos.sh
+    └── run_tests.sh
 ```
 
 ---
@@ -1663,11 +1906,15 @@ runtime:
   max_message_bytes: 4096
   max_inline_bytes: 65536
   event_ring: 10000
+  max_sessions: 1
+  trace_token_events: sampled   # sampled | full | off
 
 session:
   max_outstanding_jobs: 32
   max_buffer_bytes: 2147483648
   max_injected_tokens_per_turn: 2048
+  max_injected_bytes_per_event: 65536
+  max_sleep_registrations: 1
   sleep_level: S1
   sleep_authority: model_with_policy   # model | controller | model_with_policy
   max_sleep_seconds: 300
@@ -1684,9 +1931,18 @@ session:
       JobCompleted: wake
       Progress: observe
 
+buffers:
+  checksum: blake3
+  verify_on_read: true
+  max_inline_bytes: 65536
+  default_ttl_ms: 3600000
+  import_roots: ["/data", "/tmp/lmpu/imports"]
+
 host:
   engine: hf                 # hf | vllm | scripted | openai
   model: Qwen/Qwen3.5-2B
+  model_class: auto          # auto | Qwen3_5ForConditionalGeneration
+  trust_remote_code: false
   dtype: bfloat16
   device: cuda
   constrained_decoding: true
@@ -1721,7 +1977,9 @@ observability:
   prometheus: false
   dashboard: true
   mission_control: true
+  dashboard_admin: false
   dashboard_bind: 127.0.0.1
+  dashboard_token_env: LMPU_DASHBOARD_TOKEN
 ```
 
 ---
@@ -1739,3 +1997,66 @@ observability:
 - **Token Tax**: host tokens spent controlling, waiting for, or ingesting a computation.
 - **CDR**: Compute-to-Decision Ratio; host compute per semantic decision.
 - **S1/S2/S3**: sleep levels with KV resident, offloaded, or checkpointed.
+
+---
+
+## Appendix D — Dependencies and compatibility policy
+
+The plan is only buildable if the dependency surface is explicit. Use `uv` with a lockfile and split heavy or fragile packages into extras.
+
+| Layer | Required | Optional / extras | Notes |
+|---|---|---|---|
+| Core runtime | Python 3.12/3.13, `pydantic` v2, `orjson`, `numpy`, `blake3` | `ml_dtypes` for bfloat16 | Python 3.14 only if every wheel exists |
+| Vector processor | `numpy` | `scipy` for FFT/conv; `mkl`/OpenBLAS | Strict determinism pins BLAS threads |
+| Host | `torch`, `transformers>=5.22,<6`, `tokenizers` | `accelerate` for device maps | Qwen3.5 requires a Transformers 5.x build |
+| Decoding | One of `outlines` or `lm-format-enforcer` | Both during P3-04 spike | Pick one after the spike; pin it |
+| Engine adapter | `vllm==0.33.*` | `lmpu-vllm-adapter` extra | Monkey-patch only; fail closed on version mismatch |
+| Observability | `fastapi`, `uvicorn` | `sse-starlette`, `nvidia-ml-py` (`pynvml`) | NVML is required for GPU joules |
+| Testing | `pytest`, `pytest-asyncio`, `hypothesis`, `pytest-benchmark` | `mutmut` for mutation tests | Deterministic clock and fixtures are in-repo |
+| Tooling | `ruff`, `mypy`, `pre-commit`, `uv` | `pyright` optional | CI uses the lockfile |
+| Sandbox | Linux namespaces, `resource` | `nsjail`, Docker/Podman, `wasmtime` | Subprocess is not a security boundary |
+
+Policy:
+
+- Pin versions in `uv.lock`; no “latest” in a release.
+- Extras: `lmpu[host]`, `lmpu[vllm]`, `lmpu[decoder]`, `lmpu[dashboard]`, `lmpu[bench]`, `lmpu[dev]`.
+- `lmpu doctor` reports missing optional dependencies and the active sandbox profile.
+- A missing optional dependency must produce a clear error at startup, not a late `ImportError` inside a worker.
+- The vLLM adapter checks the version and patch points before serving; unsupported versions fail closed.
+- Qwen3.5 is multimodal; use the text-only path. Do not enable remote code unless explicitly configured.
+
+---
+
+## Appendix E — Demo and test runbook
+
+Make targets:
+
+```text
+make setup            # uv sync with dev extras; create .env from .env.example
+make doctor           # Python, shm, UDS, GPU, NVML, model cache, sandbox
+make check            # ruff + mypy + unit/property/contract
+make test-core        # integration + scenario, no GPU/model
+make test-gpu         # E2E model tests on the reference GPU
+make test-failure     # failure-injection suite
+make test-security    # sandbox/profile security tests
+make test-fuzz        # parser, framing, and buffer fuzz tests
+make demo             # demos 01-11 with assertion mode
+make mission-control  # demos/12 + dashboard on 127.0.0.1
+make bench-smoke      # short benchmark sanity run
+make bench            # full pre-registered benchmark
+make soak             # 1-hour mixed workload
+make release-check    # all gates, artifacts, and license/SBOM checks
+```
+
+Recommended first run:
+
+1. `make setup`
+2. Download `Qwen/Qwen3.5-0.8B`; confirm the cache.
+3. `make doctor`
+4. `make test-core`
+5. `make test-gpu`
+6. `make mission-control`
+7. Open the dashboard and run the scenario board.
+8. `make bench-smoke`, then `make bench`.
+
+If a step fails, fix the gate before starting the next phase. Do not work around a red gate with a demo-only path.
