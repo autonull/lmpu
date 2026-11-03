@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Traces and benchmarks
+traces/
+benchmarks/results/
+
+# Shared memory
+/dev/shm/lmpu/
+
+# Socket files
+*.sock
+/tmp/lmpu/
+
+# Environment
+.env
+.env.local
+
+# Jupyter
+.ipynb_checkpoints/
