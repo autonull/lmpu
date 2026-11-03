@@ -5,6 +5,7 @@ from .hf import HFEngine
 from .session import SessionController, SessionConfig, ControllerState, SleepAuthority, InjectionPolicy
 from .parser import SentinelScanner, ControlBlockParser, IncrementalScanner
 from .grammar import ConstrainedDecoder, OutlinesDecoder, LMFormatEnforcerDecoder, FallbackDecoder, create_decoder
+from .scripted import ScriptedDecoder
 from .metrics import HostMetrics, MetricsCollector, get_metrics_collector
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "LMFormatEnforcerDecoder",
     "FallbackDecoder",
     "create_decoder",
+    "ScriptedDecoder",
     "HostMetrics",
     "MetricsCollector",
     "get_metrics_collector",

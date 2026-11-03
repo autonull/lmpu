@@ -3,31 +3,33 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Optional, Awaitable
+from enum import StrEnum
+from typing import Any
 
+from lmpu.host.engine import HostEngine, HostState
+from lmpu.host.grammar import ConstrainedDecoder
+from lmpu.host.parser import ControlBlockParser, IncrementalScanner, SentinelScanner
+from lmpu.kernel.quotas import QuotaConfig
+from lmpu.kernel.runtime import Runtime
+from lmpu.kernel.trace import get_trace_sink
+from lmpu.protocol.errors import ValidationError
 from lmpu.protocol.messages import (
-    ModelMessage,
-    ModelMessageKind,
     EventKind,
-    Event,
     InjectedEvent,
     ModelJobStatus,
+    ModelMessage,
+    ModelMessageKind,
     SleepLevel,
-    SleepCondition,
 )
-from lmpu.protocol.errors import ValidationError
-from lmpu.kernel.runtime import Runtime
-from lmpu.host.engine import HostEngine, HostState, SleepLevel as EngineSleepLevel
-from lmpu.host.parser import SentinelScanner, IncrementalScanner, ControlBlockParser
-from lmpu.host.grammar import ConstrainedDecoder, create_decoder
-from lmpu.kernel.trace import get_trace_sink
+from lmpu.protocol.sentinels import PROC_CLOSE, PROC_EVENT_CLOSE, PROC_EVENT_OPEN, PROC_OPEN
 
 
-class ControllerState(str, Enum):
+class ControllerState(StrEnum):
     """Session controller states."""
+
     IDLE = "idle"
     GENERATING = "generating"
     PARSING = "parsing"
@@ -37,35 +39,59 @@ class ControllerState(str, Enum):
     CLOSED = "closed"
 
 
-class SleepAuthority(str, Enum):
+class SleepAuthority(StrEnum):
     """Who controls sleep decisions."""
+
     MODEL = "model"
     CONTROLLER = "controller"
     MODEL_WITH_POLICY = "model_with_policy"
 
 
+VALID_INJECTION_ACTIONS = {"interrupt", "next_turn", "observe", "wake", "inject"}
+
+
 @dataclass
 class InjectionPolicy:
     """Event injection policy configuration."""
-    generating: dict[str, str] = field(default_factory=lambda: {
-        "JobFailed": "interrupt",
-        "NeedsMoreInput": "interrupt",
-        "JobCompleted": "next_turn",
-        "JobCancelled": "next_turn",
-        "Progress": "observe",
-    })
-    parked: dict[str, str] = field(default_factory=lambda: {
-        "JobFailed": "wake",
-        "NeedsMoreInput": "wake",
-        "JobCompleted": "wake",
-        "JobCancelled": "wake",
-        "Progress": "observe",
-    })
+
+    generating: dict[str, str] = field(
+        default_factory=lambda: {
+            "JobFailed": "interrupt",
+            "NeedsMoreInput": "interrupt",
+            "JobCompleted": "next_turn",
+            "JobCancelled": "next_turn",
+            "Progress": "observe",
+            "ControlError": "inject",
+            "ResultTooLarge": "inject",
+        }
+    )
+    parked: dict[str, str] = field(
+        default_factory=lambda: {
+            "JobFailed": "wake",
+            "NeedsMoreInput": "wake",
+            "JobCompleted": "wake",
+            "JobCancelled": "wake",
+            "Progress": "observe",
+            "Woken": "inject",
+        }
+    )
+
+    def validate(self) -> None:
+        valid_events = {kind.value for kind in EventKind}
+        for phase, policy in (("generating", self.generating), ("parked", self.parked)):
+            for event, action in policy.items():
+                if event not in valid_events:
+                    raise ValueError(f"Unknown injected event {event!r} in {phase} policy")
+                if action not in VALID_INJECTION_ACTIONS:
+                    raise ValueError(f"Invalid injection action {action!r} for {event}")
+                if phase == "parked" and action in {"interrupt", "next_turn"}:
+                    raise ValueError(f"Parked policy for {event} cannot use {action}")
 
 
 @dataclass
 class SessionConfig:
     """Session configuration."""
+
     max_outstanding_jobs: int = 32
     max_buffer_bytes: int = 2_147_483_648
     max_injected_tokens_per_turn: int = 2048
@@ -77,19 +103,31 @@ class SessionConfig:
     injection_policy: InjectionPolicy = field(default_factory=InjectionPolicy)
     max_context_tokens: int = 32768
 
+    def __post_init__(self) -> None:
+        self.injection_policy.validate()
+
+    def quota_config(self) -> dict[str, Any]:
+        """Return only the fields accepted by ``QuotaConfig``."""
+        fields = set(QuotaConfig.__dataclass_fields__)
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key in fields
+        }
+
 
 class SessionController:
     """Controls a single session's model-kernel interaction loop."""
-    
+
     def __init__(
         self,
         session_id: str,
         runtime: Runtime,
         engine: HostEngine,
         decoder: ConstrainedDecoder,
-        config: Optional[SessionConfig] = None,
-        prompt_template: Optional[str] = None,
-        system_prompt: Optional[str] = None,
+        config: SessionConfig | None = None,
+        prompt_template: str | None = None,
+        system_prompt: str | None = None,
     ):
         self.session_id = session_id
         self.runtime = runtime
@@ -98,416 +136,556 @@ class SessionController:
         self.config = config or SessionConfig()
         self.prompt_template = prompt_template
         self.system_prompt = system_prompt
-        
-        # State
+
         self.state = ControllerState.IDLE
-        self.host_state: Optional[HostState] = None
+        self.host_state: HostState | None = None
         self.prompt = ""
         self.generated_buffer = ""
-        
-        # Components
+
         self.scanner = SentinelScanner()
         self.incremental_scanner = IncrementalScanner(self.scanner)
-        self.parser = ControlBlockParser(
-            max_control_tokens=512,
-        )
-        
-        # Wake condition
-        self._wake_event: Optional[asyncio.Event] = None
-        self._wake_reason: Optional[str] = None
-        self._wake_job_statuses: dict[str, ModelJobStatus] = {}
-        
-        # Injection buffer
+        self.parser = ControlBlockParser(max_control_tokens=512)
+
+        self._wake_event: asyncio.Event | None = None
+        self._wake_reason: str | None = None
+        self._wake_job_statuses: dict[str, str] = {}
+        self._sleep_deadline_monotonic: float | None = None
+
         self._pending_injections: list[InjectedEvent] = []
         self._injected_this_turn = 0
-        
-        # Metrics
+
         self._turn_count = 0
         self._start_time = time.time()
 
     async def initialize(self, initial_prompt: str) -> None:
-        """Initialize session with prompt."""
+        """Initialize the session and adopt the runtime-assigned session ID."""
         self.prompt = await self._build_prompt(initial_prompt)
         self.host_state = await self.engine.prefill(self.prompt)
+
+        hello = await self.runtime._hello(
+            {
+                "protocol": "lmpu/1",
+                "session_config": self.config.quota_config(),
+            }
+        )
+        runtime_session_id = (
+            hello.get("session_id")
+            if isinstance(hello, dict)
+            else getattr(hello, "session_id", None)
+        )
+        if runtime_session_id:
+            self.session_id = runtime_session_id
+
         self.state = ControllerState.GENERATING
-        
-        # Send hello to runtime
-        await self.runtime._hello({
-            "protocol": "lmpu/1",
-            "session_config": self.config.__dict__,
-        })
 
     async def _build_prompt(self, user_prompt: str) -> str:
-        """Build full prompt with system prompt and capabilities."""
-        parts = []
-        
+        """Build the full prompt with system prompt and live capabilities."""
+        parts: list[str] = []
         if self.system_prompt:
             parts.append(self.system_prompt)
-        
-        # Add capability summary
+
         caps_result = await self.runtime._capabilities({})
         if caps_result.processors:
-            caps_summary = "Available processors:\n"
-            for p in caps_result.processors:
-                caps_summary += f"  - {p.name} v{p.version}: {', '.join(op['name'] for op in p.ops)}\n"
-            parts.append(caps_summary)
-        
-        parts.append("Protocol rules:")
-        parts.append("  - Emit control blocks using <|proc|> ... <|/proc|>")
-        parts.append("  - Use 'submit' to launch jobs, 'sleep' to wait for completion")
-        parts.append("  - Read results with 'read_result' using bounded slices")
-        parts.append("  - Never fabricate computational results")
-        
-        parts.append(f"\nUser request: {user_prompt}")
-        
+            parts.append("Available processors:")
+            for processor in caps_result.processors:
+                op_names = [
+                    op.get("name", "") if isinstance(op, dict) else str(op)
+                    for op in processor.ops
+                ]
+                parts.append(
+                    f"  - {processor.name} v{processor.version}: {', '.join(op_names)}"
+                )
+
+        parts.extend(
+            [
+                "Protocol rules:",
+                f"  - Emit control blocks using {PROC_OPEN} ... {PROC_CLOSE}",
+                "  - Use 'submit' to launch jobs, 'sleep' to wait for completion",
+                "  - Read results with 'read_result' using bounded slices",
+                "  - Never fabricate computational results",
+                f"\nUser request: {user_prompt}",
+            ]
+        )
         return "\n".join(parts)
 
     async def run_turn(self) -> bool:
-        """Run one generation turn. Returns True if should continue."""
+        """Run one generation turn. Returns True if the loop should continue."""
         if self.state == ControllerState.CLOSED:
             return False
-        
         if self.state == ControllerState.PARKED:
             return await self._handle_parked()
-        
-        if self.state == ControllerState.GENERATING:
+        if self.state in {ControllerState.IDLE, ControllerState.GENERATING}:
             return await self._handle_generating()
-        
         return True
 
+    async def run_until_idle(self, max_turns: int = 100) -> int:
+        """Run turns until the controller stops or the turn limit is reached."""
+        turns = 0
+        while turns < max_turns and await self.run_turn():
+            turns += 1
+        return turns
+
     async def _handle_generating(self) -> bool:
-        """Handle generation phase."""
-        # Check context budget
-        if self.host_state and len(self.host_state.tokens) >= self.config.max_context_tokens:
-            # Context full - need to handle
-            await self._handle_context_full()
+        """Run one generate/parse/dispatch cycle."""
+        if self._context_exhausted():
+            self._handle_context_full()
+            return False
+
+        # Events with next_turn/inject policy are rendered before decoding.
+        if self._pending_injections:
+            self._inject_events()
             return True
-        
-        # Check for pending injections
-        if self._pending_injections and self._should_inject_now():
-            await self._inject_events()
-            return True
-        
-        # Generate free text until sentinel
+
+        prompt = self.prompt + self.generated_buffer
+        try:
+            free_text = await self.decoder.decode_free(
+                prompt=prompt,
+                max_tokens=1024,
+                stop_sequence=PROC_OPEN,
+            )
+        except Exception as exc:
+            self._record_control_error("engine_error", str(exc))
+            self.state = ControllerState.CLOSED
+            return False
+
+        if not free_text:
+            if not self.incremental_scanner.buffer:
+                self.state = ControllerState.IDLE
+                return False
+            free_text = ""
+
         self.state = ControllerState.GENERATING
-        
-        stop_sequence = "<|proc|>"
-        free_text = await self.decoder.decode_free(
-            prompt=self.prompt + self.generated_buffer,
-            max_tokens=1024,
-            stop_sequence=stop_sequence,
-        )
-        
         self.generated_buffer += free_text
-        
-        # Scan for control block
-        free_text, control_msg = self.incremental_scanner.feed(free_text)
-        
-        if control_msg:
-            # Found control block - parse and dispatch
+
+        try:
+            _, control_msg = self.incremental_scanner.feed(free_text)
+        except ValidationError as exc:
+            # A malformed block must not kill the session. Reset the scanner and
+            # report the failure as an injectable ControlError event.
+            self.incremental_scanner = IncrementalScanner(self.scanner)
+            self._record_control_error("parser_failure", str(exc))
+            return True
+
+        if control_msg is not None:
             self.state = ControllerState.PARSING
             await self._handle_control_message(control_msg)
-            return True
-        
-        # No control block yet, continue generating
+            return self.state != ControllerState.CLOSED
+
         return True
 
     async def _handle_control_message(self, message: ModelMessage) -> None:
-        """Handle parsed control message."""
+        """Dispatch one parsed control message."""
         self.state = ControllerState.DISPATCHING
-        
+        handlers = {
+            ModelMessageKind.SUBMIT: self._handle_submit,
+            ModelMessageKind.SLEEP: self._handle_sleep,
+            ModelMessageKind.WAKE: self._handle_wake,
+            ModelMessageKind.READ_RESULT: self._handle_read_result,
+            ModelMessageKind.WRITE_INPUT: self._handle_write_input,
+            ModelMessageKind.CANCEL: self._handle_cancel,
+            ModelMessageKind.POLL: self._handle_poll,
+            ModelMessageKind.WAIT: self._handle_wait,
+            ModelMessageKind.QUERY_CAPABILITIES: self._handle_query_capabilities,
+        }
+        handler = handlers.get(message.kind)
+        if handler is None:
+            self._record_control_error(
+                "dispatch_failure",
+                f"Unsupported model message kind: {message.kind}",
+            )
+            return
         try:
-            if message.kind == ModelMessageKind.SUBMIT:
-                await self._handle_submit(message)
-            elif message.kind == ModelMessageKind.SLEEP:
-                await self._handle_sleep(message)
-            elif message.kind == ModelMessageKind.WAKE:
-                await self._handle_wake(message)
-            elif message.kind == ModelMessageKind.READ_RESULT:
-                await self._handle_read_result(message)
-            elif message.kind == ModelMessageKind.WRITE_INPUT:
-                await self._handle_write_input(message)
-            elif message.kind == ModelMessageKind.CANCEL:
-                await self._handle_cancel(message)
-            elif message.kind == ModelMessageKind.POLL:
-                await self._handle_poll(message)
-            elif message.kind == ModelMessageKind.WAIT:
-                await self._handle_wait(message)
-            elif message.kind == ModelMessageKind.QUERY_CAPABILITIES:
-                await self._handle_query_capabilities(message)
+            await handler(message)
+        except Exception as exc:
+            self._record_control_error("dispatch_failure", str(exc))
         finally:
-            self.state = ControllerState.GENERATING
+            if self.state in {ControllerState.DISPATCHING, ControllerState.PARSING}:
+                self.state = ControllerState.GENERATING
 
     async def _handle_submit(self, message: ModelMessage) -> None:
-        """Handle job submission."""
+        """Submit a job to the runtime."""
         from lmpu.protocol.messages import SubmitMessage
+
         msg: SubmitMessage = message
-        
-        # Submit to runtime
-        result = await self.runtime._submit({
-            "job_id": msg.job_id,
-            "processor": msg.processor,
-            "op": msg.op,
-            "inputs": msg.inputs,
-            "outputs": msg.outputs,
-            "program": msg.program,
-            "batch": msg.batch,
-            "config": msg.config,
-        }, self.session_id)
-        
-        # Track job
-        # Log submission
-        trace = get_trace_sink()
-        if trace:
-            trace.emit_control_parsed(self.session_id, "submit", result.job_id)
+        result = await self.runtime._submit(
+            {
+                "job_id": msg.job_id,
+                "processor": msg.processor,
+                "op": msg.op,
+                "inputs": msg.inputs,
+                "outputs": msg.outputs,
+                "program": msg.program,
+                "batch": msg.batch,
+                "config": msg.config,
+            },
+            self.session_id,
+        )
+        self._trace_control("submit", result.job_id)
 
     async def _handle_sleep(self, message: ModelMessage) -> None:
-        """Handle sleep request."""
+        """Register a sleep condition and park the host."""
         from lmpu.protocol.messages import SleepMessage
+
         msg: SleepMessage = message
-        
-        # Check sleep authority
+        condition = msg.until
+        level = msg.level or self.config.sleep_level
+
         if self.config.sleep_authority == SleepAuthority.CONTROLLER:
-            # Controller decides - ignore model sleep
+            # Controller-owned sleep still requires an explicit registered
+            # condition; a model sleep block is advisory only.
             return
-        elif self.config.sleep_authority == SleepAuthority.MODEL_WITH_POLICY:
-            # Validate against policy
-            condition = msg.until
-            max_sleep = self.config.max_sleep_seconds * 1000
-            if condition.deadline_ms and condition.deadline_ms > max_sleep:
-                condition.deadline_ms = max_sleep
-            # Clamp sleep level
-            if msg.level and msg.level != self.config.sleep_level:
-                msg.level = self.config.sleep_level
-        
-        # Register sleep with runtime
-        sleep_result = await self.runtime._sleep({
-            "until": condition.__dict__,
-            "level": msg.level,
-        }, self.session_id)
-        
+
+        deadline_ms = condition.deadline_ms
+        if self.config.sleep_authority == SleepAuthority.MODEL_WITH_POLICY:
+            max_sleep_ms = self.config.max_sleep_seconds * 1000
+            deadline_ms = min(deadline_ms, max_sleep_ms) if deadline_ms else max_sleep_ms
+            condition.deadline_ms = deadline_ms
+            if level != self.config.sleep_level:
+                level = self.config.sleep_level
+
+        sleep_result = await self.runtime._sleep(
+            {
+                "until": condition.model_dump(mode="json"),
+                "level": level,
+            },
+            self.session_id,
+        )
+
         if sleep_result.status == "already_satisfied":
-            # Condition already met - inject wake event immediately
-            woken = sleep_result.woken
-            await self._inject_wake_event(woken)
-        else:
-            # Park the host
-            level = msg.level or self.config.sleep_level
-            await self.engine.park(self.host_state, level)
-            self.state = ControllerState.PARKED
-            self._wake_event = asyncio.Event()
-            trace = get_trace_sink()
-            if trace:
-                trace.emit_park_enter(self.session_id, level, condition.all or [])
+            await self._inject_wake_event(sleep_result.woken or {})
+            return
+
+        now = time.monotonic()
+        self._sleep_deadline_monotonic = (
+            now + (deadline_ms / 1000) if deadline_ms else None
+        )
+        await self.engine.park(self.host_state, level)
+        self.state = ControllerState.PARKED
+        self._wake_event = asyncio.Event()
+        trace = get_trace_sink()
+        if trace:
+            trace.emit_park_enter(self.session_id, level, condition.all or [])
 
     async def _handle_wake(self, message: ModelMessage) -> None:
-        """Handle wake request."""
+        """Handle an explicit wake control block."""
         await self.runtime._wake({}, self.session_id)
-        if self._wake_event:
-            self._wake_event.set()
+        await self.force_wake("model_wake")
 
     async def _handle_read_result(self, message: ModelMessage) -> None:
-        """Handle read result request."""
+        """Read a bounded result view and queue it for injection."""
         from lmpu.protocol.messages import ReadResultMessage
+
         msg: ReadResultMessage = message
-        
-        result = await self.runtime._read({
-            "buffer": msg.buffer,
-            "slices": msg.slices,
-            "max_inline_bytes": msg.max_inline_bytes,
-        }, self.session_id)
-        
-        # Inject result into context
-        await self._inject_read_result(result)
+        result = await self.runtime._read(
+            {
+                "buffer": msg.buffer,
+                "slices": msg.slices,
+                "max_inline_bytes": msg.max_inline_bytes,
+            },
+            self.session_id,
+        )
+        self._queue_summary_event(EventKind.BUFFER_UPDATED, msg.job_id, result)
 
     async def _handle_write_input(self, message: ModelMessage) -> None:
-        """Handle write input request."""
+        """Write interactive input through the runtime."""
         from lmpu.protocol.messages import WriteInputMessage
+
         msg: WriteInputMessage = message
-        
-        await self.runtime._write({
-            "buffer": msg.field,  # Using field as buffer for interactive input
-            "slices": [],
-            "data": msg.value,
-        }, self.session_id)
+        await self.runtime._write(
+            {
+                "buffer": msg.field,
+                "slices": [],
+                "data": msg.value,
+            },
+            self.session_id,
+        )
 
     async def _handle_cancel(self, message: ModelMessage) -> None:
-        """Handle cancel request."""
+        """Cancel a job."""
         from lmpu.protocol.messages import CancelMessage
+
         msg: CancelMessage = message
-        
-        await self.runtime._cancel({
-            "job_id": msg.job_id,
-            "reason": msg.reason,
-        }, self.session_id)
+        await self.runtime._cancel(
+            {"job_id": msg.job_id, "reason": msg.reason},
+            self.session_id,
+        )
 
     async def _handle_poll(self, message: ModelMessage) -> None:
-        """Handle poll request."""
+        """Poll a job and queue the status for injection."""
         from lmpu.protocol.messages import PollMessage
+
         msg: PollMessage = message
-        
         result = await self.runtime._poll({"job_id": msg.job_id}, self.session_id)
-        # Inject poll result
-        await self._inject_poll_result(result)
+        self._queue_summary_event(EventKind.PROGRESS, msg.job_id, result)
 
     async def _handle_wait(self, message: ModelMessage) -> None:
-        """Handle wait request."""
+        """Wait for a job and queue the result for injection."""
         from lmpu.protocol.messages import WaitMessage
+
         msg: WaitMessage = message
-        
-        result = await self.runtime._wait({
-            "job_id": msg.job_id,
-            "timeout_ms": msg.timeout_ms,
-        }, self.session_id)
-        await self._inject_wait_result(result)
+        result = await self.runtime._wait(
+            {"job_id": msg.job_id, "timeout_ms": msg.timeout_ms},
+            self.session_id,
+        )
+        self._queue_summary_event(EventKind.JOB_COMPLETED, msg.job_id, result)
 
     async def _handle_query_capabilities(self, message: ModelMessage) -> None:
-        """Handle capability query."""
+        """Queue a capability summary for injection."""
         from lmpu.protocol.messages import QueryCapabilitiesMessage
+
         msg: QueryCapabilitiesMessage = message
-        
-        result = await self.runtime._capabilities({
-            "op": msg.op,
-            "processor": msg.processor,
-        })
-        await self._inject_capabilities(result)
+        result = await self.runtime._capabilities(
+            {"op": msg.op, "processor": msg.processor}
+        )
+        self._queue_summary_event(EventKind.PROGRESS, None, result)
 
     async def _handle_parked(self) -> bool:
-        """Handle parked state - wait for wake."""
+        """Wait for a wake event, resume the host, and inject Woken."""
         self.state = ControllerState.PARKED
-        
-        # Wait for wake event
-        if self._wake_event:
-            try:
-                await asyncio.wait_for(self._wake_event.wait(), timeout=300)
-            except asyncio.TimeoutError:
-                # Sleep deadline exceeded
-                await self._handle_wake_timeout()
-        
-        # Resume host
+        if self._wake_event is None:
+            self._wake_event = asyncio.Event()
+
+        timeout = float(self.config.max_sleep_seconds)
+        if self._sleep_deadline_monotonic is not None:
+            timeout = max(0.0, self._sleep_deadline_monotonic - time.monotonic())
+
+        try:
+            await asyncio.wait_for(self._wake_event.wait(), timeout=timeout)
+        except TimeoutError:
+            self._wake_reason = "timeout"
+            await self.runtime._wake({}, self.session_id)
+
+        reason = self._wake_reason or "woken"
+        statuses = dict(self._wake_job_statuses)
+
         self.state = ControllerState.WAKING
         await self.engine.resume(self.host_state)
-        
-        # Inject wake event
-        if self._wake_reason:
-            await self._inject_wake_event({
-                "reason": self._wake_reason,
+        await self._inject_wake_event(
+            {
+                "reason": reason,
                 "satisfied_jobs": [],
-                "statuses": self._wake_job_statuses,
+                "statuses": statuses,
                 "already_satisfied": False,
-            })
-        
+            }
+        )
+
         self.state = ControllerState.GENERATING
         self._wake_event = None
         self._wake_reason = None
         self._wake_job_statuses = {}
-        
+        self._sleep_deadline_monotonic = None
+
         trace = get_trace_sink()
         if trace:
-            trace.emit_wake(self.session_id, self._wake_reason or "unknown")
-        
+            trace.emit_wake(self.session_id, reason)
         return True
 
-    async def _handle_wake_timeout(self) -> None:
-        """Handle sleep timeout."""
-        self._wake_reason = "timeout"
-        # Force wake
-        await self.runtime._wake({}, self.session_id)
+    async def force_wake(self, reason: str = "forced_wake") -> None:
+        """Wake a parked session from outside the model loop."""
+        self._wake_reason = reason
+        if self.state == ControllerState.PARKED and self._wake_event is not None:
+            self._wake_event.set()
+        if self.session_id:
+            await self.runtime._wake({}, self.session_id)
 
-    def _should_inject_now(self) -> bool:
-        """Check if we should inject pending events now."""
-        if self._injected_this_turn >= self.config.max_injected_tokens_per_turn:
+    def _context_exhausted(self) -> bool:
+        if self.host_state is None:
             return False
-        return True
+        buffered_tokens = len(self.generated_buffer) // 4
+        return (
+            len(self.host_state.tokens) + buffered_tokens
+            >= self.config.max_context_tokens
+        )
 
-    async def _inject_events(self) -> None:
-        """Inject pending events into model context."""
-        while self._pending_injections and self._should_inject_now():
-            event = self._pending_injections.pop(0)
-            
-            # Render event as <|proc_event|> block
-            event_text = self._render_event(event)
-            
-            # Add to prompt buffer
-            self.generated_buffer += event_text
-            self._injected_this_turn += len(event_text) // 4  # rough token estimate
-            
-            # Update stats
-            self.host_state.injected_tokens += self._injected_this_turn
-            self.engine.stats_.total_injected_tokens += self._injected_this_turn
+    def _handle_context_full(self) -> None:
+        """Report context exhaustion instead of silently truncating."""
+        event = InjectedEvent(
+            version=1,
+            kind="event",
+            event=EventKind.RESULT_TOO_LARGE,
+            summary={
+                "buffer": "",
+                "reason": "context_budget_exhausted",
+                "max_context_tokens": self.config.max_context_tokens,
+                "suggested_slice": [],
+            },
+        )
+        self.generated_buffer += self._render_event(event)
+        self._trace_inject(event)
+        self.state = ControllerState.CLOSED
+
+    def _select_injection_action(self, event: InjectedEvent) -> str:
+        policy = (
+            self.config.injection_policy.parked
+            if self.state == ControllerState.PARKED
+            else self.config.injection_policy.generating
+        )
+        return policy.get(event.event.value, "observe")
+
+    def enqueue_event(self, event: InjectedEvent) -> str:
+        """Apply the configured injection policy to one event."""
+        action = self._select_injection_action(event)
+        if action == "observe":
+            self._trace_inject(event)
+            return action
+
+        if action == "wake" and self.state == ControllerState.PARKED:
+            self._wake_reason = event.event.value
+            if event.job_id and event.status:
+                self._wake_job_statuses[event.job_id] = event.status
+            if self._wake_event is not None:
+                self._wake_event.set()
+            self._trace_inject(event)
+            return action
+
+        self._pending_injections.append(event)
+        self._trace_inject(event)
+        return action
+
+    def _inject_events(self) -> None:
+        """Render pending events within the per-event and per-turn budgets."""
+        self._injected_this_turn = 0
+
+        while self._pending_injections:
+            event = self._pending_injections[0]
+            rendered = self._render_event(event)
+            encoded_size = len(rendered.encode("utf-8"))
+
+            if encoded_size > self.config.max_injected_bytes_per_event:
+                event = self._too_large_event(event, encoded_size)
+                rendered = self._render_event(event)
+                self._trace_inject(event)
+
+            token_estimate = max(1, len(rendered) // 4)
+            if (
+                self._injected_this_turn + token_estimate
+                > self.config.max_injected_tokens_per_turn
+            ):
+                break
+
+            self._pending_injections.pop(0)
+            self.generated_buffer += rendered
+            self._injected_this_turn += token_estimate
+            if self.host_state is not None:
+                self.host_state.injected_tokens += token_estimate
+            stats = getattr(self.engine, "stats_", None)
+            if stats is not None:
+                stats.total_injected_tokens += token_estimate
+
+    def _too_large_event(
+        self,
+        event: InjectedEvent,
+        encoded_size: int,
+    ) -> InjectedEvent:
+        return InjectedEvent(
+            version=1,
+            kind="event",
+            event=EventKind.RESULT_TOO_LARGE,
+            job_id=event.job_id,
+            status="truncated",
+            summary={
+                "buffer": event.job_id or "",
+                "reason": "event_exceeds_budget",
+                "original_event": event.event.value,
+                "bytes": encoded_size,
+                "max_bytes": self.config.max_injected_bytes_per_event,
+                "suggested_slice": [
+                    [0, self.config.max_injected_bytes_per_event, 1]
+                ],
+            },
+        )
 
     def _render_event(self, event: InjectedEvent) -> str:
-        """Render event as proc_event block."""
-        import json
-        data = event.model_dump(exclude_none=True)
-        json_str = json.dumps(data, separators=(",", ":"))
-        return f"\n<|proc_event|>\n{json_str}\n<|/proc_event|>\n"
+        data = event.model_dump(mode="json", exclude_none=True)
+        encoded = json.dumps(data, separators=(",", ":"))
+        return f"\n{PROC_EVENT_OPEN}\n{encoded}\n{PROC_EVENT_CLOSE}\n"
 
-    async def _inject_wake_event(self, woken_data: dict) -> None:
-        """Inject wake event."""
+    def _queue_summary_event(
+        self,
+        kind: EventKind,
+        job_id: str | None,
+        payload: Any,
+    ) -> None:
+        summary = (
+            payload.model_dump(mode="json")
+            if hasattr(payload, "model_dump")
+            else payload
+        )
+        self.enqueue_event(
+            InjectedEvent(
+                version=1,
+                kind="event",
+                event=kind,
+                job_id=job_id,
+                summary=summary if isinstance(summary, dict) else {"value": summary},
+            )
+        )
+
+    async def _inject_wake_event(self, woken_data: dict[str, Any]) -> None:
+        """Queue a Woken event after resume."""
+        satisfied_jobs = woken_data.get("satisfied_jobs") or []
+        statuses = woken_data.get("statuses") or {}
         event = InjectedEvent(
             version=1,
             kind="event",
             event=EventKind.WOKEN,
-            job_id=woken_data.get("satisfied_jobs", [None])[0],
+            job_id=satisfied_jobs[0] if satisfied_jobs else None,
             status=woken_data.get("reason"),
             summary={
-                "satisfied_jobs": woken_data.get("satisfied_jobs", []),
-                "statuses": woken_data.get("statuses", {}),
+                "reason": woken_data.get("reason"),
+                "satisfied_jobs": satisfied_jobs,
+                "statuses": statuses,
+                "already_satisfied": woken_data.get("already_satisfied", False),
             },
         )
         self._pending_injections.append(event)
+        self._trace_inject(event)
 
-    async def _inject_read_result(self, result) -> None:
-        """Inject read result."""
-        # Render as event
-        pass
+    def _record_control_error(self, reason: str, message: str) -> None:
+        event = InjectedEvent(
+            version=1,
+            kind="event",
+            event=EventKind.CONTROL_ERROR,
+            status="rejected",
+            summary={"reason": reason, "error": message},
+        )
+        self.generated_buffer += self._render_event(event)
+        self._trace_inject(event)
 
-    async def _inject_poll_result(self, result) -> None:
-        """Inject poll result."""
-        pass
+    def _trace_control(self, kind: str, job_id: str | None) -> None:
+        trace = get_trace_sink()
+        if trace:
+            trace.emit_control_parsed(self.session_id, kind, job_id or "")
 
-    async def _inject_wait_result(self, result) -> None:
-        """Inject wait result."""
-        pass
+    def _trace_inject(self, event: InjectedEvent) -> None:
+        trace = get_trace_sink()
+        if trace:
+            trace.emit_inject(
+                self.session_id,
+                event.event.value,
+                event.job_id or "",
+            )
 
-    async def _inject_capabilities(self, result) -> None:
-        """Inject capabilities."""
-        pass
-
-    async def _handle_context_full(self) -> None:
-        """Handle context budget exhaustion."""
-        # Could trigger summarization or truncation
-        pass
-
-    async def on_job_completed(self, job_id: str, status: ModelJobStatus) -> None:
-        """Callback when job completes (called from runtime)."""
-        if self.state == ControllerState.PARKED:
-            # Check if this satisfies sleep condition
-            # For simplicity, wake on any completion
-            self._wake_reason = "job_done"
-            self._wake_job_statuses[job_id] = status
-            if self._wake_event:
-                self._wake_event.set()
-        else:
-            # Queue for injection
-            event = InjectedEvent(
+    async def on_job_completed(
+        self,
+        job_id: str,
+        status: ModelJobStatus,
+    ) -> None:
+        """Runtime callback for terminal job success."""
+        self.enqueue_event(
+            InjectedEvent(
                 version=1,
                 kind="event",
                 event=EventKind.JOB_COMPLETED,
                 job_id=job_id,
                 status=status.value,
             )
-            self._pending_injections.append(event)
+        )
 
     async def on_job_failed(self, job_id: str, error: str) -> None:
-        """Callback when job fails."""
-        if self.state == ControllerState.PARKED and self.config.wake_on_failure:
-            self._wake_reason = "job_failed"
-            if self._wake_event:
-                self._wake_event.set()
-        else:
-            event = InjectedEvent(
+        """Runtime callback for terminal job failure."""
+        self.enqueue_event(
+            InjectedEvent(
                 version=1,
                 kind="event",
                 event=EventKind.JOB_FAILED,
@@ -515,10 +693,11 @@ class SessionController:
                 status="failed",
                 summary={"error": error},
             )
-            self._pending_injections.append(event)
+        )
 
     async def close(self) -> None:
-        """Close session."""
+        """Close the session and release runtime resources."""
         self.state = ControllerState.CLOSED
+        self._wake_event = None
         await self.runtime._close({"detach": False}, self.session_id)
         await self.engine.close()

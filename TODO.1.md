@@ -80,17 +80,16 @@ not merely "a file exists".
 | Explicit batch API and async batch coalescing with per-job fanout | Done | integration test; manual 100-item batch run |
 | `pure.func`, `python.vm`, `vector.engine`, `symbolic.planner`, `neural.summary`, `hardware.stub` | Partial | all register and return results; all six pass the representative contract suite (`tests/contract/test_processor_contract.py`); per-op coverage is incomplete |
 | `python.vm` timeout and cancellation enforcement | Partial | parent-side hard cancel verified; child-side sandbox limits incomplete |
-| Host engine ABC, scripted engine, parser, grammar, session controller | Partial | modules exist; session loop and injection rendering incomplete |
+| Host engine ABC, scripted engine, parser, grammar, session controller | Partial | scripted session loop, injection policy, context/event budgets, `ResultTooLarge`, parser-failure recovery, and forced wake are covered by `tests/scenario/test_session_loop.py`; HF engine still unverified |
 | HF engine and GPU path | Not verified | code exists; model/toolchain gate P0-08 is open |
 | Trace sink and metrics | Partial | JSONL sink, redaction, and replay tests exist (`tests/unit/test_trace.py`); host token/energy metrics missing |
 | Benchmarks, Mission Control, RFC/SDK/docs | Not started | directories exist only |
 
 **Immediate next work (in order).**
 
-1. Make the scripted-host session loop real: event injection, context budget, `ResultTooLarge`, parser failure, forced wake.
-2. Add `SCM_RIGHTS` fd passing for buffers and an end-to-end `vector.engine` matmul with `copy_count == 0`.
-3. Add the failure-injection suite (worker crash, OOM, duplicate delivery, event-before-sleep, disconnect).
-4. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
+1. Add `SCM_RIGHTS` fd passing for buffers and an end-to-end `vector.engine` matmul with `copy_count == 0`.
+2. Add the failure-injection suite (worker crash, OOM, duplicate delivery, event-before-sleep, disconnect).
+3. Verify P0-08 on the reference GPU: Transformers 5.x, Qwen3.5-0.8B load, tokens/sec, then start P3 GPU work.
 
 **Completed in this pass (2026-11-03).**
 
@@ -98,12 +97,13 @@ not merely "a file exists".
 - Property tests for JSON-RPC framing round-trip and typed buffer import/slice/write without NumPy divergence.
 - Trace replay helper (`read_trace`, `replay_trace`, contiguous-gap detection) and sensitive-payload redaction by default.
 - Processor checksums now use the shared BLAKE3 helper instead of `hashlib.blake3`, which does not exist on Python 3.14.
+- Scripted host loop: `ScriptedDecoder`, runtime session adoption, policy-driven event injection, event/context budgets, `ResultTooLarge`, parser-failure recovery, engine-error handling, and forced wake.
+- Scenario suite `tests/scenario/test_session_loop.py` covers nine model-free controller cases.
 
 **P1 exit gate — still open.**
 
 - Grants/refcount release audit and negative authorization tests (P1-06).
 - Routing contract test and advertisement/authorization separation (P1-07).
-- Scripted session-loop scenarios: injection, `ResultTooLarge`, parser failure, forced wake (P1-09, P3-06/P3-07).
 - Demos 1 and 2 in headless assertion mode (P1-10).
 - End-to-end 16 MiB buffer slice read and buffer-import provenance checks (P1-14).
 
@@ -1495,7 +1495,7 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [~] P1-06 Grants, refcounts, TTL, reaper (M)
 - [~] P1-07 CapabilityRegistry + routing + `query_capabilities`; advertisement is separate from session authorization (M)
 - [x] P1-08 `pure.func` processor and contract tests (M)
-- [~] P1-09 Scripted host + minimal session loop (M)
+- [x] P1-09 Scripted host + minimal session loop (M)
 - [~] P1-10 Demos 1 and 2, headless assertion mode (S)
 - [x] P1-11 Property tests: buffer slices, protocol round-trip (M)
 - [x] P1-12 Runtime RPC handlers: hello, capabilities, submit, poll, wait, read, write, cancel, ack, configure, close; health reports liveness, readiness, and backend availability (M)
@@ -1529,7 +1529,7 @@ Schedule includes roughly 15% contingency. If the vLLM spike fails, Phase 6 drop
 - [~] P3-04 Two-phase constrained decoder spike: Outlines vs lm-format-enforcer (L)
 - [~] P3-05 Parser, schema validation, `ControlError`, minimal repair policy (M)
 - [~] P3-06 SessionController: generate/parse/dispatch/park/wake (L)
-- [~] P3-07 Injection renderer + context budget + `ResultTooLarge` (M)
+- [x] P3-07 Injection renderer + context budget + `ResultTooLarge` (M)
 - [~] P3-08 S1 park/resume with zero-forward-pass assertion (M)
 - [ ] P3-09 S2 offload/restore spike and cache-equality test (M)
 - [ ] P3-10 Demos 4 and 5 with `Qwen/Qwen3.5-0.8B`; record a 2B run for the demo (L)
@@ -1802,7 +1802,7 @@ Change control: record any reversal in `docs/adr/`, update this table, and updat
 ## 18. Definition of done for 0.1
 
 - [ ] Phase 0–7 gates are green.
-- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (Unit, property, contract, and integration pass: 92 tests, 2 skipped; the scenario suite is not written yet.)
+- [~] `pytest -m "unit or property or contract or integration or scenario"` passes on CPU in <5 minutes. (Unit, property, contract, integration, and scenario pass: 101 tests, 2 skipped.)
 - [ ] `make test-gpu` passes on the reference GPU runner.
 - [ ] Demos 1–12 run from a clean checkout and produce traces.
 - [ ] Mission Control dashboard shows multiple concurrent processors, live buffers, progress, energy, and a parked host with frozen forward counters.
@@ -1959,9 +1959,9 @@ These restate and tighten §0.2. They are not new promises.
 
 1. Reconcile plan and code. **Done in this revision.**
 2. Close §20.4: worker-loss test, bounded queue/backpressure test, negative authorization tests, resource-release audit.
-3. Close P1 exit gate: contract suite, property tests, trace/replay tests, demo 1/2 assertion mode.
-4. Complete the scripted session loop: injection, context budget, `ResultTooLarge`, parser failure, forced wake.
-5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`.
+3. Close P1 exit gate: contract suite, property tests, trace/replay tests **(done)**; demo 1/2 assertion mode remains.
+4. Complete the scripted session loop: injection, context budget, `ResultTooLarge`, parser failure, forced wake. **Done.**
+5. Add `SCM_RIGHTS` and the portable copy fallback; then measure `copy_count` for `vector.engine`. **Next.**
 6. Verify P0-08 on the reference GPU and start P3.
 7. Keep P5.5 benchmarks behind a working P3 sleep/wake proof.
 
