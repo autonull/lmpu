@@ -155,9 +155,6 @@ class SessionController:
 
     async def initialize(self, initial_prompt: str) -> None:
         """Initialize the session and adopt the runtime-assigned session ID."""
-        self.prompt = await self._build_prompt(initial_prompt)
-        self.host_state = await self.engine.prefill(self.prompt)
-
         hello = await self.runtime._hello(
             {
                 "protocol": "lmpu/1",
@@ -172,6 +169,11 @@ class SessionController:
         if runtime_session_id:
             self.session_id = runtime_session_id
 
+        if hasattr(self.engine, "session_id"):
+            self.engine.session_id = self.session_id
+
+        self.prompt = await self._build_prompt(initial_prompt)
+        self.host_state = await self.engine.prefill(self.prompt)
         self.state = ControllerState.GENERATING
 
     async def _build_prompt(self, user_prompt: str) -> str:
@@ -354,6 +356,7 @@ class SessionController:
         self._sleep_deadline_monotonic = now + (deadline_ms / 1000) if deadline_ms else None
         assert self.host_state is not None
         await self.engine.park(self.host_state, level)
+        self._mark_sleep_start()
         self.state = ControllerState.PARKED
         self._wake_event = asyncio.Event()
         trace = get_trace_sink()
@@ -459,6 +462,7 @@ class SessionController:
         self.state = ControllerState.WAKING
         assert self.host_state is not None
         await self.engine.resume(self.host_state)
+        self._mark_sleep_end()
         await self._inject_wake_event(
             {
                 "reason": reason,
@@ -561,9 +565,6 @@ class SessionController:
             self._injected_this_turn += token_estimate
             if self.host_state is not None:
                 self.host_state.injected_tokens += token_estimate
-            stats = getattr(self.engine, "stats_", None)
-            if stats is not None:
-                stats.total_injected_tokens += token_estimate
 
     def _too_large_event(
         self,
@@ -653,6 +654,22 @@ class SessionController:
                 event.job_id or "",
             )
 
+    def _host_metrics(self):
+        metrics = getattr(self.engine, "metrics", None)
+        if metrics is None or not hasattr(self.engine, "session_id"):
+            return None
+        return metrics.get_or_create(self.session_id)
+
+    def _mark_sleep_start(self) -> None:
+        metrics = self._host_metrics()
+        if metrics is not None:
+            metrics.start_sleep()
+
+    def _mark_sleep_end(self) -> None:
+        metrics = self._host_metrics()
+        if metrics is not None:
+            metrics.end_sleep()
+
     async def on_job_completed(
         self,
         job_id: str,
@@ -686,5 +703,8 @@ class SessionController:
         """Close the session and release runtime resources."""
         self.state = ControllerState.CLOSED
         self._wake_event = None
+        metrics = getattr(self.engine, "metrics", None)
+        if metrics is not None and hasattr(self.engine, "session_id"):
+            metrics.flush(self.engine.session_id)
         await self.runtime._close({"detach": False}, self.session_id)
         await self.engine.close()

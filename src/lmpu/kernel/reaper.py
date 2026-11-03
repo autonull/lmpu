@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import ulid
 import time
-from typing import Any, Callable, Optional
+from typing import Any
 
-from .jobs import JobTable, JobStatus
-from .events import EventLog
+import ulid
+
 from ..memory.buffers import BufferManager
-from ..protocol.messages import EventKind, Event, SleepingData
+from ..protocol.messages import Event, EventKind, JobFailedData
+from .events import EventLog
+from .jobs import JobStatus, JobTable
 
 
 class Reaper:
@@ -33,8 +34,8 @@ class Reaper:
         self.job_timeout_ms = job_timeout_ms
         self.buffer_ttl_ms = buffer_ttl_ms
         self.session_grace_ms = session_grace_ms
-        
-        self._task: Optional[asyncio.Task] = None
+
+        self._task: asyncio.Task | None = None
         self._running = False
         self._orphaned_sessions: dict[str, float] = {}  # session_id -> disconnect_time
         self._worker_health: dict[str, float] = {}  # worker_id -> last_heartbeat
@@ -63,7 +64,7 @@ class Reaper:
     def update_worker_heartbeat(self, worker_id: str) -> None:
         self._worker_health[worker_id] = time.time()
 
-    def get_worker_health(self, worker_id: str) -> Optional[float]:
+    def get_worker_health(self, worker_id: str) -> float | None:
         return self._worker_health.get(worker_id)
 
     async def _run(self) -> None:
@@ -77,16 +78,16 @@ class Reaper:
 
     async def _reap_once(self) -> None:
         now = time.time()
-        
+
         # 1. Reap expired jobs
         await self._reap_jobs(now)
-        
+
         # 2. Reap orphaned sessions
         await self._reap_sessions(now)
-        
+
         # 3. Reap expired buffers
         await self._reap_buffers(now)
-        
+
         # 4. Check worker health
         await self._check_workers(now)
 
@@ -109,6 +110,7 @@ class Reaper:
     async def _timeout_job(self, job) -> None:
         """Handle job timeout."""
         from ..protocol.messages import ErrorCode
+
         job.status = JobStatus.FAILED
         job.completed_at = time.time()
         job.error = {
@@ -144,20 +146,18 @@ class Reaper:
                         # Default: cancel
                         self.job_table.transition(job.job_id, JobStatus.CANCEL_REQUESTED)
                         # Will be picked up by worker
-                
+
                 # Clean up buffers
                 self.buffer_manager.cleanup_session(session_id)
-                
+
                 # Remove from tracking
                 self._orphaned_sessions.pop(session_id, None)
                 self.event_log.remove_session(session_id)
                 self.job_table._session_jobs.pop(session_id, None)
 
     async def _reap_buffers(self, now: float) -> None:
-        """Clean up expired buffers."""
-        # BufferManager handles TTL internally
-        # This is a fallback for orphaned buffers
-        pass
+        """Delete buffers whose TTL elapsed while their session is gone."""
+        self.buffer_manager.reap_expired(now)
 
     async def _check_workers(self, now: float) -> None:
         """Check for dead workers."""
@@ -167,8 +167,8 @@ class Reaper:
         for worker_id, last_heartbeat in self._worker_health.items():
             if now - last_heartbeat > 3:  # 3 seconds without heartbeat
                 dead_workers.append(worker_id)
-        
-        for worker_id in dead_workers:
+
+        for _worker_id in dead_workers:
             # WorkerPool will handle restart
             pass
 

@@ -9,7 +9,13 @@ from .grammar import (
     create_decoder,
 )
 from .hf import HFDecoder, HFEngine
-from .metrics import HostMetrics, MetricsCollector, get_metrics_collector
+from .metrics import (
+    EnergySample,
+    EnergySampler,
+    HostMetrics,
+    MetricsCollector,
+    get_metrics_collector,
+)
 from .parser import ControlBlockParser, IncrementalScanner, SentinelScanner
 from .scripted import ScriptedDecoder
 from .session import (
@@ -44,4 +50,6 @@ __all__ = [
     "HostMetrics",
     "MetricsCollector",
     "get_metrics_collector",
+    "EnergySample",
+    "EnergySampler",
 ]

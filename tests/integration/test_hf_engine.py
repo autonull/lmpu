@@ -61,3 +61,25 @@ async def test_hf_engine_runs_inside_session_loop(tmp_path) -> None:
     finally:
         await controller.close()
         await runtime.stop()
+
+
+async def test_hf_decoder_reuses_kv_across_injected_turns() -> None:
+    engine = HFEngine(model_name="Qwen/Qwen3.5-0.8B", device="cuda", dtype="bfloat16")
+    try:
+        decoder = HFDecoder(engine, max_tokens=4)
+        prompt = "Write a list of numbers: 1, 2, 3,"
+        first = await decoder.decode_free(prompt, max_tokens=4, stop_sequence="")
+        prefills = engine.stats_.total_prefill_tokens
+        forwards = engine.stats_.total_forward_passes
+
+        await decoder.decode_free(
+            prompt + first + "\n<|event|>{}\n<|/event|>",
+            max_tokens=4,
+            stop_sequence="",
+        )
+
+        assert engine.stats_.total_prefill_tokens == prefills
+        assert engine.stats_.total_forward_passes > forwards
+        assert engine.stats_.total_injected_tokens > 0
+    finally:
+        await engine.close()

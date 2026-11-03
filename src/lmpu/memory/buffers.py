@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import shutil
 import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -106,8 +108,8 @@ class BufferManager:
         """Parse dtype string to numpy dtype."""
         try:
             return np.dtype(dtype_str)
-        except TypeError:
-            raise BufferError(f"Invalid dtype: {dtype_str}")
+        except TypeError as exc:
+            raise BufferError(f"Invalid dtype: {dtype_str}") from exc
 
     def _validate_shape(self, shape: tuple[int, ...], dtype: np.dtype) -> int:
         """Validate shape and return total bytes."""
@@ -246,7 +248,7 @@ class BufferManager:
         buffer_id = self._make_buffer_id(name)
         mm, f = self.backend.create_buffer(session_id, buffer_id, expected_bytes)
         try:
-            with open(path_obj, "rb") as src:
+            with path_obj.open("rb") as src:
                 shutil.copyfileobj(src, f)
             f.flush()
             checksum = self.backend.compute_checksum(session_id, buffer_id)
@@ -351,31 +353,31 @@ class BufferManager:
         slices: list[tuple[int, int, int]],
         data: np.ndarray,
         job_id: str,
+        enforce_grant: bool = True,
     ) -> BufferRef:
-        """Write to a buffer view (requires write grant)."""
+        """Write to a buffer view (requires write grant unless disabled)."""
         meta = self._metadata.get(buffer_id)
         if not meta:
             raise BufferError(f"Buffer not found: {buffer_id}")
 
         # Check grant
         slice_objs = tuple(slice(s[0], s[1], s[2]) for s in slices)
-        # Calculate byte offset and length
-        np_dtype = self._dtype_from_str(meta.dtype)
-        itemsize = np_dtype.itemsize
-
-        # Simplified: check full buffer grant for now
-        grant = self.grant_manager.check_access(job_id, buffer_id, 0, meta.bytes, write=True)
-        if not grant:
-            raise BufferError(f"No write grant for job {job_id} on buffer {buffer_id}")
+        grant = None
+        if enforce_grant:
+            grant = self.grant_manager.check_access(job_id, buffer_id, 0, meta.bytes, write=True)
+            if not grant:
+                raise BufferError(f"No write grant for job {job_id} on buffer {buffer_id}")
 
         mm, f = self.backend.open_buffer(meta.session_id, buffer_id, writable=True)
         try:
+            np_dtype = self._dtype_from_str(meta.dtype)
             arr = np.ndarray(meta.shape, dtype=np_dtype, buffer=mm)
             arr[slice_objs] = data
             mm.flush()
             checksum = compute_checksum(mm[:])
             meta.checksum = checksum
-            meta.grants.append(grant)
+            if grant is not None:
+                meta.grants.append(grant)
         finally:
             mm.close()
             f.close()
@@ -485,11 +487,32 @@ class BufferManager:
 
     def release_grants(self, job_id: str) -> int:
         """Release all grants for a job. Returns count released."""
+        grants = self.grant_manager.get_job_grants(job_id)
         count = self.grant_manager.revoke_job(job_id)
-        for meta in self._metadata.values():
+        per_buffer: dict[str, int] = {}
+        for grant in grants:
+            per_buffer[grant.buffer_id] = per_buffer.get(grant.buffer_id, 0) + 1
+        for buffer_id, released in per_buffer.items():
+            meta = self._metadata.get(buffer_id)
+            if meta is None:
+                continue
             meta.grants = [g for g in meta.grants if g.job_id != job_id]
-            meta.ref_count = max(0, meta.ref_count - count)
+            meta.ref_count = max(0, meta.ref_count - released)
         return count
+
+    def reap_expired(self, now: float | None = None) -> list[str]:
+        """Delete non-persistent buffers whose TTL has elapsed."""
+        now = time.time() if now is None else now
+        expired = [
+            buffer_id
+            for buffer_id, meta in self._metadata.items()
+            if meta.ttl_ms is not None
+            and not meta.persist
+            and (now - meta.created_at) * 1000 >= meta.ttl_ms
+        ]
+        for buffer_id in expired:
+            self.delete(buffer_id, force=True)
+        return expired
 
     def list_buffers(self, session_id: str) -> list[BufferRef]:
         """List all buffers for a session."""
@@ -521,8 +544,3 @@ class BufferManager:
             np_dtype = self._dtype_from_str(meta.dtype)
             arr = np.ndarray(meta.shape, dtype=np_dtype, buffer=mm)
             yield arr
-
-
-# Import for export_file
-import shutil
-from pathlib import Path

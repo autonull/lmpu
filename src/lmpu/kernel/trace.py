@@ -150,22 +150,26 @@ class TraceSink:
 
     def start_trace(self, trace_id: str, session_id: str) -> None:
         self._current_trace_id = trace_id
-        self.emit({
-            "type": "session_start",
-            "trace_id": trace_id,
-            "session_id": session_id,
-            "ts": time.time(),
-            "mono": time.monotonic(),
-        })
+        self.emit(
+            {
+                "type": "session_start",
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "ts": time.time(),
+                "mono": time.monotonic(),
+            }
+        )
 
     def end_trace(self, trace_id: str, session_id: str) -> None:
-        self.emit({
-            "type": "session_end",
-            "trace_id": trace_id,
-            "session_id": session_id,
-            "ts": time.time(),
-            "mono": time.monotonic(),
-        })
+        self.emit(
+            {
+                "type": "session_end",
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "ts": time.time(),
+                "mono": time.monotonic(),
+            }
+        )
         if self._current_trace_id == trace_id:
             self._current_trace_id = None
 
@@ -206,7 +210,7 @@ class TraceSink:
             record["job_id"] = event.job_id
 
         # Add event data (excluding large payloads)
-        data_dict = event.data.model_dump() if hasattr(event.data, 'model_dump') else {}
+        data_dict = event.data.model_dump() if hasattr(event.data, "model_dump") else {}
         if event.type in (EventKind.PROGRESS, EventKind.HEARTBEAT):
             # Sample high-frequency events
             self._token_counter += 1
@@ -223,27 +227,44 @@ class TraceSink:
 
     def emit_host_forward(self, session_id: str, tokens: int, phase: str) -> None:
         """Emit host forward pass record."""
-        self.emit({
-            "ts": time.time(),
-            "mono": time.monotonic(),
-            "trace": self._current_trace_id,
-            "session": session_id,
-            "type": "host_forward",
-            "tokens": tokens,
-            "phase": phase,
-        })
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "host_forward",
+                "tokens": tokens,
+                "phase": phase,
+            }
+        )
+
+    def emit_host_metrics(self, session_id: str, metrics: dict[str, Any]) -> None:
+        """Emit the canonical host metrics payload once for a session."""
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "host_metrics",
+                "metrics": metrics,
+            }
+        )
 
     def emit_control_parsed(self, session_id: str, kind: str, job_id: str) -> None:
         """Emit control block parsed record."""
-        self.emit({
-            "ts": time.time(),
-            "mono": time.monotonic(),
-            "trace": self._current_trace_id,
-            "session": session_id,
-            "type": "control_parsed",
-            "kind": kind,
-            "job_id": job_id,
-        })
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "control_parsed",
+                "kind": kind,
+                "job_id": job_id,
+            }
+        )
 
     def emit_job_state(
         self,
@@ -253,51 +274,59 @@ class TraceSink:
         to_status: str,
     ) -> None:
         """Emit job state transition."""
-        self.emit({
-            "ts": time.time(),
-            "mono": time.monotonic(),
-            "trace": self._current_trace_id,
-            "session": session_id,
-            "type": "job_state",
-            "job_id": job_id,
-            "from": from_status,
-            "to": to_status,
-        })
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "job_state",
+                "job_id": job_id,
+                "from": from_status,
+                "to": to_status,
+            }
+        )
 
     def emit_park_enter(self, session_id: str, level: str, jobs: list[str]) -> None:
         """Emit park enter."""
-        self.emit({
-            "ts": time.time(),
-            "mono": time.monotonic(),
-            "trace": self._current_trace_id,
-            "session": session_id,
-            "type": "park_enter",
-            "level": level,
-            "jobs": jobs,
-        })
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "park_enter",
+                "level": level,
+                "jobs": jobs,
+            }
+        )
 
     def emit_wake(self, session_id: str, reason: str) -> None:
         """Emit wake."""
-        self.emit({
-            "ts": time.time(),
-            "mono": time.monotonic(),
-            "trace": self._current_trace_id,
-            "session": session_id,
-            "type": "wake",
-            "reason": reason,
-        })
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "wake",
+                "reason": reason,
+            }
+        )
 
     def emit_inject(self, session_id: str, event: str, job_id: str) -> None:
         """Emit event injection."""
-        self.emit({
-            "ts": time.time(),
-            "mono": time.monotonic(),
-            "trace": self._current_trace_id,
-            "session": session_id,
-            "type": "inject",
-            "event": event,
-            "job_id": job_id,
-        })
+        self.emit(
+            {
+                "ts": time.time(),
+                "mono": time.monotonic(),
+                "trace": self._current_trace_id,
+                "session": session_id,
+                "type": "inject",
+                "event": event,
+                "job_id": job_id,
+            }
+        )
 
     def emit_buffer_access(
         self,

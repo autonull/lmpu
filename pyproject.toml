@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 host = [
     "torch>=2.5,<3",
-    "transformers>=5.21,<6",
+    "transformers>=5.16,<6",
     "tokenizers>=0.20,<1",
     "accelerate>=0.33,<1",
 ]
@@ -43,7 +43,7 @@ decoder = [
 dashboard = [
     "fastapi>=0.115,<1",
     "uvicorn>=0.30,<1",
-    "sse-starflare>=2.0,<3",
+    "sse-starlette>=2.0,<3",
     "pynvml>=12.0,<13",
 ]
 bench = [
@@ -68,6 +68,14 @@ dev = [
 # Local development overrides if needed
 
 [tool.uv]
+# vLLM pins its own outlines-core, which cannot coexist with the decoder
+# extra's outlines pin. The two are validated in isolated environments.
+conflicts = [
+    [{ extra = "vllm" }, { extra = "host" }],
+    [{ extra = "vllm" }, { extra = "decoder" }],
+    [{ extra = "vllm" }, { extra = "dashboard" }],
+    [{ extra = "vllm" }, { extra = "bench" }],
+]
 dev-dependencies = [
     "ruff>=0.6,<1",
     "mypy>=1.11,<2",

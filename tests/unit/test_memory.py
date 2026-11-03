@@ -226,3 +226,19 @@ class TestBufferManager:
         
         count = buffer_manager.release_grants("job_1")
         assert count == 2
+
+def test_release_grants_decrements_only_the_matching_buffer(buffer_manager):
+    first = buffer_manager.create("session_1", "first", "uint8", (8,))
+    second = buffer_manager.create("session_1", "second", "uint8", (8,))
+    buffer_manager.grant_read("job_1", first.buffer_id)
+    buffer_manager.grant_read("job_1", second.buffer_id)
+    buffer_manager.grant_read("job_2", second.buffer_id)
+
+    assert buffer_manager.release_grants("job_1") == 2
+
+    first_meta = buffer_manager._metadata[first.buffer_id]
+    second_meta = buffer_manager._metadata[second.buffer_id]
+    assert first_meta.ref_count == 0
+    assert first_meta.grants == []
+    assert second_meta.ref_count == 1
+    assert [grant.job_id for grant in second_meta.grants] == ["job_2"]

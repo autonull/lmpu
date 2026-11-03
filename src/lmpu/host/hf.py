@@ -8,10 +8,11 @@ import torch
 
 from .engine import HostEngine, HostState, HostStats, SleepLevel
 from .grammar import ConstrainedDecoder
+from .metrics import EnergySampler, MetricsCollector, get_metrics_collector
 
 
 class HFEngine(HostEngine):
-    """Hugging Face reference engine with manual decode loop."""
+    """Hugging Face reference engine with an incremental manual decode loop."""
 
     def __init__(
         self,
@@ -20,6 +21,11 @@ class HFEngine(HostEngine):
         dtype: str = "bfloat16",
         trust_remote_code: bool = False,
         max_context: int = 32768,
+        model: Any = None,
+        tokenizer: Any = None,
+        session_id: str | None = None,
+        metrics: MetricsCollector | None = None,
+        energy_sampler: EnergySampler | None = None,
     ):
         self.model_name = model_name
         self.device = device
@@ -27,18 +33,20 @@ class HFEngine(HostEngine):
         self.trust_remote_code = trust_remote_code
         self.max_context = max_context
 
-        self._model = None
-        self._tokenizer = None
+        self._model = model
+        self._tokenizer = tokenizer
         self._device_obj = torch.device(device)
         self.stats_ = HostStats()
-        self._initialized = False
+        self._initialized = model is not None and tokenizer is not None
+        self.session_id = session_id
+        self.metrics = metrics or get_metrics_collector()
+        self.energy_sampler = energy_sampler or EnergySampler()
 
     async def _initialize(self) -> None:
         """Lazy initialization of model and tokenizer."""
         if self._initialized:
             return
 
-        # Import here to avoid dependency if not used
         from transformers import AutoModelForImageTextToText, AutoTokenizer
 
         self._tokenizer = AutoTokenizer.from_pretrained(
@@ -58,35 +66,82 @@ class HFEngine(HostEngine):
         self._model.eval()
         self._initialized = True
 
-    async def prefill(self, prompt: str) -> HostState:
-        await self._initialize()
+    def _extend_mask(self, state: HostState, tokens: int) -> torch.Tensor:
+        ones = torch.ones((1, tokens), device=self._device_obj, dtype=torch.long)
+        if state.attention_mask is None:
+            return ones
+        return torch.cat([state.attention_mask.view(1, -1), ones], dim=1)
 
-        # Tokenize
-        inputs = self._tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
-        input_ids = inputs["input_ids"].to(self._device_obj)
-        attention_mask = inputs["attention_mask"].to(self._device_obj)
-
-        # Prefill forward pass
+    def _forward(
+        self,
+        state: HostState,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> None:
         with torch.inference_mode():
             outputs = self._model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                past_key_values=state.past_key_values,
                 use_cache=True,
                 return_dict=True,
             )
+        state.past_key_values = outputs.past_key_values
+        state.logits = outputs.logits[:, -1, :]
+        state.attention_mask = attention_mask[0]
+        state.forward_passes += 1
+        self.stats_.total_forward_passes += 1
+        self.stats_.peak_context_tokens = max(self.stats_.peak_context_tokens, len(state.tokens))
 
-        past_key_values = outputs.past_key_values
-        self.stats_.total_prefill_tokens = input_ids.shape[1]
-        self.stats_.total_forward_passes = 1
-
-        return HostState(
-            tokens=input_ids[0].tolist(),
-            attention_mask=attention_mask[0],
-            past_key_values=past_key_values,
-            prefill_tokens=input_ids.shape[1],
-            generated_tokens=0,
-            forward_passes=1,
+    def _record(self, kind: str, tokens: int) -> None:
+        """Feed one forward pass to the canonical metrics schema and trace."""
+        if not self.session_id:
+            return
+        vram_peak_mb = 0.0
+        if torch.cuda.is_available():
+            vram_peak_mb = torch.cuda.max_memory_allocated(self._device_obj) / (1024.0**2)
+        energy = self.energy_sampler.sample()
+        self.metrics.record_forward(
+            self.session_id,
+            kind,
+            tokens=tokens,
+            energy=energy,
+            vram_peak_mb=vram_peak_mb,
         )
+
+    async def prefill(self, prompt: str) -> HostState:
+        await self._initialize()
+
+        inputs = self._tokenizer(prompt, return_tensors="pt", add_special_tokens=False)
+        input_ids = inputs["input_ids"].to(self._device_obj)
+        attention_mask = inputs["attention_mask"].to(self._device_obj)
+
+        state = HostState(tokens=input_ids[0].tolist())
+        self._forward(state, input_ids, attention_mask)
+        state.prefill_tokens = input_ids.shape[1]
+        self.stats_.total_prefill_tokens += state.prefill_tokens
+        self._record("prefill", state.prefill_tokens)
+        return state
+
+    async def append(self, state: HostState, text: str) -> int:
+        """Append text to the live KV cache without re-prefilling the prompt."""
+        if not text:
+            return 0
+        await self._initialize()
+
+        inputs = self._tokenizer(text, return_tensors="pt", add_special_tokens=False)
+        input_ids = inputs["input_ids"].to(self._device_obj)
+        tokens = input_ids.shape[1]
+        if tokens == 0:
+            return 0
+
+        attention_mask = self._extend_mask(state, tokens)
+        self._forward(state, input_ids, attention_mask)
+        state.tokens.extend(input_ids[0].tolist())
+        state.injected_tokens += tokens
+        self.stats_.total_injected_tokens += tokens
+        self._record("injected", tokens)
+        return tokens
 
     async def decode(
         self,
@@ -99,85 +154,44 @@ class HFEngine(HostEngine):
 
         await self._initialize()
 
-        generated_text = ""
-
-        # First decode after prefill: attend to the last prompt token using the
-        # full cached attention mask (past + current), not a mask of length 1.
-        input_ids = torch.tensor(
-            [[state.tokens[-1]]],
-            device=self._device_obj,
-            dtype=torch.long,
-        )
-        if state.attention_mask is not None:
-            attention_mask = state.attention_mask.to(self._device_obj).unsqueeze(0)
-        else:
-            attention_mask = torch.ones(
-                (1, len(state.tokens)),
-                device=self._device_obj,
-                dtype=torch.long,
-            )
-
-        stop_token_ids = set()
+        stop_token_ids: set[int] = set()
         for seq in stop_sequences:
-            stop_ids = self._tokenizer.encode(seq, add_special_tokens=False)
-            stop_token_ids.update(stop_ids)
-
-        # Also stop on EOS
+            stop_token_ids.update(self._tokenizer.encode(seq, add_special_tokens=False))
         if self._tokenizer.eos_token_id is not None:
             stop_token_ids.add(self._tokenizer.eos_token_id)
 
+        generated_text = ""
+
         for _ in range(max_tokens):
-            with torch.inference_mode():
-                outputs = self._model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    past_key_values=state.past_key_values,
-                    use_cache=True,
-                    return_dict=True,
-                )
-
-            logits = outputs.logits[:, -1, :]
-            next_token_id = torch.argmax(logits, dim=-1).item()
-
-            # Update state
-            state.tokens.append(next_token_id)
-            state.past_key_values = outputs.past_key_values
-            state.generated_tokens += 1
-            state.forward_passes += 1
-            self.stats_.total_forward_passes += 1
-            self.stats_.total_generated_tokens += 1
-
-            # Check stop conditions
-            if next_token_id in stop_token_ids:
+            if state.logits is None:
                 break
+            next_token_id = int(torch.argmax(state.logits, dim=-1).item())
+            is_stop = next_token_id in stop_token_ids
 
-            # Decode new token
-            token_text = self._tokenizer.decode([next_token_id], skip_special_tokens=True)
-            generated_text += token_text
-
-            # Check stop sequences in generated text
-            for seq in stop_sequences:
-                if seq in generated_text:
-                    # Return up to the stop sequence
-                    idx = generated_text.index(seq)
-                    return generated_text[:idx]
-
-            # Prepare next input
+            # Forward every generated token, including a stop token, so the
+            # next turn can append injected text directly to the cache.
             input_ids = torch.tensor(
                 [[next_token_id]],
                 device=self._device_obj,
                 dtype=torch.long,
             )
-            attention_mask = torch.cat(
-                [
-                    attention_mask,
-                    torch.ones(1, 1, device=self._device_obj, dtype=torch.long),
-                ],
-                dim=1,
-            )
-            state.attention_mask = attention_mask[0]
+            attention_mask = self._extend_mask(state, 1)
+            self._forward(state, input_ids, attention_mask)
+            state.tokens.append(next_token_id)
+            state.generated_tokens += 1
+            self.stats_.total_generated_tokens += 1
+            self._record("generated", 1)
 
-            # Context length check
+            if is_stop:
+                break
+
+            token_text = self._tokenizer.decode([next_token_id], skip_special_tokens=True)
+            generated_text += token_text
+
+            for seq in stop_sequences:
+                if seq in generated_text:
+                    return generated_text[: generated_text.index(seq)]
+
             if len(state.tokens) >= self.max_context:
                 break
 
@@ -186,11 +200,9 @@ class HFEngine(HostEngine):
     async def park(self, state: HostState, level: str) -> None:
         """Park the host engine."""
         if level == SleepLevel.S1:
-            # S1: Keep KV cache in VRAM, just stop decoding
             state.parked = True
             state.sleep_level = level
         elif level == SleepLevel.S2:
-            # S2: Offload KV cache to CPU
             if state.past_key_values is not None:
                 state.kv_cache_cpu = self._offload_kv_cache(state.past_key_values)
                 state.past_key_values = None
@@ -198,7 +210,6 @@ class HFEngine(HostEngine):
             state.parked = True
             state.sleep_level = level
         elif level == SleepLevel.S3:
-            # S3: Full checkpoint (not implemented)
             state.parked = True
             state.sleep_level = level
 
@@ -208,7 +219,6 @@ class HFEngine(HostEngine):
             return
 
         if state.sleep_level == SleepLevel.S2 and state.kv_cache_cpu is not None:
-            # Restore KV cache from CPU
             state.past_key_values = self._restore_kv_cache(state.kv_cache_cpu)
             state.kv_cache_cpu = None
 
@@ -217,9 +227,7 @@ class HFEngine(HostEngine):
 
     def _offload_kv_cache(self, past_key_values) -> Any:
         """Offload KV cache to CPU memory."""
-        # For DynamicCache or tuple format
         if hasattr(past_key_values, "to_legacy_cache"):
-            # New DynamicCache format
             legacy = past_key_values.to_legacy_cache()
             return tuple((k.cpu(), v.cpu()) for k, v in legacy)
         elif isinstance(past_key_values, tuple):
@@ -232,7 +240,6 @@ class HFEngine(HostEngine):
             restored = tuple(
                 (k.to(self._device_obj), v.to(self._device_obj)) for k, v in cpu_kv_cache
             )
-            # Convert back to DynamicCache if needed
             from transformers.cache_utils import DynamicCache
 
             return DynamicCache.from_legacy_cache(restored)
@@ -248,19 +255,40 @@ class HFEngine(HostEngine):
         if self._tokenizer is not None:
             del self._tokenizer
             self._tokenizer = None
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 class HFDecoder(ConstrainedDecoder):
-    """Session decoder adapter for the reference HF engine.
+    """Session decoder adapter with cross-turn KV reuse.
 
-    Each call regenerates from the supplied full prompt, so injected events are
-    always visible to the model. KV reuse is within one generation call.
+    The KV cache is the source of truth for the consumed prompt. Injected text
+    is appended as a delta; a full re-prefill happens only when the prompt is
+    not an extension of the text the cache has already seen.
     """
 
     def __init__(self, engine: HFEngine, max_tokens: int = 1024):
         self.engine = engine
         self.max_tokens = max_tokens
+        self._state: HostState | None = None
+        self._known_text = ""
+
+    def reset(self) -> None:
+        """Discard the live cache, forcing a full prefill on the next call."""
+        self._state = None
+        self._known_text = ""
+
+    async def _advance(self, prompt: str) -> HostState:
+        if self._state is None or not prompt.startswith(self._known_text):
+            self._state = await self.engine.prefill(prompt)
+            self._known_text = prompt
+            return self._state
+
+        suffix = prompt[len(self._known_text) :]
+        if suffix:
+            await self.engine.append(self._state, suffix)
+            self._known_text = prompt
+        return self._state
 
     async def decode_free(
         self,
@@ -268,12 +296,14 @@ class HFDecoder(ConstrainedDecoder):
         max_tokens: int,
         stop_sequence: str,
     ) -> str:
-        state = await self.engine.prefill(prompt)
-        return await self.engine.decode(
+        state = await self._advance(prompt)
+        text = await self.engine.decode(
             state,
             max_tokens=min(max_tokens, self.max_tokens),
             stop_sequences=[stop_sequence] if stop_sequence else [],
         )
+        self._known_text += text
+        return text
 
     async def decode_constrained(
         self,

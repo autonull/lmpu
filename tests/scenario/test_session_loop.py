@@ -179,10 +179,7 @@ async def test_parked_session_wakes_and_injects_woken_event(tmp_path) -> None:
         assert await controller.run_turn() is True
         assert controller.state == ControllerState.GENERATING
         assert controller.host_state.parked is False
-        assert any(
-            event.event == EventKind.WOKEN
-            for event in controller._pending_injections
-        )
+        assert any(event.event == EventKind.WOKEN for event in controller._pending_injections)
 
         assert await controller.run_turn() is True
         assert "Woken" in controller.generated_buffer
@@ -223,3 +220,30 @@ def test_generating_and_parked_policies_use_safe_defaults() -> None:
     assert config.injection_policy.generating["JobFailed"] == "interrupt"
     assert config.injection_policy.parked["JobCompleted"] == "wake"
     assert config.injection_policy.generating["Progress"] == "observe"
+
+
+async def test_s1_park_freezes_forwards_and_resume_matches_baseline() -> None:
+    script = [{"type": "free", "text": "after wake"}]
+    baseline = ScriptedEngine(list(script))
+    baseline_state = await baseline.prefill("prompt")
+    expected = await baseline.decode(baseline_state, 4, [])
+
+    engine = ScriptedEngine(list(script))
+    state = await engine.prefill("prompt")
+    await engine.park(state, SleepLevel.S1)
+
+    frozen = (
+        engine.stats_.total_forward_passes,
+        engine.stats_.total_generated_tokens,
+        engine.position,
+    )
+    assert await engine.decode(state, 4, []) == ""
+    assert (
+        engine.stats_.total_forward_passes,
+        engine.stats_.total_generated_tokens,
+        engine.position,
+    ) == frozen
+
+    await engine.resume(state)
+    assert await engine.decode(state, 4, []) == expected
+    assert engine.stats_.total_generated_tokens == baseline.stats_.total_generated_tokens

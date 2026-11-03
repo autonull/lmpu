@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,7 +15,7 @@ from ..kernel.events import EventLog
 from ..kernel.jobs import JobRecord, JobStatus, JobTable
 from ..kernel.quotas import QuotaConfig, QuotaManager
 from ..kernel.reaper import Reaper
-from ..kernel.routing import CapabilityRegistry, ProcessorRegistration
+from ..kernel.routing import CapabilityRegistry, ProcessorRegistration, route_job
 from ..kernel.scheduler import Scheduler
 from ..kernel.trace import TraceConfig, init_trace_sink
 from ..kernel.worker_pool import WorkerPool
@@ -74,7 +73,6 @@ from ..protocol.messages import (
     SubmitResult,
     WaitParams,
     WaitResult,
-    WakeParams,
     WakeResult,
     WriteParams,
 )
@@ -102,6 +100,7 @@ class SessionState:
     wake_result: dict[str, Any] | None = None
     event_cursor: int = 0
     injection_policy: dict[str, Any] = field(default_factory=dict)
+    authorized_processors: set[str] | None = None
 
 
 class Runtime:
@@ -210,7 +209,7 @@ class Runtime:
 
     def _refresh_output_checksums(self, job: JobRecord) -> None:
         """Recompute cached checksums for buffers written directly by a worker."""
-        for name, spec in job.outputs.items():
+        for _name, spec in job.outputs.items():
             if not isinstance(spec, dict) or not spec.get("buffer"):
                 continue
             buffer_id = spec["buffer"]
@@ -265,7 +264,7 @@ class Runtime:
 
         # Remove stale socket
         try:
-            os.unlink(self.socket_path)
+            Path(self.socket_path).unlink()
         except FileNotFoundError:
             pass
 
@@ -281,7 +280,7 @@ class Runtime:
         self._start_dispatchers()
 
         # Set socket permissions
-        os.chmod(self.socket_path, 0o600)
+        Path(self.socket_path).chmod(0o600)
 
     def _start_dispatchers(self) -> None:
         """Start one dispatch loop per registered processor."""
@@ -388,7 +387,7 @@ class Runtime:
 
         # Clean up socket
         try:
-            os.unlink(self.socket_path)
+            Path(self.socket_path).unlink()
         except FileNotFoundError:
             pass
 
@@ -469,7 +468,7 @@ class Runtime:
             elif request.method == "lmpu.close":
                 result = await self._close(request.params, session_id)
             else:
-                raise LMPUError(
+                raise LMPUError(  # noqa: TRY301 - RPC dispatch boundary
                     message=f"Unknown method: {request.method}",
                     code=ErrorCode.UNKNOWN_METHOD.value,
                 )
@@ -507,13 +506,15 @@ class Runtime:
         session_id = f"s_{ulid.new()}"
 
         # Create session state
-        session_config = hello_params.session_config or {}
-        quotas = QuotaConfig(**session_config)
+        raw_config = dict(hello_params.session_config or {})
+        authorized = raw_config.pop("authorized_processors", None)
+        quotas = QuotaConfig(**raw_config)
         self.quota_manager.set_session_quotas(session_id, quotas)
 
         session_state = SessionState(
             session_id=session_id,
             config=quotas,
+            authorized_processors=set(authorized) if authorized is not None else None,
         )
         self._sessions[session_id] = session_state
 
@@ -578,28 +579,22 @@ class Runtime:
         if not session:
             raise ProtocolError("Session not found", code=ErrorCode.INTERNAL.value)
 
-        # Validate processor/op
-        processor = submit_params.processor
-        if processor:
-            reg = self.capability_registry.get(processor)
-            if not reg:
-                raise JobError("Unknown processor", code=ErrorCode.UNKNOWN_PROCESSOR.value)
-            # Check op support
-            op_supported = False
-            for op_def in reg.manifest.ops:
-                if op_def.get("name") == submit_params.op:
-                    op_supported = True
-                    break
-            if not op_supported:
-                raise JobError("Processor does not support op", code=ErrorCode.UNKNOWN_OP.value)
-        else:
-            candidates = self.capability_registry.find_by_op(submit_params.op)
-            if not candidates:
-                raise JobError(
-                    "No capable processor",
-                    code=ErrorCode.CAPABILITY_MISMATCH.value,
-                )
-            processor = candidates[0].manifest.name
+        # Route against registry capabilities; the session authorization set is
+        # a separate boundary and does not alter capability advertisement.
+        selected, candidates, reason = route_job(
+            self.capability_registry,
+            submit_params.op,
+            explicit_processor=submit_params.processor,
+            allowed_processors=session.authorized_processors,
+        )
+        if selected is None:
+            code = (
+                ErrorCode.ACCESS_DENIED.value
+                if reason.startswith("access_denied")
+                else ErrorCode.CAPABILITY_MISMATCH.value
+            )
+            raise JobError("Processor not authorized or capable", code=code)
+        processor = selected.manifest.name
 
         config = submit_params.config or {}
         estimated_buffer_bytes = self._estimate_output_bytes(submit_params.outputs)
@@ -632,12 +627,12 @@ class Runtime:
             )
 
         # Grant buffer access
-        for name, spec in submit_params.inputs.items():
+        for _name, spec in submit_params.inputs.items():
             if isinstance(spec, dict) and spec.get("buffer"):
                 buffer_id = spec["buffer"]
                 self.buffer_manager.grant_read(job.job_id, buffer_id)
 
-        for name, spec in submit_params.outputs.items():
+        for _name, spec in submit_params.outputs.items():
             if isinstance(spec, dict) and spec.get("buffer"):
                 buffer_id = spec["buffer"]
                 self.buffer_manager.grant_write(job.job_id, buffer_id)
@@ -745,12 +740,22 @@ class Runtime:
             error=finished.error,
         )
 
+    def _authorize_buffer(self, session_id: str, buffer_id: str, write: bool = False):
+        """Return buffer metadata and whether the session owns it."""
+        meta = self.buffer_manager._metadata.get(buffer_id)
+        if meta is None:
+            raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
+        if meta.session_id == session_id:
+            return meta, True
+        grant = self.grant_manager.check_access(session_id, buffer_id, 0, meta.bytes, write=write)
+        if grant is None:
+            raise BufferError("Access denied", code=ErrorCode.ACCESS_DENIED.value)
+        return meta, False
+
     async def _read(self, params: dict, session_id: str) -> BufferView:
         read_params = ReadParams(**params)
         # Check session owns buffer or has grant
-        meta = self.buffer_manager._metadata.get(read_params.buffer)
-        if not meta:
-            raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
+        meta, _ = self._authorize_buffer(session_id, read_params.buffer)
 
         inline_data, derived_ref = self.buffer_manager.read_view(
             read_params.buffer,
@@ -769,14 +774,12 @@ class Runtime:
                 buffer=read_params.buffer,
                 dtype=meta.dtype,
                 derived_buffer=derived_ref.buffer_id if derived_ref else None,
-                note=derived_ref.note if derived_ref else "Result too large, use smaller slice",
+                note="Result too large, use smaller slice" if derived_ref else None,
             )
 
     async def _write(self, params: dict, session_id: str) -> BufferRef:
         write_params = WriteParams(**params)
-        meta = self.buffer_manager._metadata.get(write_params.buffer)
-        if not meta:
-            raise BufferError("Buffer not found", code=ErrorCode.BUFFER_NOT_FOUND.value)
+        meta, owned = self._authorize_buffer(session_id, write_params.buffer, write=True)
 
         # Convert data to numpy array
         import numpy as np
@@ -788,6 +791,7 @@ class Runtime:
             write_params.slices,
             data,
             session_id,  # Use session as job_id for admin writes
+            enforce_grant=not owned,
         )
         return ref
 
@@ -899,7 +903,6 @@ class Runtime:
         )
 
     async def _wake(self, params: dict, session_id: str) -> WakeResult:
-        wake_params = WakeParams(**params)
         session = self._sessions.get(session_id or "")
         if not session:
             return WakeResult(status="no_active_sleep")
@@ -968,10 +971,12 @@ class Runtime:
 
     async def _buffer_stat(self, params: dict, session_id: str) -> BufferRef:
         stat_params = BufferStatParams(**params)
+        self._authorize_buffer(session_id, stat_params.buffer)
         return self.buffer_manager.stat(stat_params.buffer)
 
     async def _buffer_checksum(self, params: dict, session_id: str) -> str:
         checksum_params = BufferChecksumParams(**params)
+        self._authorize_buffer(session_id, checksum_params.buffer)
         from ..memory.checksum import ChecksumAlgorithm
 
         return self.buffer_manager.checksum(
@@ -981,9 +986,8 @@ class Runtime:
 
     async def _buffer_delete(self, params: dict, session_id: str) -> None:
         delete_params = BufferDeleteParams(**params)
-        meta = self.buffer_manager._metadata.get(delete_params.buffer)
-        if meta:
-            self.quota_manager.on_buffer_delete(session_id, meta.bytes)
+        meta, _ = self._authorize_buffer(session_id, delete_params.buffer)
+        self.quota_manager.on_buffer_delete(session_id, meta.bytes)
         self.buffer_manager.delete(delete_params.buffer)
 
     async def _jobs_list(self, params: dict, session_id: str) -> list[dict]:

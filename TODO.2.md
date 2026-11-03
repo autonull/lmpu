@@ -18,17 +18,19 @@
 - Six built-in processors register and pass a representative contract suite.
 - Scripted session loop: injection policy, budgets, `ResultTooLarge`, parser recovery, forced wake.
 - Reference GPU path: Qwen3.5-0.8B loads and runs inside the session loop via `HFDecoder`.
+- Cross-turn KV reuse: injected text and generated tokens append to the live cache; full prefill happens only on a non-extension prompt.
+- Canonical host metrics schema: prefill/generated/injected/control tokens, forward passes, wall time, VRAM peak, and NVML energy hooks; one `host_metrics` trace record per session.
 - Failure matrix: timeout, OOM, crash/recovery, disconnect, duplicate delivery, malformed worker messages.
 - Trace JSONL emission, replay, gap detection, redaction.
-- CPU suite: **119 passed, 4 skipped**; opt-in GPU tests: **2 passed**.
+- Session authorization boundary: capability advertisement stays registry-wide; buffer and processor access are session-scoped.
+- Grant/refcount per-buffer release, TTL reaping, close-time shm cleanup, and fd-leak assertions.
+- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**.
 
 ### Known gaps
-- `HFDecoder` re-prefills every turn; no cross-turn KV reuse.
-- Trace/metrics lack host token, forward-pass, and energy coverage.
-- P1 exit gate is not closed: grants/reaper audit, routing/auth split, demo assertions, 16 MiB context-token proof.
-- `uv.lock` has a host/vLLM dependency conflict; vLLM and Outlines are not installed.
+- Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
+- P1 exit gate is not closed: canonical demo assertions and the 16 MiB dashboard proof (Gate C).
+- Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified (Gate E).
 - Legacy `mypy`/`ruff` findings remain outside the changed-file policy.
-- Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified.
 
 ---
 
@@ -44,6 +46,8 @@
 ---
 
 ## 2. Gate A — Measurement spine
+
+**Status:** CLOSED 2026-11-03.
 
 **Goal:** make the core claims measurable and trustworthy.
 
@@ -139,13 +143,13 @@ These items do not block A–D. Each has a kill criterion.
 ## 8. Progress
 
 ### Gate A
-- [ ] A1 HFDecoder KV reuse
-- [ ] A2 Metrics/trace schema
-- [ ] A3 S1 park/resume proof
-- [ ] A4 Grants/refcounts/TTL/reaper audit
-- [ ] A5 Routing/auth split
-- [ ] A6 16 MiB context bound
-- [ ] A7 Environment reproducibility
+- [x] A1 HFDecoder KV reuse — `tests/integration/test_kv_reuse.py`, opt-in `test_hf_decoder_reuses_kv_across_injected_turns`
+- [x] A2 Metrics/trace schema — `src/lmpu/host/metrics.py`, `tests/unit/test_metrics.py`
+- [x] A3 S1 park/resume proof — `test_s1_park_freezes_forwards_and_resume_matches_baseline`
+- [x] A4 Grants/refcounts/TTL/reaper audit — `test_release_grants_decrements_only_the_matching_buffer`, `tests/integration/test_authorization.py`
+- [x] A5 Routing/auth split — `route_job(..., allowed_processors=...)`, `test_session_authorization_is_separate_from_advertisement`
+- [x] A6 16 MiB context bound — `test_16mib_result_uses_at_most_64_context_tokens`
+- [x] A7 Environment reproducibility — `uv.lock` resolves, `docs/optional-vllm.md`
 
 ### Gate B
 - [ ] B1 Harness
@@ -175,10 +179,14 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-1. **A7:** fix `uv.lock`/optional dependency isolation; confirm reproducible test command.
-2. **A1:** implement cross-turn KV reuse in `HFDecoder`; add forward-pass assertion.
-3. **A2:** define and emit the metrics schema from the HF session path.
-4. **A4/A5:** batch the grants/reaper audit and routing/auth split.
+Gate A is closed. Start Gate B in order:
+
+1. **B1:** build the resume-safe harness around the A2 metrics schema.
+2. **B2:** implement four fair baselines (direct CoT, trace-token, sync tool, async polling).
+3. **B3/B4:** add NVML idle baseline plus one compute, one large-context, and one sleep-heavy workload.
+4. **B5:** emit the first C1–C5 report with medians, CIs, raw artifacts, and limitations.
+
+Keep Gate C closed until B5 produces the report.
 
 ---
 
