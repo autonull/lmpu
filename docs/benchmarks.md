@@ -34,23 +34,44 @@ paper run.
 ## Baselines
 
 - **`lmpu.sync`**: submit and wait through one LMPU session; summary-only result.
+  Mechanism-only; not an end-to-end arm.
 - **`lmpu.sleep`**: submit asynchronously, register an S1 sleep, park for the job
   window, and wake. The treatment performs no decode, so
   `forward_passes` is zero while parked; park duration is recorded in
-  `metadata.park`.
+  `metadata.park`. Mechanism-only.
 - **`lmpu.slice`**: import a 16 MiB shared-memory buffer and read it through the
   bounded-slice path. Only derived-buffer metadata enters context.
+  Mechanism-only.
 - **`lmpu.individual`**: submit each batch item as its own synchronous job.
-- **`lmpu.batch`**: submit all batch items in one job.
+  Mechanism-only.
+- **`lmpu.batch`**: submit all batch items in one job. Mechanism-only.
 - **`native`**: run the same workload computation in-process, without the
-  runtime, for C5 overhead comparison.
-- **`direct_cot`**: model reasons in natural language with no tool.
+  runtime, for C5 overhead comparison. Mechanism-only.
+- **`direct_cot`**: model reasons in natural language with no tool. End-to-end.
 - **`trace_token`**: labelled interpreter-driven trace emulation. It is a token
-  baseline, not a wall-time or energy baseline.
-- **`sync_tool`**: PAL-style program generation, synchronous execution, full
-  result ingestion, then a final model turn.
-- **`async_poll`**: program submission plus status polling and small result
-  ingestion. Poll counts are recorded in trial metadata.
+  simulation, quarantined from every claim table by `report.py`.
+- **`sync_tool_full_result`**: PAL-style program generation, synchronous execution, full
+  result ingestion, then a final model turn scored on the decoded answer.
+  End-to-end.
+- **`async_poll_programmatic`**: program submission plus programmatic status
+  polling, bounded-result ingestion, and a final model turn scored on the
+  decoded answer. End-to-end.
+- **`async_poll_model`**: model-in-the-loop polling; each status check is a
+  model turn, bounded-result ingestion, answer scored on the decoded answer.
+  End-to-end.
+- **`session_reopen`**: async job, then a fresh session that re-prefills the
+  full context for the answer turn (no KV reuse). End-to-end.
+- **`app_agent`**: app-level agent loop without the LMPU runtime; the tool runs
+  in-process, the session stays KV-warm via the engine prefix cache, only a
+  bounded result summary enters context, and polling is programmatic.
+  End-to-end.
+- **`engine_native`**: engine-native session reuse without the LMPU protocol;
+  blocking in-process call, KV-warm session, bounded result. End-to-end.
+
+Every model baseline decodes a final answer and is scored on it. A correct
+tool result with a wrong final answer is `correct=False`; both `tool_correct`
+and the decoded `answer` are retained in trial metadata. Failed trials keep
+accumulated token accounting.
 
 `configs/benchmarks.toml` fixes the seed, model, token limit, device, and trial
 counts. Trial order is shuffled per trial with a seed derived from the base seed.

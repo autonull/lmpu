@@ -1,289 +1,900 @@
 {
-  "claims": {
-    "C1_token_reduction": {
-      "by_workload": {
-        "bigint_mul": {
-          "async_poll": {
-            "baseline_total_tokens": 0.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": null
-          },
-          "direct_cot": {
-            "baseline_total_tokens": 148.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": 1.7209302325581395
-          },
-          "sync_tool": {
-            "baseline_total_tokens": 0.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": null
-          },
-          "trace_token": {
-            "baseline_total_tokens": 3473.0,
-            "correctness": {
-              "passes": 3,
-              "rate": 1.0,
-              "total": 3
-            },
-            "reduction": 40.383720930232556
-          }
-        },
-        "large_context": {
-          "trace_token": {
-            "baseline_total_tokens": 3196.0,
-            "correctness": {
-              "passes": 3,
-              "rate": 1.0,
-              "total": 3
-            },
-            "reduction": 0.9711333941051352
-          }
-        },
-        "matmul": {
-          "async_poll": {
-            "baseline_total_tokens": 0.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": null
-          },
-          "direct_cot": {
-            "baseline_total_tokens": 104.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": 1.4857142857142858
-          },
-          "sync_tool": {
-            "baseline_total_tokens": 0.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": null
-          },
-          "trace_token": {
-            "baseline_total_tokens": 1519.0,
-            "correctness": {
-              "passes": 3,
-              "rate": 1.0,
-              "total": 3
-            },
-            "reduction": 21.7
-          }
-        },
-        "sleep": {
-          "async_poll": {
-            "baseline_total_tokens": 0.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": null
-          },
-          "direct_cot": {
-            "baseline_total_tokens": 87.0,
-            "correctness": {
-              "passes": 3,
-              "rate": 1.0,
-              "total": 3
-            },
-            "reduction": 1.2608695652173914
-          },
-          "sync_tool": {
-            "baseline_total_tokens": 0.0,
-            "correctness": {
-              "passes": 0,
-              "rate": 0.0,
-              "total": 3
-            },
-            "reduction": null
-          },
-          "trace_token": {
-            "baseline_total_tokens": 6.0,
-            "correctness": {
-              "passes": 3,
-              "rate": 1.0,
-              "total": 3
-            },
-            "reduction": 0.08695652173913043
-          }
-        }
-      },
-      "status": "partial"
-    },
-    "C2_sleep_proof": {
-      "limitation": null,
-      "measured": {
+  "end_to_end": {
+    "cells": {
+      "batch": {},
+      "bigint_mul": {
         "async_poll": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 0.0,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
           "forward_passes": 0.0,
-          "generated_tokens": 0.0,
-          "gpu_energy_joules": 0.0,
-          "wall_time_seconds": 2.6065854029729962
+          "peak_context_tokens": 0.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "total_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 0.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "total_tokens": 0.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.5703048270661384,
+            2.5958134320098907,
+            2.596452992875129
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.5703048270661384,
+              2.596452992875129
+            ],
+            "median": 2.5958134320098907
+          }
         },
         "direct_cot": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 246.87624555683672,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": null,
+              "trial": 1
+            },
+            {
+              "error": null,
+              "trial": 2
+            },
+            {
+              "error": null,
+              "trial": 3
+            }
+          ],
           "forward_passes": 65.0,
-          "generated_tokens": 64.0,
-          "gpu_energy_joules": 246.35530129351187,
-          "wall_time_seconds": 2.559034664183855
-        },
-        "lmpu.sleep": {
-          "forward_passes": 0.0,
-          "generated_tokens": 0.0,
-          "gpu_energy_joules": 0.0,
-          "wall_time_seconds": 3.1226015260908753
-        },
-        "lmpu.sync": {
-          "forward_passes": 0.0,
-          "generated_tokens": 0.0,
-          "gpu_energy_joules": 0.0,
-          "wall_time_seconds": 3.1155260431114584
-        },
-        "native": {
-          "forward_passes": 0.0,
-          "generated_tokens": 0.0,
-          "gpu_energy_joules": 0.0,
-          "wall_time_seconds": 3.0003410649951547
+          "peak_context_tokens": 148.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              64.0,
+              64.0,
+              64.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              84.0,
+              84.0,
+              84.0
+            ],
+            "total_tokens": [
+              148.0,
+              148.0,
+              148.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 64.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 84.0,
+            "total_tokens": 148.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.5599983450956643,
+            2.5834543618839234,
+            2.601273901993409
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.5599983450956643,
+              2.601273901993409
+            ],
+            "median": 2.5834543618839234
+          }
         },
         "sync_tool": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 0.0,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
           "forward_passes": 0.0,
-          "generated_tokens": 0.0,
-          "gpu_energy_joules": 0.0,
-          "wall_time_seconds": 2.5711340110283345
-        },
-        "trace_token": {
-          "forward_passes": 6.0,
-          "generated_tokens": 6.0,
-          "gpu_energy_joules": 0.0,
-          "wall_time_seconds": 8.479924872517586e-06
+          "peak_context_tokens": 0.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "total_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 0.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "total_tokens": 0.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.5720685850828886,
+            7.854563968954608,
+            16.261791073950008
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.5720685850828886,
+              16.261791073950008
+            ],
+            "median": 7.854563968954608
+          }
         }
       },
-      "note": "The lmpu.sleep treatment parks the host in S1 for the measured job window and performs zero forward passes while parked.",
-      "status": "measured",
-      "treatment": {
-        "correctness": {
-          "passes": 3,
-          "rate": 1.0,
-          "total": 3
+      "large_context": {},
+      "large_result": {},
+      "matmul": {
+        "async_poll": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 0.0,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "forward_passes": 0.0,
+          "peak_context_tokens": 0.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "total_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 0.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "total_tokens": 0.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.402975352946669,
+            2.4066743350122124,
+            2.498657777905464
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.402975352946669,
+              2.498657777905464
+            ],
+            "median": 2.4066743350122124
+          }
         },
-        "forward_passes": 0.0,
-        "sleep_duration_seconds": 3.12222292390652,
-        "wake_latency_seconds": 0.0,
-        "wall_time_seconds": 3.1226015260908753
-      }
-    },
-    "C3_context_protection": {
-      "limitation": null,
-      "measured": {
-        "lmpu.slice": {
-          "control_tokens": 15.0,
+        "direct_cot": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 246.23470561977103,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": null,
+              "trial": 1
+            },
+            {
+              "error": null,
+              "trial": 2
+            },
+            {
+              "error": null,
+              "trial": 3
+            }
+          ],
+          "forward_passes": 65.0,
+          "peak_context_tokens": 104.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              64.0,
+              64.0,
+              64.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              40.0,
+              40.0,
+              40.0
+            ],
+            "total_tokens": [
+              104.0,
+              104.0,
+              104.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 64.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 40.0,
+            "total_tokens": 104.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.545712067047134,
+            2.555538929067552,
+            2.6243139039725065
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.545712067047134,
+              2.6243139039725065
+            ],
+            "median": 2.555538929067552
+          }
+        },
+        "sync_tool": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 0.0,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "forward_passes": 0.0,
+          "peak_context_tokens": 0.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "total_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 0.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "total_tokens": 0.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.3883134208153933,
+            2.3942181579768658,
+            2.4134266329929233
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.3883134208153933,
+              2.4134266329929233
+            ],
+            "median": 2.3942181579768658
+          }
+        }
+      },
+      "sleep": {
+        "async_poll": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 0.0,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "forward_passes": 0.0,
+          "peak_context_tokens": 0.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "total_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 0.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "total_tokens": 0.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.592982716858387,
+            2.6065854029729962,
+            6.223325551021844
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.592982716858387,
+              6.223325551021844
+            ],
+            "median": 2.6065854029729962
+          }
+        },
+        "direct_cot": {
           "correctness": {
             "passes": 3,
             "rate": 1.0,
             "total": 3
           },
-          "derived": true,
-          "injected_tokens": 28.0,
-          "peak_context_tokens": 43.0
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 246.35530129351187,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [],
+          "forward_passes": 65.0,
+          "peak_context_tokens": 87.0,
+          "per_correct_task": {
+            "forward_passes": 65.0,
+            "gpu_joules": 363.37637340257635,
+            "total_tokens": 87.0,
+            "wall_time_seconds": 3.9735342341009527
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              64.0,
+              64.0,
+              64.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              23.0,
+              23.0,
+              23.0
+            ],
+            "total_tokens": [
+              87.0,
+              87.0,
+              87.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 64.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 23.0,
+            "total_tokens": 87.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.55344171798788,
+            2.559034664183855,
+            6.808126320131123
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.55344171798788,
+              6.808126320131123
+            ],
+            "median": 2.559034664183855
+          }
+        },
+        "sync_tool": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "derived": false,
+          "energy": {
+            "gpu_energy_joules": 0.0,
+            "vram_peak_mb": 0.0
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "forward_passes": 0.0,
+          "peak_context_tokens": 0.0,
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "phases": {},
+          "result_bytes": null,
+          "simulated": false,
+          "timing": {
+            "sleep_duration_seconds": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "token_cdf": {
+            "control_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "generated_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "injected_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "prefill_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "total_tokens": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tokens": {
+            "control_tokens": 0.0,
+            "generated_tokens": 0.0,
+            "injected_tokens": 0.0,
+            "prefill_tokens": 0.0,
+            "total_tokens": 0.0
+          },
+          "trials": 3,
+          "wall_time_cdf": [
+            2.547470965888351,
+            2.5711340110283345,
+            2.573654147097841
+          ],
+          "wall_time_seconds": {
+            "ci95": [
+              2.547470965888351,
+              2.573654147097841
+            ],
+            "median": 2.5711340110283345
+          }
+        }
+      }
+    },
+    "claims": {
+      "E_engine_integration": {
+        "note": "No lmpu.model_* treatment arm is present; Batch 1 adds lmpu.model_async/lmpu.model_sync before the end-to-end claim can be evaluated.",
+        "status": "not_measured"
+      }
+    },
+    "note": "Host model in the loop; every arm is scored on its decoded final answer. Token reductions require equal task correctness.",
+    "paired_vs_reference": {
+      "batch": {},
+      "bigint_mul": {
+        "async_poll": {
+          "n": 3,
+          "total_tokens_delta_ci95": [
+            -148.0,
+            -148.0
+          ],
+          "total_tokens_mean_delta": -148.0,
+          "wall_time_delta_ci95": [
+            -0.013149534817785025,
+            0.03645464777946472
+          ],
+          "wall_time_mean_delta": -0.005460469983518124
+        },
+        "sync_tool": {
+          "n": 3,
+          "total_tokens_delta_ci95": [
+            -148.0,
+            -148.0
+          ],
+          "total_tokens_mean_delta": -148.0,
+          "wall_time_delta_ci95": [
+            0.01207023998722434,
+            13.660517171956599
+          ],
+          "wall_time_mean_delta": 5.271109607070684
         }
       },
-      "note": "A 16 MiB shared-memory buffer is represented in context by bounded-slice metadata; no slice payload is inlined.",
-      "result_bytes": 16777216.0,
-      "status": "measured"
-    },
-    "C4_batching": {
-      "batched": {
-        "control_tokens": 803.0,
-        "wall_time_seconds": 0.0011434131301939487
-      },
-      "individual": {
-        "control_tokens": 3574.0,
-        "wall_time_seconds": 0.019560722867026925
-      },
-      "limitation": null,
-      "note": "One batch submission replaces one submission per item.",
-      "speedup": 17.107309991891544,
-      "status": "measured"
-    },
-    "C5_wall_time": {
-      "by_workload": {
-        "batch": {
-          "lmpu.batch": 0.0011434131301939487,
-          "lmpu.individual": 0.019560722867026925,
-          "native": 0.0002866210415959358
+      "large_context": {},
+      "large_result": {},
+      "matmul": {
+        "async_poll": {
+          "n": 3,
+          "total_tokens_delta_ci95": [
+            -104.0,
+            -104.0
+          ],
+          "total_tokens_mean_delta": -104.0,
+          "wall_time_delta_ci95": [
+            -0.21763956896029413,
+            -0.05688115116208792
+          ],
+          "wall_time_mean_delta": -0.14273671410046518
         },
-        "bigint_mul": {
-          "async_poll": 2.5958134320098907,
-          "direct_cot": 2.5834543618839234,
-          "lmpu.sync": 0.0006221621297299862,
-          "native": 0.0001674201339483261,
-          "sync_tool": 7.854563968954608,
-          "trace_token": 0.001567075029015541
-        },
-        "large_context": {
-          "lmpu.sync": 0.0007880320772528648,
-          "native": 0.0005433119367808104,
-          "trace_token": 0.0011635830160230398
-        },
-        "large_result": {
-          "lmpu.slice": 0.018198736011981964,
-          "native": 0.0012419929262250662
-        },
-        "matmul": {
-          "async_poll": 2.4066743350122124,
-          "direct_cot": 2.555538929067552,
-          "lmpu.sync": 0.016599528957158327,
-          "native": 0.00023018009960651398,
-          "sync_tool": 2.3942181579768658,
-          "trace_token": 0.0006275021005421877
-        },
-        "sleep": {
-          "async_poll": 2.6065854029729962,
-          "direct_cot": 2.559034664183855,
-          "lmpu.sleep": 3.1226015260908753,
-          "lmpu.sync": 3.1155260431114584,
-          "native": 3.0003410649951547,
-          "sync_tool": 2.5711340110283345,
-          "trace_token": 8.479924872517586e-06
+        "sync_tool": {
+          "n": 3,
+          "total_tokens_delta_ci95": [
+            -104.0,
+            -104.0
+          ],
+          "total_tokens_mean_delta": -104.0,
+          "wall_time_delta_ci95": [
+            -0.21088727097958326,
+            -0.1573986462317407
+          ],
+          "wall_time_mean_delta": -0.16132077109068632
         }
       },
-      "limitation": null,
-      "native_speedup": {
-        "batch": 3.989285377749328,
-        "bigint_mul": 3.7161726911651813,
-        "large_context": 1.4504229042381274,
-        "large_result": 14.652849970164889,
-        "matmul": 72.11539566424173,
-        "sleep": 1.0383906281389679
-      },
-      "note": "native runs the same computation in-process; LMPU includes worker, IPC, and control-plane overhead.",
-      "status": "measured"
-    }
+      "sleep": {
+        "async_poll": {
+          "n": 3,
+          "total_tokens_delta_ci95": [
+            -87.0,
+            -87.0
+          ],
+          "total_tokens_mean_delta": -87.0,
+          "wall_time_delta_ci95": [
+            -4.215143603272736,
+            3.664290886837989
+          ],
+          "wall_time_mean_delta": 0.053143684985116124
+        },
+        "sync_tool": {
+          "n": 3,
+          "total_tokens_delta_ci95": [
+            -87.0,
+            -87.0
+          ],
+          "total_tokens_mean_delta": -87.0,
+          "wall_time_delta_ci95": [
+            -4.236992309102789,
+            0.014619482913985848
+          ],
+          "wall_time_mean_delta": -0.005970752099528909
+        }
+      }
+    },
+    "reference": "direct_cot"
   },
   "limitations": [
-    "Trace-token is a labelled simulation and is not a wall-time or energy result.",
+    "Trace-token is a labelled simulation; it cannot support any claim.",
     "C2 measures the S1 park window; the treatment performs no model decode by construction.",
     "C3 inlines derived-buffer metadata only, not any slice payload.",
     "C4 uses 64 pure-function additions; it is control-plane evidence, not model-quality evidence.",
     "C5 native runs in-process and excludes worker, IPC, and control-plane overhead.",
+    "Per-correct-task cost divides total spend by correct tasks; failures are paid for, not skipped.",
     "Incorrect or failed baselines are retained; token reductions require equal task correctness.",
     "Failures and incorrect answers are retained in the table."
   ],
@@ -342,8 +953,157 @@
     "schema": "lmpu.bench.manifest.v1",
     "started_at": "2026-11-03T19:32:42.413464+00:00"
   },
-  "run_dir": "benchmarks/results/2026-11-03/NVIDIA-GeForce-RTX-3080/3a42d6a5a011",
-  "schema": "lmpu.bench.report.v1",
+  "mechanism": {
+    "claims": {
+      "C2_sleep_proof": {
+        "limitation": null,
+        "measured": {
+          "async_poll": {
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "wall_time_seconds": 2.6065854029729962
+          },
+          "direct_cot": {
+            "forward_passes": 65.0,
+            "generated_tokens": 64.0,
+            "gpu_energy_joules": 246.35530129351187,
+            "wall_time_seconds": 2.559034664183855
+          },
+          "lmpu.sleep": {
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "wall_time_seconds": 3.1226015260908753
+          },
+          "lmpu.sync": {
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "wall_time_seconds": 3.1155260431114584
+          },
+          "native": {
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "wall_time_seconds": 3.0003410649951547
+          },
+          "sync_tool": {
+            "forward_passes": 0.0,
+            "generated_tokens": 0.0,
+            "gpu_energy_joules": 0.0,
+            "wall_time_seconds": 2.5711340110283345
+          }
+        },
+        "note": "The lmpu.sleep treatment parks the host in S1 for the measured job window and performs zero forward passes while parked.",
+        "status": "measured",
+        "treatment": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "forward_passes": 0.0,
+          "sleep_duration_seconds": 3.12222292390652,
+          "wake_latency_seconds": 0.0,
+          "wall_time_seconds": 3.1226015260908753
+        }
+      },
+      "C3_context_protection": {
+        "limitation": null,
+        "measured": {
+          "lmpu.slice": {
+            "control_tokens": 15.0,
+            "correctness": {
+              "passes": 3,
+              "rate": 1.0,
+              "total": 3
+            },
+            "derived": true,
+            "injected_tokens": 28.0,
+            "peak_context_tokens": 43.0
+          }
+        },
+        "note": "A 16 MiB shared-memory buffer is represented in context by bounded-slice metadata; no slice payload is inlined.",
+        "result_bytes": 16777216.0,
+        "status": "measured"
+      },
+      "C4_batching": {
+        "batched": {
+          "control_tokens": 803.0,
+          "wall_time_seconds": 0.0011434131301939487
+        },
+        "individual": {
+          "control_tokens": 3574.0,
+          "wall_time_seconds": 0.019560722867026925
+        },
+        "limitation": null,
+        "note": "One batch submission replaces one submission per item.",
+        "speedup": 17.107309991891544,
+        "status": "measured"
+      },
+      "C5_wall_time": {
+        "by_workload": {
+          "batch": {
+            "lmpu.batch": 0.0011434131301939487,
+            "lmpu.individual": 0.019560722867026925,
+            "native": 0.0002866210415959358
+          },
+          "bigint_mul": {
+            "async_poll": 2.5958134320098907,
+            "direct_cot": 2.5834543618839234,
+            "lmpu.sync": 0.0006221621297299862,
+            "native": 0.0001674201339483261,
+            "sync_tool": 7.854563968954608
+          },
+          "large_context": {
+            "lmpu.sync": 0.0007880320772528648,
+            "native": 0.0005433119367808104
+          },
+          "large_result": {
+            "lmpu.slice": 0.018198736011981964,
+            "native": 0.0012419929262250662
+          },
+          "matmul": {
+            "async_poll": 2.4066743350122124,
+            "direct_cot": 2.555538929067552,
+            "lmpu.sync": 0.016599528957158327,
+            "native": 0.00023018009960651398,
+            "sync_tool": 2.3942181579768658
+          },
+          "sleep": {
+            "async_poll": 2.6065854029729962,
+            "direct_cot": 2.559034664183855,
+            "lmpu.sleep": 3.1226015260908753,
+            "lmpu.sync": 3.1155260431114584,
+            "native": 3.0003410649951547,
+            "sync_tool": 2.5711340110283345
+          }
+        },
+        "limitation": null,
+        "native_speedup": {
+          "batch": 3.989285377749328,
+          "bigint_mul": 3.7161726911651813,
+          "large_context": 1.4504229042381274,
+          "large_result": 14.652849970164889,
+          "matmul": 72.11539566424173,
+          "sleep": 1.0383906281389679
+        },
+        "note": "native runs the same computation in-process; LMPU includes worker, IPC, and control-plane overhead.",
+        "status": "measured"
+      }
+    },
+    "note": "Mechanism-only evidence (S1 park, bounded slices, batching, overhead). Not an end-to-end efficiency claim."
+  },
+  "run_dir": "benchmarks/reports/gate-b-evidence",
+  "schema": "lmpu.bench.report.v2",
+  "simulation_quarantine": {
+    "baselines": [
+      "trace_token"
+    ],
+    "excluded_records": 12,
+    "note": "trace_token is a labelled simulation; it cannot appear in any claim table. Its records remain in the raw table, flagged."
+  },
   "table": {
     "batch": {
       "lmpu.batch": {
@@ -360,6 +1120,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 853.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 853.0,
+          "wall_time_seconds": 0.0016116814222186804
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -428,6 +1195,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 3624.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 3624.0,
+          "wall_time_seconds": 0.5241885842600217
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -496,6 +1270,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 0.0,
+          "wall_time_seconds": 0.0005062580263863007
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -579,6 +1360,13 @@
         ],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -660,6 +1448,13 @@
         ],
         "forward_passes": 65.0,
         "peak_context_tokens": 148.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -728,6 +1523,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 86.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 86.0,
+          "wall_time_seconds": 0.0006447054135302702
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -796,6 +1598,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 0.0,
+          "wall_time_seconds": 0.00017805040503541628
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -877,6 +1686,13 @@
         ],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -945,6 +1761,13 @@
         "failures": [],
         "forward_passes": 3473.0,
         "peak_context_tokens": 3473.0,
+        "per_correct_task": {
+          "forward_passes": 3473.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 3473.0,
+          "wall_time_seconds": 0.0015741110158463318
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": true,
         "timing": {
@@ -1015,6 +1838,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 3291.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 3291.0,
+          "wall_time_seconds": 0.000787382402146856
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1083,6 +1913,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 0.0,
+          "wall_time_seconds": 0.0005503882033129533
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1151,6 +1988,13 @@
         "failures": [],
         "forward_passes": 3196.0,
         "peak_context_tokens": 3196.0,
+        "per_correct_task": {
+          "forward_passes": 3196.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 3196.0,
+          "wall_time_seconds": 0.0012053869819889467
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": true,
         "timing": {
@@ -1221,6 +2065,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 43.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 43.0,
+          "wall_time_seconds": 0.019111120995754998
+        },
+        "phases": {},
         "result_bytes": 16777216.0,
         "simulated": false,
         "timing": {
@@ -1289,6 +2140,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 0.0,
+          "wall_time_seconds": 0.0023275630082935095
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1372,6 +2230,13 @@
         ],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1453,6 +2318,13 @@
         ],
         "forward_passes": 65.0,
         "peak_context_tokens": 104.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1521,6 +2393,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 70.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 70.0,
+          "wall_time_seconds": 0.029406668695931632
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1589,6 +2468,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 0.0,
+          "wall_time_seconds": 0.004595246709262331
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1670,6 +2556,13 @@
         ],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1738,6 +2631,13 @@
         "failures": [],
         "forward_passes": 1519.0,
         "peak_context_tokens": 1519.0,
+        "per_correct_task": {
+          "forward_passes": 1519.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 1519.0,
+          "wall_time_seconds": 0.0006259283206115166
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": true,
         "timing": {
@@ -1821,6 +2721,13 @@
         ],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1889,6 +2796,13 @@
         "failures": [],
         "forward_passes": 65.0,
         "peak_context_tokens": 87.0,
+        "per_correct_task": {
+          "forward_passes": 65.0,
+          "gpu_joules": 363.37637340257635,
+          "total_tokens": 87.0,
+          "wall_time_seconds": 3.9735342341009527
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -1957,6 +2871,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 70.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 70.0,
+          "wall_time_seconds": 3.609607499015207
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -2025,6 +2946,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 69.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 69.0,
+          "wall_time_seconds": 3.1391739320630827
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -2093,6 +3021,13 @@
         "failures": [],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": 0.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 0.0,
+          "wall_time_seconds": 3.0004940923924246
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -2174,6 +3109,13 @@
         ],
         "forward_passes": 0.0,
         "peak_context_tokens": 0.0,
+        "per_correct_task": {
+          "forward_passes": null,
+          "gpu_joules": null,
+          "total_tokens": null,
+          "wall_time_seconds": null
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": false,
         "timing": {
@@ -2242,6 +3184,13 @@
         "failures": [],
         "forward_passes": 6.0,
         "peak_context_tokens": 6.0,
+        "per_correct_task": {
+          "forward_passes": 6.0,
+          "gpu_joules": 0.0,
+          "total_tokens": 6.0,
+          "wall_time_seconds": 9.509967640042305e-06
+        },
+        "phases": {},
         "result_bytes": null,
         "simulated": true,
         "timing": {
@@ -2301,6 +3250,7 @@
   "timeline": [
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734363.4263775,
       "trial": 1,
       "wall_time_seconds": 16.261791073950008,
@@ -2308,6 +3258,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734380.690767,
       "trial": 1,
       "wall_time_seconds": 0.0005694117862731218,
@@ -2315,6 +3266,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734381.6933022,
       "trial": 1,
       "wall_time_seconds": 0.001567075029015541,
@@ -2322,6 +3274,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734382.6976738,
       "trial": 1,
       "wall_time_seconds": 0.0006275021005421877,
@@ -2329,6 +3282,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734383.7001922,
       "trial": 1,
       "wall_time_seconds": 3.0003410649951547,
@@ -2336,6 +3290,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734387.7029743,
       "trial": 1,
       "wall_time_seconds": 0.00016034115105867386,
@@ -2343,6 +3298,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734388.7051067,
       "trial": 1,
       "wall_time_seconds": 2.5958134320098907,
@@ -2350,6 +3306,7 @@
     },
     {
       "baseline": "lmpu.slice",
+      "simulated": false,
       "started_at": 1793734392.3028643,
       "trial": 1,
       "wall_time_seconds": 0.018198736011981964,
@@ -2357,6 +3314,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734393.3229234,
       "trial": 1,
       "wall_time_seconds": 2.6243139039725065,
@@ -2364,6 +3322,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734396.949549,
       "trial": 1,
       "wall_time_seconds": 2.6065854029729962,
@@ -2371,6 +3330,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734400.558282,
       "trial": 1,
       "wall_time_seconds": 0.0002866210415959358,
@@ -2378,6 +3338,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734401.5604749,
       "trial": 1,
       "wall_time_seconds": 0.0013398649170994759,
@@ -2385,6 +3346,7 @@
     },
     {
       "baseline": "lmpu.sleep",
+      "simulated": false,
       "started_at": 1793734402.5648227,
       "trial": 1,
       "wall_time_seconds": 4.601448853965849,
@@ -2392,6 +3354,7 @@
     },
     {
       "baseline": "lmpu.individual",
+      "simulated": false,
       "started_at": 1793734408.1685967,
       "trial": 1,
       "wall_time_seconds": 1.5343737159855664,
@@ -2399,6 +3362,7 @@
     },
     {
       "baseline": "lmpu.batch",
+      "simulated": false,
       "started_at": 1793734410.705125,
       "trial": 1,
       "wall_time_seconds": 0.0009546130895614624,
@@ -2406,6 +3370,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734411.7074313,
       "trial": 1,
       "wall_time_seconds": 2.601273901993409,
@@ -2413,6 +3378,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734415.3108394,
       "trial": 1,
       "wall_time_seconds": 8.479924872517586e-06,
@@ -2420,6 +3386,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734416.3129299,
       "trial": 1,
       "wall_time_seconds": 0.0008544630836695433,
@@ -2427,6 +3394,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734417.3158705,
       "trial": 1,
       "wall_time_seconds": 0.013398119015619159,
@@ -2434,6 +3402,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734418.3309622,
       "trial": 1,
       "wall_time_seconds": 0.0007108920253813267,
@@ -2441,6 +3410,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734419.3338017,
       "trial": 1,
       "wall_time_seconds": 2.55344171798788,
@@ -2448,6 +3418,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734422.8887398,
       "trial": 1,
       "wall_time_seconds": 3.1155260431114584,
@@ -2455,6 +3426,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734427.006235,
       "trial": 1,
       "wall_time_seconds": 2.4066743350122124,
@@ -2462,6 +3434,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734430.4148512,
       "trial": 1,
       "wall_time_seconds": 2.4134266329929233,
@@ -2469,6 +3442,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734433.8308518,
       "trial": 1,
       "wall_time_seconds": 0.016599528957158327,
@@ -2476,6 +3450,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734434.8493283,
       "trial": 1,
       "wall_time_seconds": 2.547470965888351,
@@ -2483,6 +3458,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734438.398813,
       "trial": 1,
       "wall_time_seconds": 0.004841614048928022,
@@ -2490,6 +3466,7 @@
     },
     {
       "baseline": "lmpu.individual",
+      "simulated": false,
       "started_at": 1793734439.4052546,
       "trial": 2,
       "wall_time_seconds": 0.018631313927471638,
@@ -2497,6 +3474,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734440.4250798,
       "trial": 2,
       "wall_time_seconds": 0.00020638993009924889,
@@ -2504,6 +3482,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734441.4272842,
       "trial": 2,
       "wall_time_seconds": 0.010795202106237411,
@@ -2511,6 +3490,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734442.4395337,
       "trial": 2,
       "wall_time_seconds": 0.0008990820497274399,
@@ -2518,6 +3498,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734443.4425788,
       "trial": 2,
       "wall_time_seconds": 0.0011127130128443241,
@@ -2525,6 +3506,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734444.4457598,
       "trial": 2,
       "wall_time_seconds": 0.0007880320772528648,
@@ -2532,6 +3514,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734445.4490345,
       "trial": 2,
       "wall_time_seconds": 0.0006010620854794979,
@@ -2539,6 +3522,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734446.4512672,
       "trial": 2,
       "wall_time_seconds": 2.545712067047134,
@@ -2546,6 +3530,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734449.9982796,
       "trial": 2,
       "wall_time_seconds": 2.5834543618839234,
@@ -2553,6 +3538,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734453.584382,
       "trial": 2,
       "wall_time_seconds": 3.102477769134566,
@@ -2560,6 +3546,7 @@
     },
     {
       "baseline": "lmpu.sleep",
+      "simulated": false,
       "started_at": 1793734457.690295,
       "trial": 2,
       "wall_time_seconds": 3.1226015260908753,
@@ -2567,6 +3554,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734461.8156466,
       "trial": 2,
       "wall_time_seconds": 0.00023018009960651398,
@@ -2574,6 +3562,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734462.8187225,
       "trial": 2,
       "wall_time_seconds": 3.000315578188747,
@@ -2581,6 +3570,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734466.8207247,
       "trial": 2,
       "wall_time_seconds": 2.402975352946669,
@@ -2588,6 +3578,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734470.2259884,
       "trial": 2,
       "wall_time_seconds": 2.3883134208153933,
@@ -2595,6 +3586,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734473.6158977,
       "trial": 2,
       "wall_time_seconds": 2.559034664183855,
@@ -2602,6 +3594,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734477.1762457,
       "trial": 2,
       "wall_time_seconds": 0.0006367419846355915,
@@ -2609,6 +3602,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734478.178439,
       "trial": 2,
       "wall_time_seconds": 2.573654147097841,
@@ -2616,6 +3610,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734481.7539766,
       "trial": 2,
       "wall_time_seconds": 2.5703048270661384,
@@ -2623,6 +3618,7 @@
     },
     {
       "baseline": "lmpu.slice",
+      "simulated": false,
       "started_at": 1793734485.32629,
       "trial": 2,
       "wall_time_seconds": 0.021129838889464736,
@@ -2630,6 +3626,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734486.3512046,
       "trial": 2,
       "wall_time_seconds": 0.0005433119367808104,
@@ -2637,6 +3634,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734487.3537724,
       "trial": 2,
       "wall_time_seconds": 0.0016018440946936607,
@@ -2644,6 +3642,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734488.358097,
       "trial": 2,
       "wall_time_seconds": 1.2079952284693718e-05,
@@ -2651,6 +3650,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734489.3611302,
       "trial": 2,
       "wall_time_seconds": 0.0009568920359015465,
@@ -2658,6 +3658,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734490.3665118,
       "trial": 2,
       "wall_time_seconds": 6.223325551021844,
@@ -2665,6 +3666,7 @@
     },
     {
       "baseline": "lmpu.batch",
+      "simulated": false,
       "started_at": 1793734497.5924916,
       "trial": 2,
       "wall_time_seconds": 0.00273701804690063,
@@ -2672,6 +3674,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734498.598559,
       "trial": 2,
       "wall_time_seconds": 7.854563968954608,
@@ -2679,6 +3682,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734507.456127,
       "trial": 3,
       "wall_time_seconds": 6.808126320131123,
@@ -2686,6 +3690,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734515.2706378,
       "trial": 3,
       "wall_time_seconds": 3.0008256339933723,
@@ -2693,6 +3698,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734519.2763338,
       "trial": 3,
       "wall_time_seconds": 0.06082527502439916,
@@ -2700,6 +3706,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734520.3431084,
       "trial": 3,
       "wall_time_seconds": 0.0005384408868849277,
@@ -2707,6 +3714,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734521.3474402,
       "trial": 3,
       "wall_time_seconds": 3.199517983943224,
@@ -2714,6 +3722,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734525.5487099,
       "trial": 3,
       "wall_time_seconds": 2.596452992875129,
@@ -2721,6 +3730,7 @@
     },
     {
       "baseline": "lmpu.slice",
+      "simulated": false,
       "started_at": 1793734529.148295,
       "trial": 3,
       "wall_time_seconds": 0.01800478808581829,
@@ -2728,6 +3738,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734530.1682267,
       "trial": 3,
       "wall_time_seconds": 0.0006135408766567707,
@@ -2735,6 +3746,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734531.1708612,
       "trial": 3,
       "wall_time_seconds": 2.498657777905464,
@@ -2742,6 +3754,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734534.6736374,
       "trial": 3,
       "wall_time_seconds": 0.00027526100166141987,
@@ -2749,6 +3762,7 @@
     },
     {
       "baseline": "lmpu.individual",
+      "simulated": false,
       "started_at": 1793734535.6757047,
       "trial": 3,
       "wall_time_seconds": 0.019560722867026925,
@@ -2756,6 +3770,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734536.6969564,
       "trial": 3,
       "wall_time_seconds": 0.0012419929262250662,
@@ -2763,6 +3778,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734537.699848,
       "trial": 3,
       "wall_time_seconds": 0.001553413923829794,
@@ -2770,6 +3786,7 @@
     },
     {
       "baseline": "lmpu.batch",
+      "simulated": false,
       "started_at": 1793734538.702698,
       "trial": 3,
       "wall_time_seconds": 0.0011434131301939487,
@@ -2777,6 +3794,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734539.7056687,
       "trial": 3,
       "wall_time_seconds": 0.0011635830160230398,
@@ -2784,6 +3802,7 @@
     },
     {
       "baseline": "lmpu.sleep",
+      "simulated": false,
       "started_at": 1793734540.7089474,
       "trial": 3,
       "wall_time_seconds": 3.1047721169888973,
@@ -2791,6 +3810,7 @@
     },
     {
       "baseline": "async_poll",
+      "simulated": false,
       "started_at": 1793734544.8159568,
       "trial": 3,
       "wall_time_seconds": 2.592982716858387,
@@ -2798,6 +3818,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734548.4110212,
       "trial": 3,
       "wall_time_seconds": 2.555538929067552,
@@ -2805,6 +3826,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734551.968781,
       "trial": 3,
       "wall_time_seconds": 0.0007196520455181599,
@@ -2812,6 +3834,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734552.9707146,
       "trial": 3,
       "wall_time_seconds": 2.3942181579768658,
@@ -2819,6 +3842,7 @@
     },
     {
       "baseline": "trace_token",
+      "simulated": true,
       "started_at": 1793734556.3665762,
       "trial": 3,
       "wall_time_seconds": 7.970025762915611e-06,
@@ -2826,6 +3850,7 @@
     },
     {
       "baseline": "lmpu.sync",
+      "simulated": false,
       "started_at": 1793734557.3683534,
       "trial": 3,
       "wall_time_seconds": 0.0006221621297299862,
@@ -2833,6 +3858,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734558.3708768,
       "trial": 3,
       "wall_time_seconds": 0.00015744101256132126,
@@ -2840,6 +3866,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734559.3732748,
       "trial": 3,
       "wall_time_seconds": 2.5720685850828886,
@@ -2847,6 +3874,7 @@
     },
     {
       "baseline": "direct_cot",
+      "simulated": false,
       "started_at": 1793734562.94731,
       "trial": 3,
       "wall_time_seconds": 2.5599983450956643,
@@ -2854,6 +3882,7 @@
     },
     {
       "baseline": "native",
+      "simulated": false,
       "started_at": 1793734566.5092936,
       "trial": 3,
       "wall_time_seconds": 0.0001674201339483261,
@@ -2861,6 +3890,7 @@
     },
     {
       "baseline": "sync_tool",
+      "simulated": false,
       "started_at": 1793734567.512425,
       "trial": 3,
       "wall_time_seconds": 2.5711340110283345,

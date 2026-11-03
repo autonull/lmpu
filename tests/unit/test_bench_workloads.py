@@ -21,7 +21,9 @@ def test_workload_set_is_registered() -> None:
         "batch",
     }
     assert get_workload("matmul").inputs == {"size": 512, "seed": 7}
-    assert get_workload("large_context").baselines == ("lmpu.sync", "trace_token", "native")
+    assert get_workload("large_context").baselines[0] == "lmpu.sync"
+    assert "app_agent" in get_workload("large_context").baselines
+    assert "native" in get_workload("large_context").baselines
     assert get_workload("sleep").inputs["program"].count("sleep(3)") == 1
     assert get_workload("large_result").config["result_bytes"] == 16 * 1024 * 1024
     assert get_workload("batch").native is not None

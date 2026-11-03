@@ -1,0 +1,1674 @@
+{
+  "baselines": {
+    "batch/lmpu.batch": {
+      "baseline": "lmpu.batch",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 803.0,
+          "sum": 2409.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 50.0,
+          "sum": 150.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 853.0,
+          "sum": 2559.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0011434131301939487,
+          "sum": 0.004835044266656041
+        }
+      },
+      "trials": 3,
+      "workload": "batch"
+    },
+    "batch/lmpu.individual": {
+      "baseline": "lmpu.individual",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 3574.0,
+          "sum": 10722.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 50.0,
+          "sum": 150.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 3624.0,
+          "sum": 10872.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.019560722867026925,
+          "sum": 1.572565752780065
+        }
+      },
+      "trials": 3,
+      "workload": "batch"
+    },
+    "batch/native": {
+      "baseline": "native",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0002866210415959358,
+          "sum": 0.0015187740791589022
+        }
+      },
+      "trials": 3,
+      "workload": "batch"
+    },
+    "bigint_mul/async_poll": {
+      "baseline": "async_poll",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.5958134320098907,
+          "sum": 7.762571251951158
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/direct_cot": {
+      "baseline": "direct_cot",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 65.0,
+          "sum": 195.0
+        },
+        "generated_tokens": {
+          "median": 64.0,
+          "sum": 192.0
+        },
+        "gpu_energy_joules": {
+          "median": 246.87624555683672,
+          "sum": 741.2158064070297
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 84.0,
+          "sum": 252.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 148.0,
+          "sum": 444.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.5834543618839234,
+          "sum": 7.7447266089729965
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/lmpu.sync": {
+      "baseline": "lmpu.sync",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 68.0,
+          "sum": 204.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 18.0,
+          "sum": 54.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 86.0,
+          "sum": 258.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0006221621297299862,
+          "sum": 0.0019341162405908108
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/native": {
+      "baseline": "native",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0001674201339483261,
+          "sum": 0.0005341512151062489
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/sync_tool": {
+      "baseline": "sync_tool",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 7.854563968954608,
+          "sum": 26.688423627987504
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/trace_token": {
+      "baseline": "trace_token",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 3473.0,
+          "sum": 10419.0
+        },
+        "generated_tokens": {
+          "median": 3473.0,
+          "sum": 10419.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 3473.0,
+          "sum": 10419.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.001567075029015541,
+          "sum": 0.004722333047538996
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "large_context/lmpu.sync": {
+      "baseline": "lmpu.sync",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 3270.0,
+          "sum": 9810.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 21.0,
+          "sum": 63.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 3291.0,
+          "sum": 9873.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0007880320772528648,
+          "sum": 0.002362147206440568
+        }
+      },
+      "trials": 3,
+      "workload": "large_context"
+    },
+    "large_context/native": {
+      "baseline": "native",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0005433119367808104,
+          "sum": 0.00165116460993886
+        }
+      },
+      "trials": 3,
+      "workload": "large_context"
+    },
+    "large_context/trace_token": {
+      "baseline": "trace_token",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 3196.0,
+          "sum": 9588.0
+        },
+        "generated_tokens": {
+          "median": 3196.0,
+          "sum": 9588.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 3196.0,
+          "sum": 9588.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0011635830160230398,
+          "sum": 0.00361616094596684
+        }
+      },
+      "trials": 3,
+      "workload": "large_context"
+    },
+    "large_result/lmpu.slice": {
+      "baseline": "lmpu.slice",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 15.0,
+          "sum": 45.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 28.0,
+          "sum": 84.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 43.0,
+          "sum": 129.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.018198736011981964,
+          "sum": 0.05733336298726499
+        }
+      },
+      "trials": 3,
+      "workload": "large_result"
+    },
+    "large_result/native": {
+      "baseline": "native",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0012419929262250662,
+          "sum": 0.0069826890248805285
+        }
+      },
+      "trials": 3,
+      "workload": "large_result"
+    },
+    "matmul/async_poll": {
+      "baseline": "async_poll",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.4066743350122124,
+          "sum": 7.308307465864345
+        }
+      },
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/direct_cot": {
+      "baseline": "direct_cot",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 65.0,
+          "sum": 195.0
+        },
+        "generated_tokens": {
+          "median": 64.0,
+          "sum": 192.0
+        },
+        "gpu_energy_joules": {
+          "median": 246.23470561977103,
+          "sum": 735.5619274951222
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 40.0,
+          "sum": 120.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 104.0,
+          "sum": 312.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.555538929067552,
+          "sum": 7.725564900087193
+        }
+      },
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/lmpu.sync": {
+      "baseline": "lmpu.sync",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 52.0,
+          "sum": 156.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 18.0,
+          "sum": 54.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 70.0,
+          "sum": 210.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.016599528957158327,
+          "sum": 0.0882200060877949
+        }
+      },
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/native": {
+      "baseline": "native",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.00023018009960651398,
+          "sum": 0.013785740127786994
+        }
+      },
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/sync_tool": {
+      "baseline": "sync_tool",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.3942181579768658,
+          "sum": 7.195958211785182
+        }
+      },
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/trace_token": {
+      "baseline": "trace_token",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 1519.0,
+          "sum": 4557.0
+        },
+        "generated_tokens": {
+          "median": 1519.0,
+          "sum": 4557.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 1519.0,
+          "sum": 4557.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 0.0006275021005421877,
+          "sum": 0.00187778496183455
+        }
+      },
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "sleep/async_poll": {
+      "baseline": "async_poll",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.6065854029729962,
+          "sum": 11.422893670853227
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/direct_cot": {
+      "baseline": "direct_cot",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 65.0,
+          "sum": 195.0
+        },
+        "generated_tokens": {
+          "median": 64.0,
+          "sum": 192.0
+        },
+        "gpu_energy_joules": {
+          "median": 246.35530129351187,
+          "sum": 1090.129120207729
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 23.0,
+          "sum": 69.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 87.0,
+          "sum": 261.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.559034664183855,
+          "sum": 11.920602702302858
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/lmpu.sleep": {
+      "baseline": "lmpu.sleep",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 68.0,
+          "sum": 204.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 2.0,
+          "sum": 6.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 3.12222292390652,
+          "sum": 10.827703332994133
+        },
+        "total_tokens": {
+          "median": 70.0,
+          "sum": 210.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 3.1226015260908753,
+          "sum": 10.828822497045621
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/lmpu.sync": {
+      "baseline": "lmpu.sync",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 67.0,
+          "sum": 201.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 2.0,
+          "sum": 6.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 69.0,
+          "sum": 207.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 3.1155260431114584,
+          "sum": 9.417521796189249
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/native": {
+      "baseline": "native",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 3.0003410649951547,
+          "sum": 9.001482277177274
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/sync_tool": {
+      "baseline": "sync_tool",
+      "correct": 0,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "generated_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 2.5711340110283345,
+          "sum": 7.692259124014527
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/trace_token": {
+      "baseline": "trace_token",
+      "correct": 3,
+      "has_per_phase_instrumentation": false,
+      "phases": {},
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 6.0,
+          "sum": 18.0
+        },
+        "generated_tokens": {
+          "median": 6.0,
+          "sum": 18.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 6.0,
+          "sum": 18.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 8.479924872517586e-06,
+          "sum": 2.8529902920126915e-05
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    }
+  },
+  "best_case_measured": false,
+  "ceiling": {
+    "batch/lmpu.batch": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 2559.0,
+      "baseline": "lmpu.batch",
+      "control_tokens": 2409.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 150.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 2559.0,
+      "trials": 3,
+      "workload": "batch"
+    },
+    "batch/lmpu.individual": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 10872.0,
+      "baseline": "lmpu.individual",
+      "control_tokens": 10722.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 150.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 10872.0,
+      "trials": 3,
+      "workload": "batch"
+    },
+    "batch/native": {
+      "baseline": "native",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "batch"
+    },
+    "bigint_mul/async_poll": {
+      "baseline": "async_poll",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/direct_cot": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "direct_cot",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 444.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/lmpu.sync": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 258.0,
+      "baseline": "lmpu.sync",
+      "control_tokens": 204.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 54.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 258.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/native": {
+      "baseline": "native",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/sync_tool": {
+      "baseline": "sync_tool",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/trace_token": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "trace_token",
+      "control_tokens": 0.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 10419.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "large_context/lmpu.sync": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 9873.0,
+      "baseline": "lmpu.sync",
+      "control_tokens": 9810.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 63.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 9873.0,
+      "trials": 3,
+      "workload": "large_context"
+    },
+    "large_context/native": {
+      "baseline": "native",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "large_context"
+    },
+    "large_context/trace_token": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "trace_token",
+      "control_tokens": 0.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 9588.0,
+      "trials": 3,
+      "workload": "large_context"
+    },
+    "large_result/lmpu.slice": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 129.0,
+      "baseline": "lmpu.slice",
+      "control_tokens": 45.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 84.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 129.0,
+      "trials": 3,
+      "workload": "large_result"
+    },
+    "large_result/native": {
+      "baseline": "native",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "large_result"
+    },
+    "matmul/async_poll": {
+      "baseline": "async_poll",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "matmul"
+    },
+    "matmul/direct_cot": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "direct_cot",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 312.0,
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/lmpu.sync": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 210.0,
+      "baseline": "lmpu.sync",
+      "control_tokens": 156.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 54.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 210.0,
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "matmul/native": {
+      "baseline": "native",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "matmul"
+    },
+    "matmul/sync_tool": {
+      "baseline": "sync_tool",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "matmul"
+    },
+    "matmul/trace_token": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "trace_token",
+      "control_tokens": 0.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 4557.0,
+      "trials": 3,
+      "workload": "matmul"
+    },
+    "sleep/async_poll": {
+      "baseline": "async_poll",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "sleep"
+    },
+    "sleep/direct_cot": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "direct_cot",
+      "control_tokens": 0.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 261.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/lmpu.sleep": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 210.0,
+      "baseline": "lmpu.sleep",
+      "control_tokens": 204.0,
+      "correct": 3,
+      "idle_seconds": 10.827703332994133,
+      "ingestion_tokens": 6.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 210.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/lmpu.sync": {
+      "addressable_fraction": 1.0,
+      "addressable_tokens": 207.0,
+      "baseline": "lmpu.sync",
+      "control_tokens": 201.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 6.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 207.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/native": {
+      "baseline": "native",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "sleep"
+    },
+    "sleep/sync_tool": {
+      "baseline": "sync_tool",
+      "reason": "no token accounting",
+      "status": "not_measured",
+      "workload": "sleep"
+    },
+    "sleep/trace_token": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "trace_token",
+      "control_tokens": 0.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 18.0,
+      "trials": 3,
+      "workload": "sleep"
+    }
+  },
+  "record_count": 81,
+  "run_dir": "benchmarks/reports/gate-b-evidence",
+  "schema": "lmpu.bench.ceiling.v1",
+  "verdict": "inconclusive",
+  "verdict_rule": "Record FAIL for the performance thesis only after the ceiling is computed on the best-case workload (plan 0.1). Artifacts without the best-case cell are reported as inconclusive, and the decisive number comes from the Batch 1 instrumented pilot."
+}

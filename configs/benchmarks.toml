@@ -16,8 +16,12 @@ baselines = [
     "native",
     "direct_cot",
     "trace_token",
-    "sync_tool",
-    "async_poll",
+    "sync_tool_full_result",
+    "async_poll_programmatic",
+    "async_poll_model",
+    "session_reopen",
+    "app_agent",
+    "engine_native",
 ]
 trials = 5
 warmups = 1

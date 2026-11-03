@@ -18,6 +18,7 @@ from typing import Any
 from .baselines import BaselineRunner, resolve_baselines
 from .config import BenchmarkConfig
 from .runner import TrialContext, TrialRunner
+from .taxonomy import baseline_kind, record_is_simulated
 from .workloads import WorkloadSpec, resolve_workloads
 
 logger = logging.getLogger(__name__)
@@ -206,11 +207,13 @@ def summarize(
 
             by_baseline[baseline] = {
                 "trials": len(trials),
+                "kind": baseline_kind(baseline),
                 "wall_time_seconds": {
                     "median": statistics.median(walls) if walls else None,
                     "ci95": _bootstrap_ci(walls, workload_hash(f"{workload.name}:{baseline}")),
                 },
                 "metrics": metric_medians,
+                "per_correct_task": _per_correct_task(trials),
                 "correctness": {
                     "passes": sum(correctness),
                     "total": len(correctness),
@@ -222,9 +225,7 @@ def summarize(
                     if not record["correct"]
                 ],
                 "metadata": {
-                    "simulated": any(
-                        record.get("metadata", {}).get("simulated") for record in trials
-                    ),
+                    "simulated": any(record_is_simulated(record) for record in trials),
                     "polls": [
                         record["metadata"]["polls"]
                         for record in trials
@@ -242,6 +243,28 @@ def summarize(
 def workload_hash(name: str) -> int:
     """Stable per-workload bootstrap seed."""
     return sum(ord(char) for char in name) * 7919
+
+
+def _per_correct_task(trials: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Total cost per correct task; failures are paid for, not skipped (V0.4)."""
+    correct = sum(1 for record in trials if record.get("correct"))
+    if not correct:
+        return {
+            "total_tokens": None,
+            "forward_passes": None,
+            "wall_time_seconds": None,
+            "gpu_joules": None,
+        }
+
+    def total(key: str) -> float:
+        return sum(float(record["metrics"].get(key, 0.0)) for record in trials)
+
+    return {
+        "total_tokens": total("total_tokens") / correct,
+        "forward_passes": total("forward_passes") / correct,
+        "wall_time_seconds": sum(float(record["wall_time_seconds"]) for record in trials) / correct,
+        "gpu_joules": total("gpu_energy_joules") / correct,
+    }
 
 
 class BenchmarkHarness:
