@@ -1,4 +1,0 @@
-[console_scripts]
-lmpu = lmpu.cli:main
-lmpu-doctor = lmpu.doctor:main
-lmpu-worker = lmpu.worker:main

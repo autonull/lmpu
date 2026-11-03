@@ -70,20 +70,39 @@ class Worker:
         else:
             raise ValueError(f"Unknown processor: {self.processor_name}")
 
-        # Setup stdin/stdout for communication
+        # Setup stdin/stdout for communication (binary mode for orjson)
+        loop = asyncio.get_event_loop()
+        
+        # Use a simpler approach: create readers/writers directly
         self._stdin_reader = asyncio.StreamReader()
         self._stdin_protocol = asyncio.StreamReaderProtocol(self._stdin_reader)
-        await asyncio.get_event_loop().connect_read_pipe(
+        
+        # Connect stdin (binary)
+        await loop.connect_read_pipe(
             lambda: self._stdin_protocol,
-            sys.stdin,
+            sys.stdin.buffer,
         )
         
-        self._stdout_writer = asyncio.StreamWriter(
-            sys.stdout,
-            None,
-            None,
-            asyncio.get_event_loop(),
-        )
+        # For stdout, use a simple approach with sys.stdout.buffer directly
+        class BinaryStreamWriter:
+            def __init__(self, stream):
+                self._stream = stream
+                self._loop = loop
+            
+            def write(self, data: bytes) -> None:
+                self._stream.write(data)
+                self._stream.flush()
+            
+            async def drain(self) -> None:
+                pass
+            
+            def close(self) -> None:
+                pass
+            
+            async def wait_closed(self) -> None:
+                pass
+        
+        self._stdout_writer = BinaryStreamWriter(sys.stdout.buffer)
 
         # Initialize processor
         ctx = ProcessorContext(runtime_config={})

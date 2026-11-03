@@ -139,12 +139,14 @@ class Runtime:
 
     def _register_builtin_processors(self) -> None:
         """Register built-in processors."""
-        from .builtin.pure_function import PureFunctionProcessor
-        from .builtin.python_vm import PythonVMProcessor
-        from .builtin.vector_engine import VectorEngineProcessor
-        from .builtin.symbolic_planner import SymbolicPlannerProcessor
-        from .builtin.neural_summary import NeuralSummaryProcessor
-        from .builtin.hardware_stub import HardwareStubProcessor
+        from lmpu.processors.builtin import (
+            PureFunctionProcessor,
+            PythonVMProcessor,
+            VectorEngineProcessor,
+            SymbolicPlannerProcessor,
+            NeuralSummaryProcessor,
+            HardwareStubProcessor,
+        )
         
         processors = [
             PureFunctionProcessor(),

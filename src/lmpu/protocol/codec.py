@@ -79,15 +79,21 @@ class RPCStream:
         self._writer = writer
         self._buffer = bytearray()
 
-    async def send_request(self, request: RPCRequest) -> None:
+    async def send_request(self, request: Union[RPCRequest, dict]) -> None:
+        if isinstance(request, dict):
+            request = RPCRequest.model_validate(request)
         self._writer.write(RPCCodec.encode_request(request))
         await self._writer.drain()
 
-    async def send_response(self, response: RPCResponse) -> None:
+    async def send_response(self, response: Union[RPCResponse, dict]) -> None:
+        if isinstance(response, dict):
+            response = RPCResponse.model_validate(response)
         self._writer.write(RPCCodec.encode_response(response))
         await self._writer.drain()
 
-    async def send_notification(self, notification: RPCNotification) -> None:
+    async def send_notification(self, notification: Union[RPCNotification, dict]) -> None:
+        if isinstance(notification, dict):
+            notification = RPCNotification.model_validate(notification)
         self._writer.write(RPCCodec.encode_notification(notification))
         await self._writer.drain()
 

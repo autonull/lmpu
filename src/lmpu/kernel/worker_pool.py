@@ -6,10 +6,10 @@ import asyncio
 import os
 import signal
 import sys
+import ulid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
-from ulid import ULID
 
 from ..protocol.messages import (
     EventKind,
@@ -22,6 +22,7 @@ from ..protocol.messages import (
     NeedsMoreInputData,
     HeartbeatData,
 )
+import ulid
 from ..kernel.events import EventLog
 from ..kernel.jobs import JobTable, JobRecord, JobStatus
 from ..kernel.clock import get_clock
@@ -90,7 +91,7 @@ class WorkerPool:
         plugin_path: Optional[str] = None,
     ) -> WorkerInfo:
         """Spawn a new worker process."""
-        worker_id = f"worker_{ULID()}"
+        worker_id = f"worker_{str(ulid.new())}"
         
         # Build command
         cmd = [
@@ -184,7 +185,7 @@ class WorkerPool:
             self.event_log.append(
                 msg.get("session", "unknown"),
                 Event(
-                    event_id=str(ULID()),
+                    event_id=str(ulid.new()),
                     seq=0,
                     session=msg.get("session", "unknown"),
                     job_id=msg.get("job_id"),
@@ -204,7 +205,7 @@ class WorkerPool:
                     self.event_log.append(
                         job.session_id,
                         Event(
-                            event_id=str(ULID()),
+                            event_id=str(ulid.new()),
                             seq=0,
                             session=job.session_id,
                             job_id=job_id,
@@ -228,7 +229,7 @@ class WorkerPool:
                     self.event_log.append(
                         job.session_id,
                         Event(
-                            event_id=str(ULID()),
+                            event_id=str(ulid.new()),
                             seq=0,
                             session=job.session_id,
                             job_id=job_id,
@@ -262,7 +263,7 @@ class WorkerPool:
         self.event_log.append(
             job.session_id,
             Event(
-                event_id=str(ULID()),
+                event_id=str(ulid.new()),
                 seq=0,
                 session=job.session_id,
                 job_id=job_id,
@@ -301,7 +302,7 @@ class WorkerPool:
         self.event_log.append(
             job.session_id,
             Event(
-                event_id=str(ULID()),
+                event_id=str(ulid.new()),
                 seq=0,
                 session=job.session_id,
                 job_id=job_id,
@@ -346,7 +347,7 @@ class WorkerPool:
                 self.event_log.append(
                     job.session_id,
                     Event(
-                        event_id=str(ULID()),
+                        event_id=str(ulid.new()),
                         seq=0,
                         session=job.session_id,
                         job_id=job.job_id,
