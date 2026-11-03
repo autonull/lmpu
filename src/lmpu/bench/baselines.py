@@ -1037,6 +1037,7 @@ class BaselineRunner:
         program: dict[str, Any] | None = None
         final_answer: str | None = None
         polls = 0
+        submitted: Any = None
         try:
             prefix, program, _ = await self._model_program(context, metrics, phases)
             conversation = prefix

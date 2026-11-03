@@ -1,0 +1,975 @@
+{
+  "baselines": {
+    "bigint_mul/app_agent": {
+      "baseline": "app_agent",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.78610338596627
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 962.0424233553814,
+          "sum": 2892.2929105076673
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 110.0,
+          "sum": 330.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 366.0,
+          "sum": 1098.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 10.033012371975929,
+          "sum": 29.941562509862706
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/async_poll_model": {
+      "baseline": "async_poll_model",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.907586621819064,
+        "poll": 7.851175534073263,
+        "submit": 0.000793329905718565
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 55.0,
+          "sum": 165.0
+        },
+        "forward_passes": {
+          "median": 323.0,
+          "sum": 969.0
+        },
+        "generated_tokens": {
+          "median": 320.0,
+          "sum": 960.0
+        },
+        "gpu_energy_joules": {
+          "median": 1235.7578958791005,
+          "sum": 3695.180592267143
+        },
+        "injected_tokens": {
+          "median": 82.0,
+          "sum": 246.0
+        },
+        "prefill_tokens": {
+          "median": 110.0,
+          "sum": 330.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 567.0,
+          "sum": 1701.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 12.6953172350768,
+          "sum": 37.918182445224375
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/async_poll_programmatic": {
+      "baseline": "async_poll_programmatic",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 41.583314024144784,
+        "poll": 0.9116183770820498,
+        "submit": 0.0009512712713330984
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 174.0,
+          "sum": 444.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 110.0,
+          "sum": 330.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 540.0,
+          "sum": 1542.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 10.271467057056725,
+          "sum": 42.499093336984515
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/direct_cot": {
+      "baseline": "direct_cot",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "answer": 29.658948508789763,
+        "prefill": 0.0008929802570492029
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 966.2375172843703,
+          "sum": 2894.320376497974
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 84.0,
+          "sum": 252.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 340.0,
+          "sum": 1020.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.942069411976263,
+          "sum": 29.662476994795725
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/engine_native": {
+      "baseline": "engine_native",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.86438421602361
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 976.5380376042672,
+          "sum": 2927.333868285149
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 110.0,
+          "sum": 330.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 366.0,
+          "sum": 1098.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.885770689928904,
+          "sum": 29.86693971697241
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/session_reopen": {
+      "baseline": "session_reopen",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "answer": 29.658235030947253,
+        "plan": 29.55409890622832,
+        "poll": 0.5073209791444242,
+        "reprefill": 0.0008390313014388084,
+        "submit": 0.0008061900734901428
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 79.0,
+          "sum": 328.0
+        },
+        "forward_passes": {
+          "median": 514.0,
+          "sum": 1542.0
+        },
+        "generated_tokens": {
+          "median": 512.0,
+          "sum": 1536.0
+        },
+        "gpu_energy_joules": {
+          "median": 964.2961824703351,
+          "sum": 2898.5705349832683
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 214.0,
+          "sum": 642.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 805.0,
+          "sum": 2506.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 19.749604924116284,
+          "sum": 59.72668992332183
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/sync_tool_full_result": {
+      "baseline": "sync_tool_full_result",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.812733265105635,
+        "submit": 0.4059133480768651
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 61.0,
+          "sum": 183.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 110.0,
+          "sum": 330.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 427.0,
+          "sum": 1281.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.961714182980359,
+          "sum": 30.221389866201207
+        }
+      },
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "sleep/app_agent": {
+      "baseline": "app_agent",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.65275590494275
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 967.8359335406874,
+          "sum": 2898.3447217839152
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 49.0,
+          "sum": 147.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 305.0,
+          "sum": 915.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.896563220070675,
+          "sum": 29.655061647994444
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/async_poll_model": {
+      "baseline": "async_poll_model",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.709032512968406
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 973.633741173767,
+          "sum": 2910.8723259358176
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 49.0,
+          "sum": 147.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 305.0,
+          "sum": 915.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.896515167085454,
+          "sum": 29.7116626072675
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/async_poll_programmatic": {
+      "baseline": "async_poll_programmatic",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 30.210895312018692
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 986.9065604440104,
+          "sum": 2953.065971958039
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 49.0,
+          "sum": 147.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 305.0,
+          "sum": 915.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 10.072737568989396,
+          "sum": 30.214122515870258
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/direct_cot": {
+      "baseline": "direct_cot",
+      "correct": 3,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "answer": 30.05180677608587,
+        "prefill": 0.0006460410077124834
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 969.7096684120595,
+          "sum": 2917.263612278429
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 23.0,
+          "sum": 69.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 279.0,
+          "sum": 837.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 10.009451816091314,
+          "sum": 30.05502210999839
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/engine_native": {
+      "baseline": "engine_native",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.80274948803708
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 970.0216242049486,
+          "sum": 2910.834834406649
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 49.0,
+          "sum": 147.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 305.0,
+          "sum": 915.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.910393727011979,
+          "sum": 29.805005320813507
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/session_reopen": {
+      "baseline": "session_reopen",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.972250375896692
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 978.1468926896914,
+          "sum": 2926.759750318066
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 49.0,
+          "sum": 147.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 305.0,
+          "sum": 915.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.963087324984372,
+          "sum": 29.975387739250436
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/sync_tool_full_result": {
+      "baseline": "sync_tool_full_result",
+      "correct": 0,
+      "has_per_phase_instrumentation": true,
+      "phases": {
+        "plan": 29.523477328009903
+      },
+      "totals": {
+        "control_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "forward_passes": {
+          "median": 257.0,
+          "sum": 771.0
+        },
+        "generated_tokens": {
+          "median": 256.0,
+          "sum": 768.0
+        },
+        "gpu_energy_joules": {
+          "median": 959.5254176262184,
+          "sum": 2881.515015330372
+        },
+        "injected_tokens": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "prefill_tokens": {
+          "median": 49.0,
+          "sum": 147.0
+        },
+        "sleep_duration_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "total_tokens": {
+          "median": 305.0,
+          "sum": 915.0
+        },
+        "wake_latency_seconds": {
+          "median": 0.0,
+          "sum": 0.0
+        },
+        "wall_time_seconds": {
+          "median": 9.85095726698637,
+          "sum": 29.526496831094846
+        }
+      },
+      "trials": 3,
+      "workload": "sleep"
+    }
+  },
+  "best_case_measured": false,
+  "ceiling": {
+    "bigint_mul/app_agent": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "app_agent",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 1098.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/async_poll_model": {
+      "addressable_fraction": 0.24162257495590828,
+      "addressable_tokens": 411.0,
+      "baseline": "async_poll_model",
+      "control_tokens": 165.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 246.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 1701.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/async_poll_programmatic": {
+      "addressable_fraction": 0.28793774319066145,
+      "addressable_tokens": 444.0,
+      "baseline": "async_poll_programmatic",
+      "control_tokens": 444.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 1542.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/direct_cot": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "direct_cot",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 1020.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/engine_native": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "engine_native",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 1098.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/session_reopen": {
+      "addressable_fraction": 0.13088620871161272,
+      "addressable_tokens": 328.00083903130144,
+      "baseline": "session_reopen",
+      "control_tokens": 328.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": 0.0008390313014388084,
+      "status": "measured",
+      "total_tokens": 2506.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "bigint_mul/sync_tool_full_result": {
+      "addressable_fraction": 0.14285714285714285,
+      "addressable_tokens": 183.0,
+      "baseline": "sync_tool_full_result",
+      "control_tokens": 183.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 1281.0,
+      "trials": 3,
+      "workload": "bigint_mul"
+    },
+    "sleep/app_agent": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "app_agent",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 915.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/async_poll_model": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "async_poll_model",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 915.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/async_poll_programmatic": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "async_poll_programmatic",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 915.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/direct_cot": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "direct_cot",
+      "control_tokens": 0.0,
+      "correct": 3,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 837.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/engine_native": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "engine_native",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 915.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/session_reopen": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "session_reopen",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 915.0,
+      "trials": 3,
+      "workload": "sleep"
+    },
+    "sleep/sync_tool_full_result": {
+      "addressable_fraction": 0.0,
+      "addressable_tokens": 0.0,
+      "baseline": "sync_tool_full_result",
+      "control_tokens": 0.0,
+      "correct": 0,
+      "idle_seconds": 0.0,
+      "ingestion_tokens": 0.0,
+      "polling_note": "control_tokens is used as the polling/wait proxy; they include submission overhead and cannot be split further until the Batch 1 instrumented run",
+      "reprefill_note": "re-prefill tokens are not separable from initial prefill in artifacts without per-phase instrumentation",
+      "reprefill_seconds": null,
+      "status": "measured",
+      "total_tokens": 915.0,
+      "trials": 3,
+      "workload": "sleep"
+    }
+  },
+  "record_count": 42,
+  "run_dir": "benchmarks/results/l0-pilot/2026-11-03/NVIDIA-GeForce-RTX-3080/cb000e530401",
+  "schema": "lmpu.bench.ceiling.v1",
+  "verdict": "inconclusive",
+  "verdict_rule": "Record FAIL for the performance thesis only after the ceiling is computed on the best-case workload (plan 0.1). Artifacts without the best-case cell are reported as inconclusive, and the decisive number comes from the Batch 1 instrumented pilot."
+}

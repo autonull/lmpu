@@ -176,25 +176,38 @@ the claims that pass; the release notes must list every claim that did not.
 
 ## 0.3 Handoff for a fresh session
 
-**Where the plan stands.** `TODO.2.md` is superseded. `TODO.3.md` is the active
-execution plan. Gates A-C from `TODO.2` are closed; D3 artifacts build but the
-release is parked and unsigned. No code for Gate V has been written yet.
+**Where the plan stands (2026-11-03, Batch 0 complete).** `TODO.2.md` is
+superseded. `TODO.3.md` is the active execution plan. Gates A-C from `TODO.2`
+are closed; D3 artifacts build but the release is parked and unsigned. Batch 0
+(L0) landed: correctness scoring on decoded final answers for every model arm,
+all-token accounting retained on the failure path, simulation quarantine for
+`trace_token`, the mechanism/end-to-end report split (`lmpu.bench.report.v2`),
+per-correct-task cost, paired-trial deltas, the baseline taxonomy with
+in-process `app_agent` and `engine_native` competitors, per-phase
+instrumentation, and the pre-registration artifact committed **before** the
+first measured run. The ceiling verdict is **INCONCLUSIVE** — existing
+artifacts cannot price the best-case workload and the instrumented pilot
+(`benchmarks/reports/l0-pilot`) shows the 0.8B model-planner arm failing at
+this budget (see `docs/viability/ceiling-analysis.md`). Batch 1 (oracle arms)
+is required to resolve it.
 
-**What to read first.** `README.md` for the design; `TODO.3.md` sections 0, 0.1,
-0.2, 0.3; `docs/benchmarks.md` for the harness contract.
+**What to read first.** `README.md` for the design; `TODO.3.md` sections 0,
+0.1, 0.2, 0.3; `docs/viability/` (pre-registration, strongest-baseline audit,
+ceiling analysis); `docs/benchmarks.md` for the harness contract.
 
 **First steps in a fresh session.**
 
 ```bash
 export UV_LINK_MODE=copy
 uv sync --dev --extra host --extra dashboard --extra bench
-uv run python -c "import scipy, torchvision, pytest; print('smoke ok')"
-uv run python -m pytest tests/unit -q
+uv run python -c "import torch, transformers, scipy, pytest; print('smoke ok')"
+uv run python -m pytest tests/unit/test_bench_gate.py tests/unit/test_bench_report.py -q
 ```
 
-Then implement **Batch 0 (L0)**: correctness scoring, all-token accounting,
-simulation quarantine, baseline taxonomy, cost decomposition, and the report
-split. Commit the pre-registration artifact before any measured trial.
+Then Batch 0 (L0) is **done**. The next milestone is **Batch 1 (L1)**:
+`lmpu.model_async`, `lmpu.model_sync`, the oracle planner, and the best-case
+oracle arms (single- and two-session). Commit the pre-registration artifact
+before any measured trial.
 
 **Non-negotiables.**
 - Do not sign, tag, publish, or market anything.
@@ -209,6 +222,11 @@ split. Commit the pre-registration artifact before any measured trial.
 - `trace_token` must never support a claim.
 - The 64-token budget produced false baseline failures; calibration is part of
   the experiment, not an afterthought.
+- (Closed 2026-11-03) The 0.8B model never emits EOS within 256 tokens and
+  echoes `<a>`-style placeholders verbatim — every tool arm fails at the
+  plan step. Calibration (V2.1) needs few-shot prompts with concrete values,
+  a budget sweep, and stop discipline; until then, treat any end-to-end
+  number from this model as void.
 
 ---
 
@@ -563,8 +581,9 @@ or product surface before Gate V returns a verdict.
 The ladder in section 0.1 is authoritative. Work is batched to avoid rework and
 to stop as early as the evidence allows.
 
-**Batch 0 — one harness change (L0).**
-V0.1-V0.4, V0.8-V0.9, V1.3, V1.4, V1.7. One refactor delivers correct scoring,
+**Batch 0 — one harness change (L0).** *(Done 2026-11-03; ceiling verdict
+INCONCLUSIVE — see `docs/viability/ceiling-analysis.md`; resolves in Batch 1.)*
+V0.1-V0.4, V0.8-V0.9, V1.3, V1.4, V1.7. One refactor delivered correct scoring,
 all-token accounting, simulation quarantine, baseline taxonomy, cost
 decomposition, and the report split. Run the ceiling analysis on existing
 artifacts; no new GPU matrix yet.
@@ -611,28 +630,33 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
+**As of 2026-11-03 (Batch 0 committed).** Harness integrity is closed and
+verified on GPU (`benchmarks/reports/l0-pilot`). The ceiling verdict is
+INCONCLUSIVE; V0.8 stays open until the best-case oracle arms exist. Batch 1
+(V1.1, V1.2, V1.8, V1.10, V0.9-validated) is next.
+
 ### V0 — Measurement integrity
-- [ ] V0.1 Correctness scoring
-- [ ] V0.2 All-token accounting
-- [ ] V0.3 Simulation quarantine
-- [ ] V0.4 Fairness invariants
-- [ ] V0.5 Report split
-- [ ] V0.6 Adversarial regression fixtures
-- [ ] V0.7 Strongest-baseline audit
-- [ ] V0.8 Cost decomposition and ceiling
-- [ ] V0.9 Competitor prototypes
+- [x] V0.1 Correctness scoring — every model arm decodes a final answer and is scored on it (`score_answer`); tool result correctness retained separately as `tool_correct`
+- [x] V0.2 All-token accounting — failure path retains accumulated metrics and host energy (verified on GPU: 15,736 failed-attempt tokens captured)
+- [x] V0.3 Simulation quarantine — `trace_token` excluded from every claim table; `report.v2` requires the `simulated` flag check; quarantine counts reported
+- [x] V0.4 Fairness invariants — randomized per-trial order (`Random(seed+trial)`), paired shared `(seed, trial)`, per-correct-task cost (failures paid for, not skipped), paired deltas vs `direct_cot`
+- [x] V0.5 Report split — mechanism (C2-C5) and end-to-end (E) sections; no mixed claim table
+- [x] V0.6 Adversarial regression fixtures — wrong final answer fails the claim gate; simulated baseline cannot be claimed (`tests/unit/test_bench_gate.py`)
+- [x] V0.7 Strongest-baseline audit — `docs/viability/strongest-baseline-audit.md` (prefix caching, programmatic polling, bounded ingestion included; streaming/vLLM excluded with reasons)
+- [~] V0.8 Cost decomposition and ceiling — `lmpu.bench.ceiling` shipped; existing artifacts + instrumented pilot analyzed; **best-case ceiling pending Batch 1 oracle arms** (INCONCLUSIVE, `docs/viability/ceiling-analysis.md`)
+- [x] V0.9 Competitor prototypes — `app_agent` (in-process tool, KV-warm prefix cache, bounded 200-char ingestion, programmatic polling) and `engine_native` (blocking in-process call) runnable in-harness; cache layout/chunking/interval/prompt/retry policy recorded in the pre-registration
 
 ### V1 — Mechanism isolation
-- [ ] V1.1 `lmpu.model_async`
-- [ ] V1.2 `lmpu.model_sync`
-- [ ] V1.3 Baseline taxonomy
-- [ ] V1.4 Per-phase instrumentation
-- [ ] V1.5 Mechanism pre-registration
-- [ ] V1.6 Negative controls
-- [ ] V1.7 Pre-registration artifact
-- [ ] V1.8 Oracle planner
-- [ ] V1.9 Capability arm
-- [ ] V1.10 Fast probes
+- [ ] V1.1 `lmpu.model_async` — Batch 1
+- [ ] V1.2 `lmpu.model_sync` — Batch 1
+- [x] V1.3 Baseline taxonomy — mechanism (`lmpu.*`, `native`), end-to-end (seven model arms), simulation (`trace_token`); old `sync_tool`/`async_poll` names removed
+- [x] V1.4 Per-phase instrumentation — `plan`, `prefill`, `submit`, `park`, `wake`, `poll`, `import`, `execute`, `ingest`, `answer`, `reprefill` recorded per phase (wall seconds) plus token-kind splits
+- [x] V1.5 Mechanism pre-registration — hypotheses and thresholds recorded (`docs/viability/preregistration.md`)
+- [ ] V1.6 Negative controls — Batch 3
+- [x] V1.7 Pre-registration artifact — `docs/viability/preregistration.md` committed before the first measured run (pre-registration commit precedes `l0-pilot`)
+- [ ] V1.8 Oracle planner — Batch 1
+- [ ] V1.9 Capability arm — Batch 3
+- [ ] V1.10 Fast probes — Batch 1
 
 ### V2 — End-to-end
 - [ ] V2.1 Calibrate model and budget
@@ -695,20 +719,28 @@ adding workloads, demos, or release polish.
 
 ## 11. Immediate next actions
 
-1. **Batch 0 (L0).** Fix scoring and token accounting; quarantine simulations;
-   add the baseline taxonomy, cost decomposition, and regression tests. Run the
-   ceiling analysis on existing artifacts. If the ceiling is below 10%, stop.
-2. **Batch 1 (L1).** Implement `lmpu.model_async`, `lmpu.model_sync`, the oracle
-   planner, and `app_agent`. Run the best-case workload single-session and with
-   two concurrent sessions. If both oracle arms lose, narrow or fail; otherwise
-   diagnose before expanding.
-3. **Batch 2 (L2).** Calibrate 0.8B at 128/256/512 tokens; run the model planner
-   on the same cell; diagnose planning before expanding.
-4. **Freeze release.** Keep `dist/` and the release checklist; do not sign, tag,
-   or publish.
+*Batch 0 is complete as of 2026-11-03 (harness integrity committed; ceiling
+INCONCLUSIVE). The remaining work, in order:*
+
+1. **Batch 1 (L1).** Implement `lmpu.model_async` (V1.1) and `lmpu.model_sync`
+   (V1.2): host model in the loop; runtime submits, parks, wakes; one KV-warm
+   session. Add the oracle planner (V1.8): gold program injected into both tool
+   arms so architecture is isolated from model planning. Run the best-case
+   workload — 16 MiB result, 60 s job, 32k context, exact oracle — single- and
+   two-session. If LMPU loses to `app_agent` in both arms, record FAIL and
+   narrow; otherwise diagnose before expanding. Also run the fast probes
+   (V1.10, P1-P3: worker-side reducer, plan graph, KV wake vs reopen). The
+   best-case oracle arms are where V0.8's ceiling verdict resolves.
+2. **V2.1 calibration (prerequisite for Batch 2).** The 0.8B model never emits
+   EOS within 256 tokens and echoes `<a>`-style placeholders verbatim (measured
+   in `benchmarks/reports/l0-pilot`). Budget sweep 128/256/512, few-shot
+   prompts with concrete values, stop discipline; measure parse failures.
+3. **Batch 3 (L3).** Capability and negative controls (V1.6, V1.9).
+4. **Freeze release.** Keep `dist/` and the release checklist; do not sign,
+   tag, or publish.
 5. **Record the verdict rule now.** No post-hoc threshold changes after seeing
    results.
 
-The next commit should make the harness incapable of producing a false
-efficiency claim and should compute the benefit ceiling before any new GPU run.
-Everything else follows from that.
+The harness is now incapable of producing a false efficiency claim from
+simulation or tool-result scoring. The next commit should add the treatment
+arm and the oracle planner — everything else follows from the L1 result.
