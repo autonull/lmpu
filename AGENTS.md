@@ -64,8 +64,6 @@
     (user-site pytest shadowing breaks collection on protobuf gencode skew).
 *   **Env restore**: `uv sync --dev --all-extras` — bare `uv sync` strips dev
     extras and produces `ModuleNotFoundError` mid-landing.
-*   **Dev-env smoke** (run before any gate): `uv run python -c "import optuna, scipy, torchvision, pytest"` —
-    a stripped env fails here in seconds instead of mid-gate.
 *   **`UV_LINK_MODE=copy`**: set in the shell env (or `.env`) on this
     filesystem layout — the uv cache hardlink falls back to copy with a
     warning on every `uv run` otherwise (cosmetic, R4.3).

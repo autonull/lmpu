@@ -109,6 +109,13 @@ long worker job runs unless it implements the same session discipline. L1
 stops the plan only if LMPU loses single-session and the two-session arm does
 not reverse it; otherwise continue to L2/L3.
 
+**Context headroom (critical, 2026-11-03).** The implemented `best_case`
+prompt is 32,818 tokens (32,761-token document + 57-token TASK suffix),
+exceeding `HFEngine.max_context = 32768`. Every model arm generates 1–2 tokens
+and stops before emitting `ANSWER:`. This is a token-arithmetic error in the
+workload spec, not a model-quality result. Any prompt change requires a dated
+pre-registration revision **before** re-running.
+
 **Capability arm:** the task requires information that does not fit in the host
 context. Report two `app_agent` variants: (a) full ingest with no reducer, which
 must fail, and (b) an application-side reducer, which is what a real app would
@@ -142,7 +149,7 @@ claims independently; release and README may use only the ones that pass.
 | E | Engine integration beats an app agent on cost | L1/L2 best case | ≥10% cost or token reduction with a tight CI |
 | B | The host can solve context-infeasible tasks | L3 capability | Succeeds where a no-reducer baseline fails; competitive with an app-side reducer |
 | C | Concurrent/batched work delivers throughput | V3.4/V3.5 | ≥10x lower control overhead than individual calls; aggregate GPU-hours per correct task improves |
-| D | Program composition amortizes planning | P2 | A plan graph beats multiple round trips by ≥2x tokens or latency |
+| D | Program composition amortizes planning | P2 | A plan graph beats multiple round trips by ≥2x tokens or latency; **P2 not yet implemented** |
 | P | Portable across model families and processors | W1/W2 | Same direction in a second family/class |
 | I | Adoption cost is reasonable | W4 | Integration effort is lower than, or clearly bounded versus, an app reducer |
 
@@ -152,6 +159,7 @@ claims independently; release and README may use only the ones that pass.
   the host sees only the answer and an evidence slice.
 - **P2 — Plan graph:** one model turn emits a small DAG; the runtime executes
   `fetch -> extract -> verify -> answer` and returns one compact result.
+  **Not implemented**; requires a plan-graph executor or a pre-registration cut.
 - **P3 — KV wake vs session reopen:** same prompt at 32k context; measure
   re-prefill and wake latency.
 
@@ -208,9 +216,7 @@ uv run python -c "import torch, transformers, scipy, pytest; print('smoke ok')"
 uv run python -m pytest tests/unit/test_bench_gate.py tests/unit/test_bench_report.py -q
 ```
 
-Batch 0 (L0) is **done**. Batch 1 (L1) is **implemented but blocked** — read
-the §10 "Batch 1 status detail" and §11 before running anything; the L1
-pilot has not produced a usable dataset yet.
+Batch 0 (L0) is **done**. Batch 1 (L1) is **implemented but blocked on a context-headroom defect** — read §10 "Batch 1 status detail" and §11 before running anything; the L1 pilot has not produced a usable dataset yet. The treatment arms, oracle planner, two-session arms, and `best_case` workload are committed (`5360c1c`); the `logits_to_keep=1` engine fix is committed (`01acf15`).
 
 **Non-negotiables.**
 - Do not sign, tag, publish, or market anything.
@@ -326,7 +332,7 @@ Prove each mechanism on its own before composing them in a model loop.
 | V1.7 | Pre-registration artifact | Commit hypotheses, thresholds, task suite, exclusions, and analysis code before the first measured run; record them in the repository, not in notes |
 | V1.8 | Oracle planner | Gold program injected into both tool arms; isolates architecture from model planning |
 | V1.9 | Capability arm | Host-context-infeasible task; report full-ingest failure and an application-side reducer baseline; LMPU success and cost are recorded separately |
-| V1.10 | Fast probes | P1 worker-side reducer, P2 plan graph, P3 KV wake vs reopen; oracle only; run before the full matrix |
+| V1.10 | Fast probes | P1 worker-side reducer, P2 plan graph, P3 KV wake vs reopen; oracle only; run before the full matrix. **P2 requires a plan-graph executor or a dated pre-registration cut.** |
 
 **Pre-registered mechanism hypotheses**
 
@@ -591,11 +597,17 @@ all-token accounting, simulation quarantine, baseline taxonomy, cost
 decomposition, and the report split. Run the ceiling analysis on existing
 artifacts; no new GPU matrix yet.
 
-**Batch 1 — one baseline change (L1 + probes).** *(In flight 2026-11-03; not complete. Implemented in `5360c1c`; blocked on the context-headroom defect, see §10/§11.)*
-V1.1, V1.2, V1.8, V0.9, V1.10. Add the treatment, oracle planner, and fast
-probes; run the best-case workload single-session and with two concurrent
-sessions plus P1-P3. Stop only if both oracle arms lose and the probes show no
-signal; otherwise diagnose before expanding.
+**Batch 1 — one baseline change (L1 + probes).** *(Implemented `5360c1c`; blocked on context-headroom defect, see §10/§11. No Batch 1 verdict recorded.)*
+V1.1, V1.2, V1.8, V0.9, V1.10. Treatment arms `lmpu.model_async`/`sync`,
+oracle planner (`<arm>_oracle` twins for all end-to-end arms; two-session
+arms oracle by construction), two-session competitors (`lmpu.model_async_2session`,
+`app_agent_2session` with two KV-warm decoders on one shared engine), `best_case`
+workload (16 MiB result, 60 s job, exact sha256 oracle). Pre-registration
+`docs/viability/preregistration-batch1.md` committed before any measured run.
+Run the best-case workload single-session and two-session plus P1-P3. Stop
+only if both oracle arms lose and probes show no signal; otherwise diagnose
+before expanding. **P2 requires a plan-graph executor or a pre-registration cut.**
+**Prompt must fit `max_context=32768` (current: 32,818 tokens) before re-run.**
 
 **Batch 2 — model planning (L2).**
 V2.1, V2.2, V2.4 (best case only), V2.7. Run the model planner on the same cell;
@@ -677,7 +689,8 @@ Open defects/decisions for the reviewer:
 - **Memory fraction**: user constraint — use only a fraction of the 10 GB
   card. Two-session arms peaked ~7.7 GB; if the constraint is binding, the
   two-session arm needs a smaller context or exclusion, again via dated
-  pre-registration revision.
+  pre-registration revision. If dropped, the single-session arms still
+  decide L1 per the plan §0.1 ladder.
 - **P2** (plan graph) is not implemented; V1.10 lists it as required signal.
   P1 (worker-side reducer) is satisfied by design pending measurement
   (`injected_tokens` ≈ 99–198 on the answer turn observed); P3 (KV wake vs
@@ -797,8 +810,9 @@ Open defects/decisions for the reviewer:
    V2.1 calibration finding, not a harness re-run.
 5. **Then the stop rule applies** (preregistration-batch1.md §5): LMPU path
    vs `app_agent_oracle` in single- and two-session arms; P3 (KV wake vs
-   re-prefill) from the same dataset; P2 ships only as an explicitly
-   unimplemented probe if the plan-graph executor is out of scope.
+   re-prefill) from the same dataset; **P2 ships only as an explicitly
+   unimplemented probe if the plan-graph executor is out of scope** — record
+   that explicitly in the report.
 6. **V0.8 ceiling verdict** stays INCONCLUSIVE until step 4 completes. No
    end-to-end or release claim may cite the aborted pilot.
 7. **Do not run model-planner arms yet** — V2.1 calibration (L0 pilot
@@ -812,5 +826,7 @@ The aborted-pilot artifacts (gitignored
 the headroom defect only. Do not analyze them as results.
 
 The harness is now incapable of producing a false efficiency claim from
-simulation or tool-result scoring. The next commit should add the treatment
-arm and the oracle planner — everything else follows from the L1 result.
+simulation or tool-result scoring. Treatment arms and oracle planner are
+committed (`5360c1c`); engine fix committed (`01acf15`). The blocking issue
+is the prompt/token arithmetic; fix that, commit a pre-registration revision,
+then re-run.
