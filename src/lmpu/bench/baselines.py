@@ -1,0 +1,482 @@
+"""Fair baseline adapters for the benchmark harness.
+
+Each adapter emits the canonical host metrics schema. Model baselines use a
+``HostModel``; the default implementation is the reference HF engine.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+import shutil
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Protocol
+
+from lmpu.host.engine import HostStats
+from lmpu.host.metrics import HostMetrics
+from lmpu.kernel.runtime import Runtime
+from lmpu.protocol.messages import ModelJobStatus
+
+from .config import BenchmarkConfig
+from .runner import TrialContext, TrialRecord, estimate_tokens
+from .workloads import WorkloadSpec
+
+logger = logging.getLogger(__name__)
+
+BASELINES = ("lmpu.sync", "direct_cot", "trace_token", "sync_tool", "async_poll")
+MODEL_BASELINES = frozenset({"direct_cot", "sync_tool", "async_poll"})
+TERMINAL_STATUSES = frozenset(
+    {ModelJobStatus.COMPLETED, ModelJobStatus.FAILED, ModelJobStatus.CANCELLED}
+)
+
+
+def resolve_baselines(selection: str | tuple[str, ...]) -> tuple[str, ...]:
+    """Validate and normalize baseline names."""
+    if isinstance(selection, str):
+        names = BASELINES if selection == "all" else (selection,)
+    else:
+        names = BASELINES if "all" in selection else tuple(selection)
+    unknown = set(names) - set(BASELINES)
+    if unknown:
+        raise ValueError(f"Unknown baseline: {sorted(unknown)[0]}")
+    return names
+
+
+class HostModel(Protocol):
+    """Minimal host-model surface used by the model baselines."""
+
+    async def start_trial(self) -> None: ...
+
+    async def decode(self, prompt: str, max_tokens: int, stop: str = "") -> str: ...
+
+    async def count_tokens(self, text: str) -> int: ...
+
+    async def close(self) -> None: ...
+
+
+class HFHost:
+    """Reference HF engine adapter with a fresh decoder state per trial."""
+
+    def __init__(self, config: BenchmarkConfig):
+        from lmpu.host.hf import HFDecoder, HFEngine
+
+        self.config = config
+        self.engine = HFEngine(model_name=config.model, device=config.device)
+        self.decoder = HFDecoder(self.engine, max_tokens=config.max_tokens)
+
+    async def start_trial(self) -> None:
+        self.engine.stats_ = HostStats()
+        self.decoder.reset()
+
+    async def decode(self, prompt: str, max_tokens: int, stop: str = "") -> str:
+        return await self.decoder.decode_free(prompt, max_tokens, stop)
+
+    async def count_tokens(self, text: str) -> int:
+        if not text:
+            return 0
+        await self.engine._initialize()
+        tokenizer = self.engine._tokenizer
+        if tokenizer is None:
+            return estimate_tokens(text)
+        return len(tokenizer.encode(text, add_special_tokens=False))
+
+    async def close(self) -> None:
+        await self.engine.close()
+
+
+def _program_from_text(text: str) -> dict[str, Any] | None:
+    candidate = text.strip()
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```[a-zA-Z]*\s*", "", candidate)
+        candidate = re.sub(r"\s*```$", "", candidate)
+    try:
+        payload = json.loads(candidate)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", candidate, re.DOTALL)
+        if not match:
+            return None
+        try:
+            payload = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(payload, dict) or "op" not in payload or "inputs" not in payload:
+        return None
+    return payload
+
+
+def _request(
+    program: dict[str, Any],
+    workload: WorkloadSpec,
+    job_id: str,
+    mode: str | None,
+) -> dict[str, Any]:
+    config: dict[str, Any] = {"timeout_ms": 60_000} | workload.config
+    if mode is not None:
+        config["mode"] = mode
+    return {
+        "job_id": job_id,
+        "processor": program.get("processor", workload.processor),
+        "op": program["op"],
+        "inputs": program["inputs"],
+        "config": config,
+    }
+
+
+def _result_text(result: Any) -> str:
+    return json.dumps(result, separators=(",", ":"), default=str)
+
+
+def _summary_text(result: Any, max_chars: int = 200) -> str:
+    text = _result_text(result)
+    return text if len(text) <= max_chars else text[:max_chars] + "…"
+
+
+async def _record_prefill(metrics: HostMetrics, host: HostModel, text: str) -> int:
+    tokens = await host.count_tokens(text)
+    if tokens:
+        metrics.record_forward("prefill", tokens)
+    return tokens
+
+
+async def _record_generated(metrics: HostMetrics, host: HostModel, text: str) -> int:
+    tokens = await host.count_tokens(text)
+    for _ in range(tokens):
+        metrics.record_forward("generated", 1)
+    return tokens
+
+
+async def _record_injected(metrics: HostMetrics, host: HostModel, text: str) -> int:
+    tokens = await host.count_tokens(text)
+    if tokens:
+        metrics.record_forward("injected", tokens)
+    return tokens
+
+
+def _payload(metrics: HostMetrics, wall: float) -> dict[str, Any]:
+    payload = metrics.to_dict()
+    payload["wall_time_seconds"] = wall
+    return payload
+
+
+class BaselineRunner:
+    """Run one of the registered baselines for each trial."""
+
+    def __init__(self, config: BenchmarkConfig, host: HostModel | None = None):
+        self.config = config
+        self._host = host
+        self.runtime: Runtime | None = None
+        self._runtime_dir: Path | None = None
+
+    async def setup(self, run_dir: Path) -> None:
+        # Unix socket paths are length-limited; keep transient runtime files
+        # out of the (possibly deep) artifact directory.
+        self._runtime_dir = Path(tempfile.mkdtemp(prefix="lmpu-bench-"))
+        self.runtime = Runtime(
+            socket_path=str(self._runtime_dir / "run.sock"),
+            shm_dir=str(self._runtime_dir / "shm"),
+            config={
+                "trace_dir": str(run_dir / "traces"),
+                "batch_window_ms": 1,
+                "reaper_interval_ms": 100,
+            },
+        )
+        await self.runtime.start()
+        if self._host is None and any(
+            baseline in MODEL_BASELINES for baseline in self.config.baselines
+        ):
+            self._host = HFHost(self.config)
+
+    async def run(self, context: TrialContext) -> TrialRecord:
+        handlers = {
+            "lmpu.sync": self._run_lmpu_sync,
+            "direct_cot": self._run_direct_cot,
+            "trace_token": self._run_trace_token,
+            "sync_tool": self._run_sync_tool,
+            "async_poll": self._run_async_poll,
+        }
+        handler = handlers.get(context.baseline)
+        if handler is None:
+            raise ValueError(f"Unknown baseline: {context.baseline}")
+
+        started_at = time.time()
+        started = time.perf_counter()
+        try:
+            return await handler(context, started_at)
+        except Exception as exc:
+            wall = time.perf_counter() - started
+            logger.exception(
+                "benchmark trial failed",
+                extra={"baseline": context.baseline, "trial": context.trial},
+            )
+            metrics = HostMetrics(session_id=f"bench_{context.baseline}_{context.trial}")
+            return TrialRecord(
+                workload=context.workload.name,
+                baseline=context.baseline,
+                trial=context.trial,
+                seed=context.seed,
+                job_id="",
+                started_at=started_at,
+                wall_time_seconds=wall,
+                correct=False,
+                metrics=_payload(metrics, wall),
+                error=str(exc),
+            )
+
+    def _host_model(self) -> HostModel:
+        if self._host is None:
+            raise RuntimeError("host model is not configured")
+        return self._host
+
+    async def _open_session(self) -> str:
+        runtime = self._require_runtime()
+        hello = await runtime._hello({"protocol": "lmpu/1"})
+        return hello.session_id
+
+    def _require_runtime(self) -> Runtime:
+        if self.runtime is None:
+            raise RuntimeError("runtime is not set up")
+        return self.runtime
+
+    async def _close_session(self, session_id: str) -> None:
+        try:
+            await self._require_runtime()._close({"detach": False}, session_id)
+        except Exception:
+            logger.exception("benchmark session close failed", extra={"session": session_id})
+
+    def _job_id(self, context: TrialContext, suffix: str = "") -> str:
+        return (
+            f"bench_{context.seed}_{context.baseline}_"
+            f"{context.workload.name}_{context.trial}{suffix}"
+        )
+
+    async def _run_lmpu_sync(self, context: TrialContext, started_at: float) -> TrialRecord:
+        runtime = self._require_runtime()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        job_id = self._job_id(context)
+        request = {
+            "job_id": job_id,
+            "processor": context.workload.processor,
+            "op": context.workload.op,
+            "inputs": context.workload.inputs,
+            "config": {"mode": "sync", "timeout_ms": 60_000} | context.workload.config,
+        }
+        metrics.record_control_tokens(estimate_tokens(request))
+        started = time.perf_counter()
+        error: str | None = None
+        result: Any = None
+        try:
+            submitted = await runtime._submit(request, session_id)
+            result = submitted.result
+            if submitted.error:
+                error = json.dumps(submitted.error, default=str)
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        if result is not None:
+            metrics.record_injected_tokens(estimate_tokens(_summary_text(result)))
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=job_id,
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and context.workload.verify(result),
+            metrics=_payload(metrics, wall),
+            error=error,
+        )
+
+    async def _run_direct_cot(self, context: TrialContext, started_at: float) -> TrialRecord:
+        host = self._host_model()
+        session_id = f"bench_direct_cot_{context.trial}"
+        metrics = HostMetrics(session_id=session_id)
+        started = time.perf_counter()
+        error: str | None = None
+        answer: str | None = None
+        response = ""
+        try:
+            await host.start_trial()
+            await _record_prefill(metrics, host, context.workload.prompt)
+            response = await host.decode(context.workload.prompt, self.config.max_tokens, "")
+            await _record_generated(metrics, host, response)
+            answer = context.workload.parse_answer(response)
+        except Exception as exc:
+            error = str(exc)
+        wall = time.perf_counter() - started
+        correct = error is None and answer is not None and context.workload.verify_answer(answer)
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id="",
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=correct,
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={"answer": answer, "response": response},
+        )
+
+    async def _run_trace_token(self, context: TrialContext, started_at: float) -> TrialRecord:
+        session_id = f"bench_trace_token_{context.trial}"
+        metrics = HostMetrics(session_id=session_id)
+        started = time.perf_counter()
+        trace = context.workload.trace()
+        tokens = estimate_tokens(trace)
+        for _ in range(tokens):
+            metrics.record_forward("generated", 1)
+        wall = time.perf_counter() - started
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id="",
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=True,
+            metrics=_payload(metrics, wall),
+            metadata={"simulated": True, "trace_tokens": tokens},
+        )
+
+    async def _model_program(
+        self, context: TrialContext, metrics: HostMetrics
+    ) -> tuple[str, dict[str, Any], str]:
+        host = self._host_model()
+        await host.start_trial()
+        prompt = context.workload.program_prompt
+        await _record_prefill(metrics, host, prompt)
+        text = await host.decode(prompt, self.config.max_tokens, "")
+        await _record_generated(metrics, host, text)
+        program = _program_from_text(text)
+        if program is None:
+            raise ValueError("model did not emit a valid tool program")
+        return prompt + text, program, text
+
+    async def _run_sync_tool(self, context: TrialContext, started_at: float) -> TrialRecord:
+        runtime = self._require_runtime()
+        host = self._host_model()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        started = time.perf_counter()
+        error: str | None = None
+        result: Any = None
+        program: dict[str, Any] | None = None
+        final_answer: str | None = None
+        try:
+            prefix, program, _ = await self._model_program(context, metrics)
+            request = _request(program, context.workload, self._job_id(context), "sync")
+            metrics.record_control_tokens(estimate_tokens(request))
+            submitted = await runtime._submit(request, session_id)
+            result = submitted.result
+            if submitted.error:
+                error = json.dumps(submitted.error, default=str)
+            if result is not None:
+                result_text = _result_text(result)
+                followup = (
+                    prefix
+                    + "\nTOOL RESULT:\n"
+                    + result_text
+                    + '\nReply with a final line "ANSWER: <integer>".'
+                )
+                await _record_injected(metrics, host, followup[len(prefix) :])
+                response = await host.decode(followup, self.config.max_tokens, "")
+                await _record_generated(metrics, host, response)
+                final_answer = context.workload.parse_answer(response)
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=self._job_id(context),
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and context.workload.verify(result),
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={"program": program, "answer": final_answer},
+        )
+
+    async def _run_async_poll(self, context: TrialContext, started_at: float) -> TrialRecord:
+        runtime = self._require_runtime()
+        host = self._host_model()
+        session_id = await self._open_session()
+        metrics = HostMetrics(session_id=session_id)
+        started = time.perf_counter()
+        job_id = self._job_id(context)
+        error: str | None = None
+        result: Any = None
+        program: dict[str, Any] | None = None
+        polls = 0
+        try:
+            _, program, _ = await self._model_program(context, metrics)
+            request = _request(program, context.workload, job_id, None)
+            metrics.record_control_tokens(estimate_tokens(request))
+            submitted = await runtime._submit(request, session_id)
+            deadline = time.monotonic() + 60.0
+            while True:
+                poll = await runtime._poll({"job_id": job_id}, session_id)
+                polls += 1
+                status_text = json.dumps(
+                    {
+                        "status": poll.status.value,
+                        "progress": poll.progress,
+                        "elapsed_ms": poll.elapsed_ms,
+                    },
+                    separators=(",", ":"),
+                )
+                metrics.record_control_tokens(await host.count_tokens(status_text))
+                if poll.status in TERMINAL_STATUSES:
+                    break
+                if time.monotonic() > deadline:
+                    raise TimeoutError("async polling exceeded 60 seconds")
+                await asyncio.sleep(self.config.poll_interval_ms / 1000)
+
+            waited = await runtime._wait({"job_id": job_id, "timeout_ms": 1000}, session_id)
+            result = waited.result
+            if waited.error:
+                error = json.dumps(waited.error, default=str)
+            if result is not None:
+                summary = _summary_text(result)
+                await _record_injected(metrics, host, summary)
+        finally:
+            await self._close_session(session_id)
+        wall = time.perf_counter() - started
+        return TrialRecord(
+            workload=context.workload.name,
+            baseline=context.baseline,
+            trial=context.trial,
+            seed=context.seed,
+            job_id=job_id,
+            started_at=started_at,
+            wall_time_seconds=wall,
+            correct=error is None and context.workload.verify(result),
+            metrics=_payload(metrics, wall),
+            error=error,
+            metadata={
+                "program": program,
+                "polls": polls,
+                "submitted_status": submitted.status.value,
+            },
+        )
+
+    async def teardown(self) -> None:
+        if self._host is not None:
+            await self._host.close()
+            self._host = None
+        if self.runtime is not None:
+            await self.runtime.stop()
+            self.runtime = None
+        if self._runtime_dir is not None:
+            shutil.rmtree(self._runtime_dir, ignore_errors=True)
+            self._runtime_dir = None

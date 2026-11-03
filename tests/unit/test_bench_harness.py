@@ -35,14 +35,14 @@ def _config(tmp_path: Path, **overrides) -> BenchmarkConfig:
 
 class FakeRunner:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, int]] = []
+        self.calls: list[tuple[str, str, int]] = []
         self.run_dir: Path | None = None
 
     async def setup(self, run_dir: Path) -> None:
         self.run_dir = run_dir
 
     async def run(self, context: TrialContext) -> TrialRecord:
-        self.calls.append((context.workload.name, context.trial))
+        self.calls.append((context.baseline, context.workload.name, context.trial))
         metrics = HostMetrics(session_id=f"s_{context.trial}")
         metrics.record_control_tokens(4)
         metrics.record_injected_tokens(2)
@@ -50,6 +50,7 @@ class FakeRunner:
         payload["wall_time_seconds"] = 0.10 + context.trial * 0.01
         return TrialRecord(
             workload=context.workload.name,
+            baseline=context.baseline,
             trial=context.trial,
             seed=context.seed,
             job_id=f"job_{context.trial}",
@@ -100,10 +101,10 @@ async def test_harness_writes_manifest_raw_and_summary(tmp_path: Path) -> None:
     run_dir = Path(summary["run_id"])
 
     assert runner.calls == [
-        ("bigint_mul", -1),
-        ("bigint_mul", 1),
-        ("bigint_mul", 2),
-        ("bigint_mul", 3),
+        ("lmpu.sync", "bigint_mul", -1),
+        ("lmpu.sync", "bigint_mul", 1),
+        ("lmpu.sync", "bigint_mul", 2),
+        ("lmpu.sync", "bigint_mul", 3),
     ]
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["schema"] == "lmpu.bench.manifest.v1"
@@ -115,7 +116,7 @@ async def test_harness_writes_manifest_raw_and_summary(tmp_path: Path) -> None:
     assert [record["trial"] for record in records] == [1, 2, 3]
     assert all(record["metrics"]["schema"] == "lmpu.host_metrics.v1" for record in records)
     assert summary["record_count"] == 3
-    workload = summary["workloads"]["bigint_mul"]
+    workload = summary["workloads"]["bigint_mul"]["baselines"]["lmpu.sync"]
     assert workload["wall_time_seconds"]["median"] == pytest.approx(0.12)
     assert len(workload["wall_time_seconds"]["ci95"]) == 2
     assert workload["correctness"]["rate"] == 1.0
@@ -133,7 +134,7 @@ async def test_resume_skips_completed_trials_and_appends_only_missing(tmp_path: 
     resumed = FakeRunner()
     summary = await BenchmarkHarness(config, runner=resumed).run()
 
-    assert resumed.calls == [("bigint_mul", 3)]
+    assert resumed.calls == [("lmpu.sync", "bigint_mul", 3)]
     records = read_raw(run_dir / "raw.jsonl")
     assert [record["trial"] for record in records] == [1, 2, 3]
     assert summary["record_count"] == 3

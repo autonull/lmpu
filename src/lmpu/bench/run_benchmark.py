@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import logging
 
+from .baselines import BASELINES, resolve_baselines
 from .config import BenchmarkConfig
 from .harness import BenchmarkHarness
 from .workloads import list_workloads
@@ -18,6 +19,7 @@ async def run_benchmark(
     trials: int | None = None,
     output: str | None = None,
     *,
+    baselines: tuple[str, ...] | None = None,
     config: BenchmarkConfig | None = None,
 ) -> dict:
     """Run a benchmark selection and return the summary payload.
@@ -29,6 +31,8 @@ async def run_benchmark(
         "trials": trials,
         "results_root": output,
     }
+    if baselines is not None:
+        overrides["baselines"] = resolve_baselines(baselines)
     if workload == "all":
         overrides["workloads"] = list_workloads()
     elif workload:
@@ -42,6 +46,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run LMPU benchmarks")
     parser.add_argument("--config", help="TOML or JSON benchmark config")
     parser.add_argument("--workload", help="Workload name or 'all'; defaults to config")
+    parser.add_argument(
+        "--baseline",
+        action="append",
+        choices=[*BASELINES, "all"],
+        help="Baseline name or 'all'; repeatable; defaults to config",
+    )
     parser.add_argument("--trials", type=int, help="Measured trials per workload")
     parser.add_argument("--warmups", type=int, help="Discarded warmup trials")
     parser.add_argument("--seed", type=int, help="Base seed")
@@ -65,21 +75,24 @@ def main(argv: list[str] | None = None) -> None:
     summary = asyncio.run(
         run_benchmark(
             workload=args.workload,
+            baselines=None if args.baseline is None else tuple(args.baseline),
             config=config,
         )
     )
 
     logger.info("run: %s", summary.get("run_id"))
     for name, workload in summary.get("workloads", {}).items():
-        wall = workload["wall_time_seconds"]
-        logger.info(
-            "%s: %s trials, median %.4fs, correctness %s/%s",
-            name,
-            workload["trials"],
-            wall["median"] or 0.0,
-            workload["correctness"]["passes"],
-            workload["correctness"]["total"],
-        )
+        for baseline, stats in workload["baselines"].items():
+            wall = stats["wall_time_seconds"]
+            logger.info(
+                "%s / %s: %s trials, median %.4fs, correctness %s/%s",
+                name,
+                baseline,
+                stats["trials"],
+                wall["median"] or 0.0,
+                stats["correctness"]["passes"],
+                stats["correctness"]["total"],
+            )
 
 
 if __name__ == "__main__":

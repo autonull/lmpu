@@ -54,10 +54,10 @@ mission-control:
 	python -m lmpu.demos 12
 
 bench-smoke:
-	python -m lmpu.bench.run_benchmark --workload smoke --trials 3
+	uv run python -m lmpu.bench.run_benchmark --workload smoke --trials 3
 
 bench:
-	python -m lmpu.bench.run_benchmark --workload all --trials 20
+	uv run python -m lmpu.bench.run_benchmark --config configs/benchmarks.toml --workload all --trials 20
 
 soak:
 	pytest -m "soak" -v --timeout=3600

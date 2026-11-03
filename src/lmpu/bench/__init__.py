@@ -1,5 +1,6 @@
 """Benchmark harness for reproducible LMPU evidence."""
 
+from .baselines import BASELINES, BaselineRunner, HFHost, resolve_baselines
 from .config import BenchmarkConfig
 from .harness import (
     BenchmarkArtifactError,
@@ -9,14 +10,16 @@ from .harness import (
     read_raw,
     summarize,
 )
-from .runner import LmpuSyncRunner, TrialContext, TrialRecord, TrialRunner
+from .runner import TrialContext, TrialRecord, TrialRunner
 from .workloads import WorkloadSpec, get_workload, list_workloads, resolve_workloads
 
 __all__ = [
+    "BASELINES",
+    "BaselineRunner",
     "BenchmarkArtifactError",
     "BenchmarkConfig",
     "BenchmarkHarness",
-    "LmpuSyncRunner",
+    "HFHost",
     "TrialContext",
     "TrialRecord",
     "TrialRunner",
@@ -26,6 +29,7 @@ __all__ = [
     "get_workload",
     "list_workloads",
     "read_raw",
+    "resolve_baselines",
     "resolve_workloads",
     "summarize",
 ]

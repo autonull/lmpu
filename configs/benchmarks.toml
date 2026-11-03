@@ -1,9 +1,12 @@
 name = "gate-b"
 workloads = ["bigint_mul"]
+baselines = ["lmpu.sync", "direct_cot", "trace_token", "sync_tool", "async_poll"]
 trials = 20
 warmups = 3
 seed = 20261103
 device = "cuda"
 model = "Qwen/Qwen3.5-0.8B"
+max_tokens = 256
+poll_interval_ms = 50
 results_root = "benchmarks/results"
 resume = true

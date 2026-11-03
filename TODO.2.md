@@ -25,12 +25,14 @@
 - Session authorization boundary: capability advertisement stays registry-wide; buffer and processor access are session-scoped.
 - Grant/refcount per-buffer release, TTL reaping, close-time shm cleanup, and fd-leak assertions.
 - Benchmark harness: TOML/JSON config, explicit seeds, warmups, measured trials, resume-safe `raw.jsonl`, hardware/commit manifest, summary medians and bootstrap CIs, and a real-runtime sync trial runner.
-- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1 adds 6 targeted tests (5 unit, 1 integration).
+- Fair baselines: direct CoT, labelled trace-token emulation, PAL-style sync tool, and summary-only async polling, plus `lmpu.sync`; randomized per-trial order, baseline-aware resume keys, and per-baseline summaries. Model baselines use the shared HF host and decoding budget.
+- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1/B2 add 9 targeted tests (5 unit, 4 integration).
 
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
 - P1 exit gate is not closed: canonical demo assertions and the 16 MiB dashboard proof (Gate C).
-- Baseline adapters, energy sampling, initial workloads, and the C1–C5 report (B2–B5) remain open.
+- Baseline adapters, energy sampling, initial workloads, and the C1–C5 report (B3–B5) remain open.
+- Trace-token baseline is a labelled simulation; a small real-model trace run remains for B5.
 - Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified (Gate E).
 - Legacy `mypy`/`ruff` findings remain outside the changed-file policy.
 
@@ -155,7 +157,7 @@ These items do not block A–D. Each has a kill criterion.
 
 ### Gate B
 - [x] B1 Harness — `src/lmpu/bench/`, `configs/benchmarks.toml`, `tests/unit/test_bench_harness.py`, `tests/integration/test_bench_runtime.py`; `make bench-smoke` runs through the real runtime
-- [ ] B2 Baselines
+- [x] B2 Baselines — `src/lmpu/bench/baselines.py`, baseline-aware harness records/summary/resume, `--baseline` CLI, `tests/integration/test_bench_baselines.py`; direct CoT, trace-token, sync tool, async polling, and LMPU sync
 - [ ] B3 Energy sampling
 - [ ] B4 Initial workloads
 - [ ] B5 C1–C5 report
@@ -181,11 +183,10 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gate A is closed and B1 is closed. Continue Gate B in order:
+Gate A is closed and B2 is closed. Continue Gate B in order:
 
-1. **B2:** implement four fair baselines (direct CoT, trace-token, sync tool, async polling) behind the `TrialRunner` interface; every baseline must emit the A2 metrics schema.
-2. **B3/B4:** add NVML idle baseline plus one compute, one large-context, and one sleep-heavy workload.
-3. **B5:** emit the first C1–C5 report with medians, CIs, raw artifacts, and limitations.
+1. **B3/B4:** add NVML idle baseline plus one compute, one large-context, and one sleep-heavy workload; wire energy and sleep metrics into the baseline records.
+2. **B5:** emit the first C1–C5 report with medians, CIs, raw artifacts, and limitations. Include a small real-model trace-token run.
 
 Keep Gate C closed until B5 produces the report.
 

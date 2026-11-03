@@ -31,4 +31,5 @@ async def test_default_runner_executes_workload_through_runtime(tmp_path: Path) 
     assert record["metrics"]["schema"] == "lmpu.host_metrics.v1"
     assert record["metrics"]["control_tokens"] > 0
     assert record["metrics"]["injected_tokens"] > 0
-    assert summary["workloads"]["bigint_mul"]["correctness"]["rate"] == 1.0
+    stats = summary["workloads"]["bigint_mul"]["baselines"]["lmpu.sync"]
+    assert stats["correctness"]["rate"] == 1.0

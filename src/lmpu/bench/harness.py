@@ -15,8 +15,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .baselines import BaselineRunner, resolve_baselines
 from .config import BenchmarkConfig
-from .runner import LmpuSyncRunner, TrialContext, TrialRunner
+from .runner import TrialContext, TrialRunner
 from .workloads import WorkloadSpec, resolve_workloads
 
 logger = logging.getLogger(__name__)
@@ -169,11 +170,16 @@ def _bootstrap_ci(values: list[float], seed: int) -> list[float] | None:
     return [medians[int(0.025 * len(medians))], medians[int(0.975 * len(medians)) - 1]]
 
 
-def summarize(records: list[dict[str, Any]], workloads: tuple[WorkloadSpec, ...]) -> dict[str, Any]:
+def summarize(
+    records: list[dict[str, Any]],
+    workloads: tuple[WorkloadSpec, ...],
+    baselines: tuple[str, ...],
+) -> dict[str, Any]:
     """Aggregate raw trials into medians and bootstrap 95% intervals."""
-    by_workload: dict[str, list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for record in records:
-        by_workload.setdefault(record["workload"], []).append(record)
+        key = (record["workload"], record.get("baseline", "lmpu.sync"))
+        grouped.setdefault(key, []).append(record)
 
     summary: dict[str, Any] = {
         "schema": SUMMARY_SCHEMA,
@@ -181,37 +187,52 @@ def summarize(records: list[dict[str, Any]], workloads: tuple[WorkloadSpec, ...]
         "workloads": {},
     }
     for workload in workloads:
-        trials = by_workload.get(workload.name, [])
-        walls = [float(record["wall_time_seconds"]) for record in trials]
-        correctness = [bool(record["correct"]) for record in trials]
-        metric_medians = {}
-        for key in SUMMARY_METRIC_KEYS:
-            values = [
-                float(record["metrics"][key])
-                for record in trials
-                if key in record.get("metrics", {})
-            ]
-            if values:
-                metric_medians[key] = statistics.median(values)
+        by_baseline: dict[str, Any] = {}
+        for baseline in baselines:
+            trials = grouped.get((workload.name, baseline), [])
+            walls = [float(record["wall_time_seconds"]) for record in trials]
+            correctness = [bool(record["correct"]) for record in trials]
+            metric_medians = {}
+            for key in SUMMARY_METRIC_KEYS:
+                values = [
+                    float(record["metrics"][key])
+                    for record in trials
+                    if key in record.get("metrics", {})
+                ]
+                if values:
+                    metric_medians[key] = statistics.median(values)
 
+            by_baseline[baseline] = {
+                "trials": len(trials),
+                "wall_time_seconds": {
+                    "median": statistics.median(walls) if walls else None,
+                    "ci95": _bootstrap_ci(walls, workload_hash(f"{workload.name}:{baseline}")),
+                },
+                "metrics": metric_medians,
+                "correctness": {
+                    "passes": sum(correctness),
+                    "total": len(correctness),
+                    "rate": (sum(correctness) / len(correctness)) if correctness else None,
+                },
+                "failures": [
+                    {"trial": record["trial"], "error": record["error"]}
+                    for record in trials
+                    if not record["correct"]
+                ],
+                "metadata": {
+                    "simulated": any(
+                        record.get("metadata", {}).get("simulated") for record in trials
+                    ),
+                    "polls": [
+                        record["metadata"]["polls"]
+                        for record in trials
+                        if "polls" in record.get("metadata", {})
+                    ],
+                },
+            }
         summary["workloads"][workload.name] = {
             "description": workload.description,
-            "trials": len(trials),
-            "wall_time_seconds": {
-                "median": statistics.median(walls) if walls else None,
-                "ci95": _bootstrap_ci(walls, workload_hash(workload.name)),
-            },
-            "metrics": metric_medians,
-            "correctness": {
-                "passes": sum(correctness),
-                "total": len(correctness),
-                "rate": (sum(correctness) / len(correctness)) if correctness else None,
-            },
-            "failures": [
-                {"trial": record["trial"], "error": record["error"]}
-                for record in trials
-                if not record["correct"]
-            ],
+            "baselines": by_baseline,
         }
     return summary
 
@@ -233,7 +254,7 @@ class BenchmarkHarness:
         clock: Any = None,
     ):
         self.config = config
-        self.runner = runner or LmpuSyncRunner(config)
+        self.runner = runner or BaselineRunner(config)
         self.hardware = hardware
         self.git = git
         self.clock = clock or time.time
@@ -269,6 +290,7 @@ class BenchmarkHarness:
 
     async def run(self) -> dict[str, Any]:
         workloads = resolve_workloads(self.config.workloads)
+        baselines = resolve_baselines(self.config.baselines)
         run_dir, manifest = self._prepare()
         raw_path = run_dir / "raw.jsonl"
         if not self.config.resume and raw_path.exists():
@@ -277,18 +299,22 @@ class BenchmarkHarness:
             )
         records = read_raw(raw_path)
         completed = {
-            (record["workload"], int(record["trial"]))
+            (record.get("baseline", "lmpu.sync"), record["workload"], int(record["trial"]))
             for record in records
             if "workload" in record and "trial" in record
         }
+        pairs = [(workload, baseline) for workload in workloads for baseline in baselines]
 
         await self.runner.setup(run_dir)
         try:
             for warmup in range(self.config.warmups):
-                for workload in workloads:
+                ordered = list(pairs)
+                random.Random(self.config.seed + warmup).shuffle(ordered)
+                for workload, baseline in ordered:
                     context = TrialContext(
                         config=self.config,
                         workload=workload,
+                        baseline=baseline,
                         trial=-(warmup + 1),
                         seed=self.config.seed + warmup,
                         run_dir=run_dir,
@@ -296,15 +322,21 @@ class BenchmarkHarness:
                     try:
                         await self.runner.run(context)
                     except Exception:
-                        logger.exception("warmup failed", extra={"workload": workload.name})
+                        logger.exception(
+                            "warmup failed",
+                            extra={"workload": workload.name, "baseline": baseline},
+                        )
 
-            for workload in workloads:
-                for trial in range(1, self.config.trials + 1):
-                    if (workload.name, trial) in completed:
+            for trial in range(1, self.config.trials + 1):
+                ordered = list(pairs)
+                random.Random(self.config.seed + trial).shuffle(ordered)
+                for workload, baseline in ordered:
+                    if (baseline, workload.name, trial) in completed:
                         continue
                     context = TrialContext(
                         config=self.config,
                         workload=workload,
+                        baseline=baseline,
                         trial=trial,
                         seed=self.config.seed + trial,
                         run_dir=run_dir,
@@ -313,11 +345,11 @@ class BenchmarkHarness:
                     payload = {"run_id": manifest["run_dir"], **record.to_dict()}
                     append_raw(raw_path, payload)
                     records.append(payload)
-                    completed.add((workload.name, trial))
+                    completed.add((baseline, workload.name, trial))
         finally:
             await self.runner.teardown()
 
-        summary = summarize(records, workloads)
+        summary = summarize(records, workloads, baselines)
         summary["run_id"] = manifest["run_dir"]
         summary["config"] = self.config.to_dict()
         summary["commit"] = manifest["commit"]
