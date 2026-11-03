@@ -33,12 +33,16 @@
 - Canonical demos: `lmpu demo canonical` runs kernel crash/recovery, S1 park/resume, and 16 MiB context protection with executable assertions; all pass headless.
 - Trace CLI: `lmpu trace` replays, detects per-session sequence gaps, redacts sensitive fields, and summarizes type timelines.
 - Dashboard: read-only Mission Control shows parked-host state, jobs, buffers, and live runtime events over SSE.
+- Contracts: RFC 0001, ADR 0001, and frozen protocol/trace JSON Schemas generated from Pydantic models with drift tests.
+- SDK: `LMPUClient` covers hello, submit, poll, wait, cancel, read, import, sleep, wake, close; plugin scaffolding generates an importable processor.
+- Packaging: `uv build` produces `lmpu-0.1.0-py3-none-any.whl` and sdist containing both schemas and the license.
+- Live tracing: runtime events mirror to the trace sink, so `lmpu trace` replays real SDK/runtime runs (verified contiguous).
 - CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1–B5 add 15 targeted tests (10 unit, 5 integration); evidence closure adds 3 integration tests.
 
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
 - Dashboard is intentionally polling-based and read-only; scenario runner and rich filters remain deferred.
-- Gate D is open: RFC/schema, packaging, and release checklist are not started.
+- D3 release execution remains: SBOM generation needs `uvx pip-audit`, and the signed `v0.1.0` tag needs the release key.
 - C1 remains partial: the 64-token model budget makes `direct_cot`/`sync_tool`/`async_poll` fail program generation and answer extraction. Accepted as a model-budget limitation; `trace_token` and successful baselines still support the reduction claim.
 - Trace-token baseline is a labelled simulation; a small real-model trace run remains.
 - CPU RAPL energy is not measured; NVML GPU energy is the only energy path.
@@ -120,6 +124,8 @@
 
 ## 5. Gate D — Release surface
 
+**Status:** D1/D2 CLOSED 2026-11-03. D3 checklist staged; signing/tagging execute at release time.
+
 **Goal:** publish a coherent, reproducible artifact.
 
 | ID | Work | Acceptance | Depends |
@@ -186,9 +192,9 @@ These items do not block A–D. Each has a kill criterion.
 - [x] C3 Minimal dashboard — read-only `Parked Host`, `Jobs`, `Buffers`, `Live Events`; `tests/unit/test_dashboard.py`
 
 ### Gate D
-- [ ] D1 RFC 0001 + JSON Schema
-- [ ] D2 Docs + SDK + packaging
-- [ ] D3 Release checklist
+- [x] D1 RFC 0001 + JSON Schema — `docs/rfcs/0001-protocol-v1.md`, `docs/adr/0001-v0.1-scope.md`, generated `src/lmpu/schema/{protocol,trace}-v1.schema.json`, `scripts/export_schema.py`, `tests/unit/test_schema.py` (examples validate; schema drift locked)
+- [x] D2 Docs + SDK + packaging — `docs/quickstart.md`, `src/lmpu/sdk.py` (`LMPUClient`), `src/lmpu/plugin.py` (`lmpu plugin`), package-data schemas; `uv build` produces wheel + sdist; `tests/integration/test_sdk.py`, `tests/unit/test_plugin.py`
+- [~] D3 Release checklist — `LICENSE`, `SECURITY.md`, `docs/release-checklist.md`, `make release-build/release-sbom/release-checksums`; GPG signature and `v0.1.0` tag execute at release
 
 ### Gate E
 - [ ] E1 vLLM spike
@@ -201,14 +207,14 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gates A, B, and C are closed.
+Gates A, B, and C are closed; Gate D1/D2 are closed.
 
-1. Start Gate D1: RFC 0001 and the frozen trace/event JSON Schema; validate protocol examples.
-2. Start Gate D2: quickstart/docs, SDK/plugin example, `lmpu==0.1.0` build.
-3. Start Gate D3: license, SBOM, pins, signed artifact, security notes, reproducible tag.
-4. Revisit C1 only if a targeted higher-budget model run becomes available; it does not block Gate D.
+1. Execute D3 at release: run `make release-check`, `make release-build`, `make release-sbom`, then sign `dist/SHA256SUMS` and tag `v0.1.0`.
+2. Verify the wheel in a clean venv: `uv pip install dist/lmpu-0.1.0-py3-none-any.whl && lmpu version`.
+3. Revisit C1 only if a targeted higher-budget model run becomes available; it does not block release.
+4. Keep Gate E optional. Deferred product work (full demo set, scenario runner, rich filters, buffer previews) stays out of scope.
 
-Gate D is now open. Deferred product work (full demo set, scenario runner, rich filters, buffer previews) stays out of scope.
+Release is blocked only on the D3 signing/SBOM/tag execution step.
 
 ---
 

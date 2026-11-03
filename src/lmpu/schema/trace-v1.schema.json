@@ -1,0 +1,485 @@
+{
+  "$defs": {
+    "HostMetricsV1": {
+      "additionalProperties": true,
+      "properties": {
+        "control_tokens": {
+          "type": "integer"
+        },
+        "cpu_energy_joules": {
+          "type": "number"
+        },
+        "forward_passes": {
+          "type": "integer"
+        },
+        "generated_tokens": {
+          "type": "integer"
+        },
+        "gpu_energy_joules": {
+          "type": "number"
+        },
+        "injected_tokens": {
+          "type": "integer"
+        },
+        "peak_context_tokens": {
+          "type": "integer"
+        },
+        "prefill_tokens": {
+          "type": "integer"
+        },
+        "schema": {
+          "const": "lmpu.host_metrics.v1"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "sleep_duration_seconds": {
+          "type": "number"
+        },
+        "total_tokens": {
+          "type": "integer"
+        },
+        "vram_peak_mb": {
+          "type": "number"
+        },
+        "wake_latency_seconds": {
+          "type": "number"
+        },
+        "wall_time_seconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "schema",
+        "session_id",
+        "forward_passes",
+        "prefill_tokens",
+        "generated_tokens",
+        "control_tokens",
+        "injected_tokens",
+        "total_tokens",
+        "peak_context_tokens",
+        "vram_peak_mb",
+        "gpu_energy_joules",
+        "cpu_energy_joules",
+        "sleep_duration_seconds",
+        "wake_latency_seconds",
+        "wall_time_seconds"
+      ],
+      "type": "object"
+    },
+    "TraceRecord": {
+      "oneOf": [
+        {
+          "additionalProperties": true,
+          "properties": {
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "trace_id": {
+              "type": "string"
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "enum": [
+                "session_start",
+                "session_end"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "trace_id",
+            "session_id",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "data": {
+              "type": "object"
+            },
+            "event_id": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "seq": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "pattern": "^event_",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "event_id",
+            "seq",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "mono": {
+              "type": "number"
+            },
+            "phase": {
+              "type": "string"
+            },
+            "session": {
+              "type": "string"
+            },
+            "tokens": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "host_forward"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "tokens",
+            "phase",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "metrics": {
+              "$ref": "#/$defs/HostMetricsV1"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "host_metrics"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "metrics",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "job_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "control_parsed"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "kind",
+            "job_id",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "job_state"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "job_id",
+            "from",
+            "to",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "jobs": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "level": {
+              "type": "string"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "park_enter"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "level",
+            "jobs",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "mono": {
+              "type": "number"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "wake"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "reason",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "event": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "const": "inject"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "event",
+            "job_id",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "buffer_id": {
+              "type": "string"
+            },
+            "byte_range": {
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "mono": {
+              "type": "number"
+            },
+            "session": {
+              "type": "string"
+            },
+            "trace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ts": {
+              "type": "number"
+            },
+            "type": {
+              "pattern": "^buffer_",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "session",
+            "job_id",
+            "buffer_id",
+            "ts",
+            "mono"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "https://lmpu.dev/schema/trace-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LMPU Trace v1"
+}

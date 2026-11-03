@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Union
 
 import orjson
 import ulid
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .sentinels import PROTOCOL_VERSION
 
@@ -464,6 +465,14 @@ class BufferImportParams(LMPUBaseModel):
     path: str | None = None
     dtype: str
     shape: list[int]
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _decode_base64(cls, value: object) -> object:
+        if isinstance(value, str):
+            padding = "=" * (-len(value) % 4)
+            return base64.urlsafe_b64decode(value + padding)
+        return value
 
 
 class BufferRef(LMPUBaseModel):

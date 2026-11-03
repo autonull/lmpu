@@ -1,0 +1,2075 @@
+{
+  "$defs": {
+    "AckParams": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq"
+      ],
+      "title": "AckParams",
+      "type": "object"
+    },
+    "AckResult": {
+      "additionalProperties": false,
+      "properties": {
+        "acked": {
+          "title": "Acked",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "acked"
+      ],
+      "title": "AckResult",
+      "type": "object"
+    },
+    "BufferChecksumParams": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "default": "blake3",
+          "enum": [
+            "blake3",
+            "sha256"
+          ],
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer"
+      ],
+      "title": "BufferChecksumParams",
+      "type": "object"
+    },
+    "BufferCreateParams": {
+      "additionalProperties": false,
+      "properties": {
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "persist": {
+          "default": false,
+          "title": "Persist",
+          "type": "boolean"
+        },
+        "shape": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Shape",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "shape"
+      ],
+      "title": "BufferCreateParams",
+      "type": "object"
+    },
+    "BufferCreatedData": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "title": "Buffer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id"
+      ],
+      "title": "BufferCreatedData",
+      "type": "object"
+    },
+    "BufferDeleteParams": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer"
+      ],
+      "title": "BufferDeleteParams",
+      "type": "object"
+    },
+    "BufferImportParams": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "anyOf": [
+            {
+              "format": "base64url",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "shape": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Shape",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "shape"
+      ],
+      "title": "BufferImportParams",
+      "type": "object"
+    },
+    "BufferRef": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "title": "Buffer Id",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "checksum": {
+          "title": "Checksum",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "number"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provenance"
+        },
+        "shape": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Shape",
+          "type": "array"
+        },
+        "ttl_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttl Ms"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "dtype",
+        "shape",
+        "bytes",
+        "checksum",
+        "owner",
+        "created_at"
+      ],
+      "title": "BufferRef",
+      "type": "object"
+    },
+    "BufferStatParams": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer"
+      ],
+      "title": "BufferStatParams",
+      "type": "object"
+    },
+    "BufferUpdatedData": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "title": "Buffer Id",
+          "type": "string"
+        },
+        "checksum": {
+          "title": "Checksum",
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "checksum"
+      ],
+      "title": "BufferUpdatedData",
+      "type": "object"
+    },
+    "BufferView": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data"
+        },
+        "derived_buffer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Derived Buffer"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "view": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "View"
+        }
+      },
+      "required": [
+        "buffer",
+        "dtype"
+      ],
+      "title": "BufferView",
+      "type": "object"
+    },
+    "CancelParams": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "CancelParams",
+      "type": "object"
+    },
+    "CancelResult": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "cancel_requested",
+            "already_terminal"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "status"
+      ],
+      "title": "CancelResult",
+      "type": "object"
+    },
+    "CapabilitiesParams": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Op"
+        },
+        "processor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Processor"
+        }
+      },
+      "title": "CapabilitiesParams",
+      "type": "object"
+    },
+    "CapabilitiesResult": {
+      "additionalProperties": false,
+      "properties": {
+        "matches": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Matches"
+        },
+        "processors": {
+          "items": {
+            "$ref": "#/$defs/CapabilityDescriptor"
+          },
+          "title": "Processors",
+          "type": "array"
+        },
+        "recommended": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recommended"
+        }
+      },
+      "required": [
+        "processors"
+      ],
+      "title": "CapabilitiesResult",
+      "type": "object"
+    },
+    "CapabilityDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "batching": {
+          "title": "Batching",
+          "type": "boolean"
+        },
+        "determinism": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Determinism",
+          "type": "array"
+        },
+        "interactive": {
+          "title": "Interactive",
+          "type": "boolean"
+        },
+        "latency_class": {
+          "title": "Latency Class",
+          "type": "string"
+        },
+        "limits": {
+          "additionalProperties": true,
+          "title": "Limits",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ops": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Ops",
+          "type": "array"
+        },
+        "persistent_state": {
+          "title": "Persistent State",
+          "type": "boolean"
+        },
+        "progress": {
+          "title": "Progress",
+          "type": "boolean"
+        },
+        "protocol": {
+          "title": "Protocol",
+          "type": "string"
+        },
+        "sandbox": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sandbox",
+          "type": "array"
+        },
+        "streaming": {
+          "title": "Streaming",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "zero_copy": {
+          "title": "Zero Copy",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "protocol",
+        "ops",
+        "limits",
+        "determinism",
+        "latency_class",
+        "streaming",
+        "progress",
+        "interactive",
+        "persistent_state",
+        "batching",
+        "zero_copy",
+        "sandbox"
+      ],
+      "title": "CapabilityDescriptor",
+      "type": "object"
+    },
+    "CloseParams": {
+      "additionalProperties": false,
+      "properties": {
+        "detach": {
+          "default": false,
+          "title": "Detach",
+          "type": "boolean"
+        }
+      },
+      "title": "CloseParams",
+      "type": "object"
+    },
+    "CloseResult": {
+      "additionalProperties": false,
+      "properties": {
+        "cancelled_jobs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Cancelled Jobs",
+          "type": "array"
+        },
+        "detached_jobs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detached Jobs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cancelled_jobs",
+        "detached_jobs"
+      ],
+      "title": "CloseResult",
+      "type": "object"
+    },
+    "ConfigureParams": {
+      "additionalProperties": false,
+      "properties": {
+        "injection": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Injection"
+        },
+        "max_buffer_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Buffer Bytes"
+        },
+        "max_outstanding_jobs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Outstanding Jobs"
+        },
+        "max_sleep_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Sleep Seconds"
+        },
+        "sleep_level": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SleepLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ConfigureParams",
+      "type": "object"
+    },
+    "ControlErrorData": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_schema": {
+          "title": "Expected Schema",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "position": {
+          "title": "Position",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "position",
+        "expected_schema",
+        "message"
+      ],
+      "title": "ControlErrorData",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "description": "Canonical error codes.",
+      "enum": [
+        "invalid_schema",
+        "unknown_method",
+        "unknown_processor",
+        "unknown_op",
+        "capability_mismatch",
+        "buffer_not_found",
+        "buffer_too_large",
+        "access_denied",
+        "quota_exceeded",
+        "backpressure",
+        "timeout",
+        "cancelled",
+        "worker_crashed",
+        "oom",
+        "checksum_mismatch",
+        "runtime_restarted",
+        "protocol_version",
+        "idempotency_conflict",
+        "already_terminal",
+        "internal"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "description": "Event log entry.",
+      "properties": {
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JobSubmittedData"
+            },
+            {
+              "$ref": "#/$defs/JobStartedData"
+            },
+            {
+              "$ref": "#/$defs/ProgressData"
+            },
+            {
+              "$ref": "#/$defs/JobCompletedData"
+            },
+            {
+              "$ref": "#/$defs/JobFailedData"
+            },
+            {
+              "$ref": "#/$defs/JobCancelledData"
+            },
+            {
+              "$ref": "#/$defs/NeedsMoreInputData"
+            },
+            {
+              "$ref": "#/$defs/SleepingData"
+            },
+            {
+              "$ref": "#/$defs/WokenData"
+            },
+            {
+              "$ref": "#/$defs/BufferCreatedData"
+            },
+            {
+              "$ref": "#/$defs/BufferUpdatedData"
+            },
+            {
+              "$ref": "#/$defs/ResourceWarningData"
+            },
+            {
+              "$ref": "#/$defs/ControlErrorData"
+            },
+            {
+              "$ref": "#/$defs/ResultTooLargeData"
+            },
+            {
+              "$ref": "#/$defs/HeartbeatData"
+            }
+          ],
+          "title": "Data"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session": {
+          "title": "Session",
+          "type": "string"
+        },
+        "ts_monotonic": {
+          "title": "Ts Monotonic",
+          "type": "number"
+        },
+        "ts_wall": {
+          "title": "Ts Wall",
+          "type": "number"
+        },
+        "type": {
+          "$ref": "#/$defs/EventKind"
+        }
+      },
+      "required": [
+        "seq",
+        "session",
+        "type",
+        "ts_monotonic",
+        "data"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "EventKind": {
+      "description": "Event types for the event log.",
+      "enum": [
+        "JobSubmitted",
+        "JobStarted",
+        "Progress",
+        "JobCompleted",
+        "JobFailed",
+        "JobCancelled",
+        "NeedsMoreInput",
+        "Sleeping",
+        "Woken",
+        "BufferCreated",
+        "BufferUpdated",
+        "ResourceWarning",
+        "ControlError",
+        "ResultTooLarge",
+        "Heartbeat"
+      ],
+      "title": "EventKind",
+      "type": "string"
+    },
+    "HealthResult": {
+      "additionalProperties": false,
+      "properties": {
+        "queue_depth": {
+          "title": "Queue Depth",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "unhealthy"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "uptime_seconds": {
+          "title": "Uptime Seconds",
+          "type": "number"
+        },
+        "worker_health": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Worker Health",
+          "type": "object"
+        }
+      },
+      "required": [
+        "status",
+        "queue_depth",
+        "worker_health",
+        "uptime_seconds"
+      ],
+      "title": "HealthResult",
+      "type": "object"
+    },
+    "HeartbeatData": {
+      "additionalProperties": false,
+      "properties": {
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "number"
+        },
+        "worker": {
+          "title": "Worker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "worker",
+        "timestamp"
+      ],
+      "title": "HeartbeatData",
+      "type": "object"
+    },
+    "HelloParams": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "default": "lmpu/1",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "resume_from": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resume From"
+        },
+        "session_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Config"
+        }
+      },
+      "title": "HelloParams",
+      "type": "object"
+    },
+    "HelloResult": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "title": "Protocol",
+          "type": "string"
+        },
+        "resume_status": {
+          "default": "none",
+          "enum": [
+            "ok",
+            "gap",
+            "none"
+          ],
+          "title": "Resume Status",
+          "type": "string"
+        },
+        "schema_hash": {
+          "title": "Schema Hash",
+          "type": "string"
+        },
+        "server_time": {
+          "title": "Server Time",
+          "type": "number"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "protocol",
+        "schema_hash",
+        "server_time"
+      ],
+      "title": "HelloResult",
+      "type": "object"
+    },
+    "InjectedEvent": {
+      "additionalProperties": false,
+      "description": "Event as injected into model context via <|proc_event|>.",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/EventKind"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "kind": {
+          "const": "event",
+          "default": "event",
+          "title": "Kind",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "version": {
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "title": "InjectedEvent",
+      "type": "object"
+    },
+    "JobCancelledData": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "reason"
+      ],
+      "title": "JobCancelledData",
+      "type": "object"
+    },
+    "JobCompletedData": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Buffer Refs",
+          "type": "array"
+        },
+        "cache_hit": {
+          "default": false,
+          "title": "Cache Hit",
+          "type": "boolean"
+        },
+        "checksum": {
+          "title": "Checksum",
+          "type": "string"
+        },
+        "copy_count": {
+          "default": 0,
+          "title": "Copy Count",
+          "type": "integer"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "mapped_bytes": {
+          "default": 0,
+          "title": "Mapped Bytes",
+          "type": "integer"
+        },
+        "result": {
+          "additionalProperties": true,
+          "title": "Result",
+          "type": "object"
+        },
+        "status": {
+          "const": "completed",
+          "default": "completed",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "result",
+        "checksum"
+      ],
+      "title": "JobCompletedData",
+      "type": "object"
+    },
+    "JobFailedData": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "retriable": {
+          "title": "Retriable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "job_id",
+        "error_code",
+        "retriable",
+        "detail"
+      ],
+      "title": "JobFailedData",
+      "type": "object"
+    },
+    "JobStartedData": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "start_time": {
+          "title": "Start Time",
+          "type": "number"
+        },
+        "worker": {
+          "title": "Worker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "worker",
+        "start_time"
+      ],
+      "title": "JobStartedData",
+      "type": "object"
+    },
+    "JobSubmittedData": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "processor": {
+          "title": "Processor",
+          "type": "string"
+        },
+        "queue_position": {
+          "title": "Queue Position",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "job_id",
+        "processor",
+        "queue_position"
+      ],
+      "title": "JobSubmittedData",
+      "type": "object"
+    },
+    "JobsListParams": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ModelJobStatus"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "title": "JobsListParams",
+      "type": "object"
+    },
+    "ModelJobStatus": {
+      "description": "Model-facing job statuses (subset of internal states).",
+      "enum": [
+        "pending",
+        "running",
+        "sleeping",
+        "cancel_requested",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "title": "ModelJobStatus",
+      "type": "string"
+    },
+    "NeedsMoreInputData": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "prompt",
+        "fields"
+      ],
+      "title": "NeedsMoreInputData",
+      "type": "object"
+    },
+    "PollParams": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "PollParams",
+      "type": "object"
+    },
+    "PollResult": {
+      "additionalProperties": false,
+      "properties": {
+        "elapsed_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Ms"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Progress"
+        },
+        "queue_position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Position"
+        },
+        "status": {
+          "$ref": "#/$defs/ModelJobStatus"
+        }
+      },
+      "required": [
+        "job_id",
+        "status"
+      ],
+      "title": "PollResult",
+      "type": "object"
+    },
+    "ProgressData": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkpoint"
+        },
+        "fraction": {
+          "title": "Fraction",
+          "type": "number"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "required": [
+        "job_id",
+        "fraction"
+      ],
+      "title": "ProgressData",
+      "type": "object"
+    },
+    "RPCError": {
+      "additionalProperties": false,
+      "description": "JSON-RPC 2.0 error object.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "retriable": {
+          "default": false,
+          "title": "Retriable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "RPCError",
+      "type": "object"
+    },
+    "RPCNotification": {
+      "additionalProperties": false,
+      "description": "JSON-RPC 2.0 notification (no id).",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0",
+          "default": "2.0",
+          "title": "Jsonrpc",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "title": "RPCNotification",
+      "type": "object"
+    },
+    "RPCRequest": {
+      "additionalProperties": false,
+      "description": "JSON-RPC 2.0 request.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "default": "2.0",
+          "title": "Jsonrpc",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "title": "RPCRequest",
+      "type": "object"
+    },
+    "RPCResponse": {
+      "additionalProperties": false,
+      "description": "JSON-RPC 2.0 response.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RPCError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "default": "2.0",
+          "title": "Jsonrpc",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        }
+      },
+      "title": "RPCResponse",
+      "type": "object"
+    },
+    "ReadParams": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        },
+        "max_inline_bytes": {
+          "default": 65536,
+          "title": "Max Inline Bytes",
+          "type": "integer"
+        },
+        "slices": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slices"
+        }
+      },
+      "required": [
+        "buffer"
+      ],
+      "title": "ReadParams",
+      "type": "object"
+    },
+    "ResourceWarningData": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "title": "Current",
+          "type": "integer"
+        },
+        "limit": {
+          "title": "Limit",
+          "type": "integer"
+        },
+        "quota": {
+          "title": "Quota",
+          "type": "string"
+        }
+      },
+      "required": [
+        "quota",
+        "current",
+        "limit"
+      ],
+      "title": "ResourceWarningData",
+      "type": "object"
+    },
+    "ResultTooLargeData": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer",
+        "reason"
+      ],
+      "title": "ResultTooLargeData",
+      "type": "object"
+    },
+    "SleepCondition": {
+      "additionalProperties": false,
+      "description": "Sleep wake condition.",
+      "properties": {
+        "all": {
+          "items": {
+            "type": "string"
+          },
+          "title": "All",
+          "type": "array"
+        },
+        "any": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Any",
+          "type": "array"
+        },
+        "deadline_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deadline Ms"
+        },
+        "events": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "success_only": {
+          "default": false,
+          "title": "Success Only",
+          "type": "boolean"
+        }
+      },
+      "title": "SleepCondition",
+      "type": "object"
+    },
+    "SleepLevel": {
+      "description": "Sleep/park levels.",
+      "enum": [
+        "S1",
+        "S2",
+        "S3"
+      ],
+      "title": "SleepLevel",
+      "type": "string"
+    },
+    "SleepParams": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SleepLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "until": {
+          "$ref": "#/$defs/SleepCondition"
+        }
+      },
+      "required": [
+        "until"
+      ],
+      "title": "SleepParams",
+      "type": "object"
+    },
+    "SleepResult": {
+      "additionalProperties": false,
+      "properties": {
+        "sleep_id": {
+          "title": "Sleep Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "registered",
+            "already_satisfied"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "woken": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Woken"
+        }
+      },
+      "required": [
+        "sleep_id",
+        "status"
+      ],
+      "title": "SleepResult",
+      "type": "object"
+    },
+    "SleepingData": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "$ref": "#/$defs/SleepCondition"
+        },
+        "session": {
+          "title": "Session",
+          "type": "string"
+        },
+        "sleep_id": {
+          "title": "Sleep Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session",
+        "sleep_id",
+        "conditions"
+      ],
+      "title": "SleepingData",
+      "type": "object"
+    },
+    "SubmitParams": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "title": "Inputs",
+          "type": "object"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "op": {
+          "title": "Op",
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": true,
+          "title": "Outputs",
+          "type": "object"
+        },
+        "processor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Processor"
+        },
+        "program": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Program"
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "title": "SubmitParams",
+      "type": "object"
+    },
+    "SubmitResult": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "queue_position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Position"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/ModelJobStatus"
+        }
+      },
+      "required": [
+        "job_id",
+        "status",
+        "seq"
+      ],
+      "title": "SubmitResult",
+      "type": "object"
+    },
+    "WaitParams": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout Ms"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "WaitParams",
+      "type": "object"
+    },
+    "WaitResult": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RPCError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "status": {
+          "$ref": "#/$defs/ModelJobStatus"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "WaitResult",
+      "type": "object"
+    },
+    "WakeParams": {
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        }
+      },
+      "title": "WakeParams",
+      "type": "object"
+    },
+    "WakeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "woken",
+            "no_active_sleep"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "WakeResult",
+      "type": "object"
+    },
+    "WokenData": {
+      "additionalProperties": false,
+      "properties": {
+        "already_satisfied": {
+          "default": false,
+          "title": "Already Satisfied",
+          "type": "boolean"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "satisfied_jobs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Satisfied Jobs",
+          "type": "array"
+        },
+        "session": {
+          "title": "Session",
+          "type": "string"
+        },
+        "sleep_id": {
+          "title": "Sleep Id",
+          "type": "string"
+        },
+        "statuses": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ModelJobStatus"
+          },
+          "title": "Statuses",
+          "type": "object"
+        }
+      },
+      "required": [
+        "session",
+        "sleep_id",
+        "reason",
+        "satisfied_jobs",
+        "statuses"
+      ],
+      "title": "WokenData",
+      "type": "object"
+    },
+    "WriteParams": {
+      "additionalProperties": false,
+      "properties": {
+        "buffer": {
+          "title": "Buffer",
+          "type": "string"
+        },
+        "data": {
+          "title": "Data"
+        },
+        "slices": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Slices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "buffer",
+        "slices",
+        "data"
+      ],
+      "title": "WriteParams",
+      "type": "object"
+    }
+  },
+  "$id": "https://lmpu.dev/schema/protocol-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LMPU Protocol v1"
+}

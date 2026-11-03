@@ -101,6 +101,28 @@ def run(
 
 
 @app.command()
+def serve(
+    socket: str = typer.Option("/tmp/lmpu/run.sock", "--socket", "-s", help="Runtime socket"),
+    trace_dir: str = typer.Option("traces", "--trace-dir", help="Trace directory"),
+    trace: bool = typer.Option(True, "--trace/--no-trace", help="Enable tracing"),
+):
+    """Start the runtime server and wait for clients."""
+    runtime = Runtime(socket_path=socket, config={"trace_dir": trace_dir, "trace_enabled": trace})
+
+    async def _serve() -> None:
+        await runtime.start()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await runtime.stop()
+
+    try:
+        asyncio.run(_serve())
+    except KeyboardInterrupt:
+        console.print("[yellow]Runtime stopped[/yellow]")
+
+
+@app.command()
 def demo(
     name: str = typer.Argument(..., help="Demo name: 01-12 or all"),
     socket: str = typer.Option("/tmp/lmpu/run.sock", "--socket", "-s", help="Runtime socket"),

@@ -80,9 +80,15 @@ class EventLog:
         return self._sessions[session_id]
 
     def append(self, session_id: str, event: Event) -> Event:
-        """Append event to session log."""
+        """Append event to session log and mirror it to the trace sink."""
+        from ..kernel.trace import get_trace_sink
+
         log = self._get_or_create(session_id)
-        return log.append(event)
+        stored = log.append(event)
+        sink = get_trace_sink()
+        if sink is not None:
+            sink.emit_event(stored)
+        return stored
 
     def get_since(self, session_id: str, seq: int) -> list[Event]:
         """Get events since sequence number."""

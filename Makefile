@@ -1,6 +1,6 @@
 # LMPU Makefile
 
-.PHONY: help setup check test-core test-gpu test-failure test-security test-fuzz demo mission-control bench bench-smoke soak release-check clean
+.PHONY: help setup check schema test-core test-gpu test-failure test-security test-fuzz demo mission-control bench bench-smoke soak release-check release-build release-sbom release-checksums clean
 
 # Default target
 help:
@@ -21,8 +21,11 @@ help:
 	@echo "  clean           - Clean build artifacts"
 
 setup:
-	uv sync --all-extras
+	uv sync --dev --extra host --extra dashboard --extra bench
 	uv pip install -e ".[dev,host]"
+
+schema:
+	uv run python scripts/export_schema.py
 
 check:
 	ruff check src tests
@@ -45,13 +48,10 @@ test-fuzz:
 	pytest -m "fuzz" -v
 
 demo:
-	python -m lmpu.demos 01
-	python -m lmpu.demos 02
-	python -m lmpu.demos 03
-	python -m lmpu.demos 10
+	uv run lmpu demo canonical
 
 mission-control:
-	python -m lmpu.demos 12
+	uv run lmpu mission-control
 
 bench-smoke:
 	uv run python -m lmpu.bench.run_benchmark --workload smoke --trials 3
@@ -66,6 +66,16 @@ soak:
 	pytest -m "soak" -v --timeout=3600
 
 release-check: check test-core test-gpu test-failure test-security bench
+
+release-build:
+	uv build
+	$(MAKE) release-checksums
+
+release-sbom:
+	uvx pip-audit -f cyclonedx -o dist/sbom.json
+
+release-checksums:
+	cd dist && sha256sum *.whl *.tar.gz > SHA256SUMS
 
 clean:
 	rm -rf .venv __pycache__ src/lmpu/__pycache__ .mypy_cache .ruff_cache .pytest_cache

@@ -148,6 +148,7 @@ class Runtime:
         self.worker_pool.set_buffer_provider(self._buffer_specs_for_job)
         self.trace_sink = init_trace_sink(
             TraceConfig(
+                enabled=self.config.get("trace_enabled", True),
                 trace_dir=self.config.get("trace_dir", "traces"),
                 trace_token_events=self.config.get("trace_token_events", "sampled"),
             )
