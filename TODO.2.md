@@ -24,11 +24,13 @@
 - Trace JSONL emission, replay, gap detection, redaction.
 - Session authorization boundary: capability advertisement stays registry-wide; buffer and processor access are session-scoped.
 - Grant/refcount per-buffer release, TTL reaping, close-time shm cleanup, and fd-leak assertions.
-- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**.
+- Benchmark harness: TOML/JSON config, explicit seeds, warmups, measured trials, resume-safe `raw.jsonl`, hardware/commit manifest, summary medians and bootstrap CIs, and a real-runtime sync trial runner.
+- CPU suite: **132 passed, 5 skipped**; opt-in GPU tests: **3 passed**. B1 adds 6 targeted tests (5 unit, 1 integration).
 
 ### Known gaps
 - Trace/metrics lack CPU energy coverage (RAPL is root-only on the reference host).
 - P1 exit gate is not closed: canonical demo assertions and the 16 MiB dashboard proof (Gate C).
+- Baseline adapters, energy sampling, initial workloads, and the C1–C5 report (B2–B5) remain open.
 - Qwen3.5-2B, vLLM 0.33, and Outlines 0.1.14 are unverified (Gate E).
 - Legacy `mypy`/`ruff` findings remain outside the changed-file policy.
 
@@ -152,7 +154,7 @@ These items do not block A–D. Each has a kill criterion.
 - [x] A7 Environment reproducibility — `uv.lock` resolves, `docs/optional-vllm.md`
 
 ### Gate B
-- [ ] B1 Harness
+- [x] B1 Harness — `src/lmpu/bench/`, `configs/benchmarks.toml`, `tests/unit/test_bench_harness.py`, `tests/integration/test_bench_runtime.py`; `make bench-smoke` runs through the real runtime
 - [ ] B2 Baselines
 - [ ] B3 Energy sampling
 - [ ] B4 Initial workloads
@@ -179,12 +181,11 @@ These items do not block A–D. Each has a kill criterion.
 
 ## 9. Immediate next actions
 
-Gate A is closed. Start Gate B in order:
+Gate A is closed and B1 is closed. Continue Gate B in order:
 
-1. **B1:** build the resume-safe harness around the A2 metrics schema.
-2. **B2:** implement four fair baselines (direct CoT, trace-token, sync tool, async polling).
-3. **B3/B4:** add NVML idle baseline plus one compute, one large-context, and one sleep-heavy workload.
-4. **B5:** emit the first C1–C5 report with medians, CIs, raw artifacts, and limitations.
+1. **B2:** implement four fair baselines (direct CoT, trace-token, sync tool, async polling) behind the `TrialRunner` interface; every baseline must emit the A2 metrics schema.
+2. **B3/B4:** add NVML idle baseline plus one compute, one large-context, and one sleep-heavy workload.
+3. **B5:** emit the first C1–C5 report with medians, CIs, raw artifacts, and limitations.
 
 Keep Gate C closed until B5 produces the report.
 

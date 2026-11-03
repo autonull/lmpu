@@ -1,0 +1,9 @@
+name = "gate-b"
+workloads = ["bigint_mul"]
+trials = 20
+warmups = 3
+seed = 20261103
+device = "cuda"
+model = "Qwen/Qwen3.5-0.8B"
+results_root = "benchmarks/results"
+resume = true

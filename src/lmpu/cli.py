@@ -141,7 +141,7 @@ def bench(
     output: str = typer.Option("benchmarks/results", "--output", "-o", help="Output directory"),
 ):
     """Run benchmarks."""
-    from lmpu.bench import run_benchmark
+    from lmpu.bench.run_benchmark import run_benchmark
 
     asyncio.run(run_benchmark(workload, trials, output))
 
