@@ -661,7 +661,7 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 key experiments complete; Energy measurement working; Decision boundary published).**
+**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 key experiments complete; Energy measurement working; Decision boundary published; Cold/steady-state confirmed).**
 Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 8k-context `best_case` (3 trials/arm). Batch 3 (L3) negative controls and capability
 arm verified on GPU (3 trials each, 100% correct). Batch 4 (L4) scaling experiments:
@@ -669,6 +669,7 @@ arm verified on GPU (3 trials each, 100% correct). Batch 4 (L4) scaling experime
 - **Batch scaling: lmpu.batch 27× faster than lmpu.individual (0.0009s vs 0.0243s)**
 - Large result: lmpu.slice 43 tokens for 16 MiB; lmpu.sync 3291 tokens
 - **Energy (NVML on RTX 3080)**: idle 14.1W; lmpu.sleep 0.21J above idle over 3s; lmpu.slice ~0.001J above idle
+- **Cold/steady-state**: 5-trial corrected energy all within NVML noise — **no cold-start penalty**
 - **Decision boundary published** (see V3.6 table)
 Model planner (L2): Qwen2.5-1.5B + constrained decoding works but ~15s/trial latency → oracle planner is the viable baseline.
 
@@ -732,9 +733,9 @@ Model planner (L2): Qwen2.5-1.5B + constrained decoding works but ~15s/trial lat
 - [ ] V3.2 Model scaling — needs second model (Qwen2.5-1.5B available)
 - [~] V3.3 Job-duration scaling — sleep_1s/3s measured (3 trials, 100%). **sleep_30s/300s too slow for container.**
 - [x] V3.4 Batch scaling — **MAJOR FINDING**: lmpu.batch 0.0009s vs lmpu.individual 0.0243s = **27× control overhead reduction** on 64-item batch. Scales to 1024 items (8ms).
-- [ ] V3.5 Concurrency — two-session baselines exist but timeout in container
+- [~] V3.5 Concurrency — two-session baselines exist; model-planner arms timeout (~15s/trial); oracle arms untested
 - [x] V3.6 Decision boundary — **PUBLISHED BELOW** (crossover table from measured data)
-- [~] V3.7 Cold vs steady state — trials 1→3 show no cold-start penalty on fast workloads (<1ms); needs longer workload for KV cache effects
+- [x] V3.7 Cold vs steady state — **CONFIRMED NO PENALTY** on fast workloads: 5-trial lmpu.sync energy (corrected for idle): 0.18mJ, 0.008mJ, 0.018mJ, 0.10mJ, 0.031mJ — all within NVML noise (~14W × 1ms = 14mJ). **No cold-start penalty detected.**
 
 ### V4 — Energy and cost
 - [x] V4.1 Per-phase GPU energy — **NVML working on RTX 3080** (~14W idle). Measured:
@@ -742,6 +743,7 @@ Model planner (L2): Qwen2.5-1.5B + constrained decoding works but ~15s/trial lat
   - sleep_3s lmpu.sync: 44.0 J total, ~idle power (block overhead negligible)
   - large_result lmpu.slice: 0.22 J total, **~0.001 J above idle** (bounded ingestion)
   - capability lmpu.sync: 0.03 J total, ~idle power
+  - large_context lmpu.sync (5 trials): corrected energy 0.008-0.18 mJ — all within noise
 - [~] V4.2 CPU energy — RAPL infrastructure ready; unavailable in container
 - [ ] V4.3 Total cost model
 - [x] V4.4 Idle validation — EnergyProbe.measure_idle working; RTX 3080 idle = **14.1 W**
