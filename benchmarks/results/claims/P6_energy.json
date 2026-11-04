@@ -1,0 +1,22 @@
+{
+  "claim": "P6",
+  "description": "Energy advantage",
+  "result": "PARTIAL",
+  "evidence": "benchmarks/experiments/energy.py",
+  "measurement": "marginal parked session cost ≈ 0 W (inside NVML noise); GPU advantage requires GPU kernels",
+  "details": {
+    "method": "nvidia-smi dmon, 10 trials, median ± IQR",
+    "idle_watts": 13.5,
+    "idle_iqr_watts": 6.0,
+    "delta_vs_idle": {
+      "single_active": -0.5,
+      "parked_4": -0.5,
+      "parked_8": +0.5,
+      "active_4": +0.5,
+      "active_8": +0.5
+    },
+    "all_deltas_inside_iqr": true,
+    "defensible_claim": "idle watts per parked session ≈ 0",
+    "note": "Workloads CPU-bound (pure.func); GPU advantage requires GPU kernels (vector.engine, future work)"
+  }
+}

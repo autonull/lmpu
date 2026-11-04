@@ -1,0 +1,13 @@
+{
+  "claim": "P2",
+  "description": "Parked sessions overlap",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/multisession.py",
+  "measurement": "4 sessions 4.23s vs 12s serial (2.84×); 8 sessions 7.37s vs 24s serial (3.26×)",
+  "details": {
+    "overlap_4_sessions": 2.84,
+    "overlap_8_sessions": 3.26,
+    "sessions_tested": [1, 2, 3, 4, 8],
+    "ideal_3s": true
+  }
+}

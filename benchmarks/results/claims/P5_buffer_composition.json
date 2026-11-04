@@ -1,0 +1,14 @@
+{
+  "claim": "P5",
+  "description": "Buffer output composes into another processor",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/buffer_composition.py",
+  "measurement": "host tokens flat (168±0) across 1–256 MiB, 3-stage pipe",
+  "details": {
+    "pipeline": "import → sha256 → text_stats → read",
+    "host_tokens_flat": true,
+    "host_tokens_value": 168,
+    "sizes_tested": ["1 MiB", "16 MiB", "64 MiB", "256 MiB"],
+    "stages": 3
+  }
+}

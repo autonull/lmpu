@@ -7,7 +7,7 @@ from typing import Any
 import torch
 
 from .engine import HostEngine, HostState, HostStats, SleepLevel
-from .grammar import ConstrainedDecoder
+from .grammar import ConstrainedDecoder, OutlinesDecoder
 from .metrics import EnergySampler, MetricsCollector, get_metrics_collector
 
 
@@ -31,6 +31,7 @@ class HFEngine(HostEngine):
         metrics: MetricsCollector | None = None,
         energy_sampler: EnergySampler | None = None,
         model_class: str | None = None,  # "causal" | "multimodal" | None (auto)
+        energy_sample_interval: int = 16,  # Sample energy every N forward passes
     ):
         self.model_name = model_name
         self.device = device
@@ -38,6 +39,8 @@ class HFEngine(HostEngine):
         self.trust_remote_code = trust_remote_code
         self.max_context = max_context
         self._model_class = model_class
+        self._energy_sample_interval = energy_sample_interval
+        self._forward_since_sample = 0
 
         self._model = model
         self._tokenizer = tokenizer
@@ -118,7 +121,14 @@ class HFEngine(HostEngine):
         vram_peak_mb = 0.0
         if torch.cuda.is_available():
             vram_peak_mb = torch.cuda.max_memory_allocated(self._device_obj) / (1024.0**2)
-        energy = self.energy_sampler.sample()
+
+        # Sample energy at intervals to avoid per-token syscall overhead
+        self._forward_since_sample += 1
+        energy = None
+        if self._forward_since_sample >= self._energy_sample_interval:
+            energy = self.energy_sampler.sample()
+            self._forward_since_sample = 0
+
         self.metrics.record_forward(
             self.session_id,
             kind,
@@ -313,9 +323,7 @@ class HFDecoder(ConstrainedDecoder):
 
     async def _get_constrained_decoder(self):
         if self._constrained_decoder is None and self._use_constrained:
-            from .grammar import LMFormatEnforcerDecoder
-
-            self._constrained_decoder = LMFormatEnforcerDecoder(
+            self._constrained_decoder = OutlinesDecoder(
                 self.engine._model, self.engine._tokenizer
             )
         return self._constrained_decoder

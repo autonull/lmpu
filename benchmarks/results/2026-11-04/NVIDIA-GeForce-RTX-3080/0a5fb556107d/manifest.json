@@ -1,0 +1,42 @@
+{
+  "commit": "0a5fb556107d",
+  "config": {
+    "baselines": [
+      "lmpu.model_async",
+      "app_agent"
+    ],
+    "device": "cuda",
+    "idle_seconds": 0.0,
+    "max_tokens": 512,
+    "model": "Qwen/Qwen3.5-0.8B",
+    "name": "lmpu-bench",
+    "poll_interval_ms": 50,
+    "results_root": "benchmarks/results",
+    "resume": true,
+    "seed": 20261103,
+    "trials": 1,
+    "warmups": 0,
+    "workloads": [
+      "best_case"
+    ]
+  },
+  "dirty": true,
+  "full_commit": "0a5fb556107def4e75e033a1bae3f79e05be0d51",
+  "hardware": {
+    "cpu_count": 16,
+    "device": "cuda",
+    "gpu": {
+      "cuda": "13.0",
+      "name": "NVIDIA GeForce RTX 3080",
+      "torch": "2.14.0+cu130",
+      "total_memory_bytes": 10409017344
+    },
+    "machine": "x86_64",
+    "platform": "Linux-7.2.11-1-cachyos-x86_64-with-glibc2.44",
+    "processor": "",
+    "python": "3.14.7"
+  },
+  "run_dir": "benchmarks/results/2026-11-04/NVIDIA-GeForce-RTX-3080/0a5fb556107d",
+  "schema": "lmpu.bench.manifest.v1",
+  "started_at": "2026-11-04T04:30:47.553370+00:00"
+}

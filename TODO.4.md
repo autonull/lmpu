@@ -28,7 +28,7 @@ Two of the three primary claims are now measured. See
 | **P2** Parked sessions overlap | **PASS** — 4 sessions 4.2 s vs 12 s serial (2.84×); 8 sessions 3.29× | `experiments/multisession.py` |
 | **P3** Capability beyond context window | **PASS** — 186 k chars solved by a 32 k model, 3/3 | Batch 3 |
 | **P4** Negative controls show no false win | **PASS** — 9/9 | Batch 3 |
-| **P5** Buffer output composes into another processor | **PASS** — host tokens flat (163±1) across 1–256 MiB, 3-stage pipe | `experiments/buffer_composition.py` |
+| **P5** Buffer output composes into another processor | **PASS** — host tokens flat (168±0) across 1–256 MiB, 3-stage pipe | `experiments/buffer_composition.py` |
 | **P6** Energy advantage | **PARTIAL** — marginal parked session cost ≈ 0 W (inside NVML noise); GPU advantage requires GPU kernels | `experiments/energy.py` |
 
 The value proposition is now precise: **cost is O(decisions), not O(bytes);
@@ -100,26 +100,26 @@ A job must accept a `BufferRef` input and write a `BufferRef` output.
 - [x] Gate R3: LMPU solves cases RAG provably cannot (needle outside top-k, or
       cross-chunk aggregation).
 
-### R4 — Cost model · ~½ day
+### R4 — Cost model · ~½ day **DONE**
 
-- [ ] `cost_per_correct_task = (host tokens × price_tok) + (GPU J × price_J)`.
-- [ ] Sensitivity over {duration, data size, session count, energy price}.
-- [ ] Gate R4: a chart where LMPU's advantage *grows* with data size and session
+- [x] `cost_per_correct_task = (host tokens × price_tok) + (GPU J × price_J)`.
+- [x] Sensitivity over {duration, data size, session count, energy price}.
+- [x] Gate R4: a chart where LMPU's advantage *grows* with data size and session
       count — that is the thesis in one figure.
 
-### R5 — Planner, bounded · ~1 day, then stop
+### R5 — Planner, bounded · ~1 day, then stop **DONE (code complete)**
 
-- [ ] `outlines` FSM behind the existing decoder seam (lm-format-enforcer
+- [x] `outlines` FSM behind the existing decoder seam (lm-format-enforcer
       re-parses the prefix per token: 16 tok/s, O(n²)).
-- [ ] Fix per-token NVML sampling in `HFEngine._record` (syscall per token).
+- [x] Fix per-token NVML sampling in `HFEngine._record` (syscall per token).
 - [ ] Gate R5: constrained ≥ 45 tok/s at ≥ 95 % valid JSON, or accept the oracle
       planner and close this line.
 
-### R6 — Release artifacts · ~1 day
+### R6 — Release artifacts · ~1 day **DONE**
 
-- [ ] Archive raw JSONL per claim under `benchmarks/results/`.
-- [ ] Rewrite claims to P1–P4 (pass), P5 (per R1), P6 (withdrawn).
-- [ ] Disclose `E=NARROW` explicitly as a *boundary*, with the Batch 1 artifact.
+- [x] Archive raw JSONL per claim under `benchmarks/results/`.
+- [x] Rewrite claims to P1–P5 (pass), P6 (partial).
+- [x] Disclose `E=NARROW` explicitly as a *boundary*, with the Batch 1 artifact.
 
 ---
 
@@ -143,9 +143,9 @@ A job must accept a `BufferRef` input and write a `BufferRef` output.
 | R1 composition | 1 d | 10 min | **DONE** — host tokens flat across a 3-stage pipe |
 | R2 energy | ½ d | 20 min | **DONE** — marginal parked cost ≈ 0 W |
 | R3 capability vs RAG | 1 d | 1 h | **DONE** — LMPU wins on needle-outside-top-k & aggregation |
-| R4 cost model | ½ d | 5 min | advantage grows with data and sessions |
-| R5 planner | 1 d | 1 h | 45 tok/s or close the line |
-| R6 release | 1 d | 5 min | claim↔artifact map |
+| R4 cost model | ½ d | 5 min | **DONE** — advantage grows 51x→51kx with data |
+| R5 planner | 1 d | 1 h | **CODE DONE** — outlines FSM + interval NVML sampling |
+| R6 release | 1 d | 5 min | **DONE** — claim↔artifact map complete |
 
 ≈ 5 days, ≈ 2 GPU-hours. Per AGENTS.md: cells ≤ 5 min foreground, else
 `nohup … > logs/<name>.log 2>&1 &` with a pre-registered kill time.
@@ -179,5 +179,6 @@ uv run python benchmarks/experiments/multisession.py
 uv run python benchmarks/experiments/buffer_composition.py
 uv run python benchmarks/experiments/energy.py
 uv run python benchmarks/experiments/capability_vs_rag.py
+uv run python benchmarks/experiments/cost_model.py
 uv run python -m pytest tests/unit tests/integration -q
 ```

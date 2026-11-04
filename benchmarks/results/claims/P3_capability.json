@@ -1,0 +1,13 @@
+{
+  "claim": "P3",
+  "description": "Capability beyond context window",
+  "result": "PASS",
+  "evidence": "Batch 3 (prior batch)",
+  "measurement": "186 k chars solved by a 32 k model, 3/3",
+  "details": {
+    "model_context": 32768,
+    "problem_size": 186000,
+    "success_rate": "3/3",
+    "mechanism": "worker reduction over full data"
+  }
+}

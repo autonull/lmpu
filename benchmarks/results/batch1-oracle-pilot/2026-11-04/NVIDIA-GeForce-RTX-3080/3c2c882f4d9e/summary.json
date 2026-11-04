@@ -1,0 +1,414 @@
+{
+  "commit": "3c2c882f4d9e",
+  "config": {
+    "baselines": [
+      "lmpu.model_async_oracle",
+      "lmpu.model_sync_oracle",
+      "app_agent_oracle",
+      "engine_native_oracle",
+      "session_reopen_oracle",
+      "lmpu.model_async_2session",
+      "app_agent_2session",
+      "direct_cot"
+    ],
+    "device": "cuda",
+    "idle_seconds": 1.0,
+    "max_tokens": 256,
+    "model": "Qwen/Qwen3.5-0.8B",
+    "name": "lmpu-bench",
+    "poll_interval_ms": 50,
+    "results_root": "benchmarks/results/batch1-oracle-pilot",
+    "resume": true,
+    "seed": 20261103,
+    "trials": 3,
+    "warmups": 0,
+    "workloads": [
+      "best_case"
+    ]
+  },
+  "record_count": 24,
+  "run_id": "benchmarks/results/batch1-oracle-pilot/2026-11-04/NVIDIA-GeForce-RTX-3080/3c2c882f4d9e",
+  "schema": "lmpu.bench.summary.v1",
+  "workloads": {
+    "best_case": {
+      "baselines": {
+        "app_agent_2session": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              [
+                1195,
+                1195
+              ],
+              [
+                1195,
+                1195
+              ],
+              [
+                1197,
+                1196
+              ]
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 514.0,
+            "generated_tokens": 510.0,
+            "gpu_energy_joules": 7993.845453890783,
+            "injected_tokens": 198.0,
+            "peak_context_tokens": 15840.0,
+            "prefill_tokens": 15132.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 15840.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": 514.0,
+            "gpu_joules": 9283.592122562692,
+            "total_tokens": 15840.0,
+            "wall_time_seconds": 85.92332950459483
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              82.81433558301069,
+              91.01847965992056
+            ],
+            "median": 83.93717327085324
+          }
+        },
+        "app_agent_oracle": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              1198,
+              1195,
+              1197
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 255.0,
+            "gpu_energy_joules": 8310.923458951665,
+            "injected_tokens": 99.0,
+            "peak_context_tokens": 7920.0,
+            "prefill_tokens": 7566.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 7920.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": 257.0,
+            "gpu_joules": 8612.484071291386,
+            "total_tokens": 7920.0,
+            "wall_time_seconds": 78.29784258299817
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              73.06189325195737,
+              86.81554034701549
+            ],
+            "median": 75.01609415002167
+          }
+        },
+        "direct_cot": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": null,
+              "trial": 1
+            },
+            {
+              "error": null,
+              "trial": 2
+            },
+            {
+              "error": null,
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 1102.536376477248,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 7822.0,
+            "prefill_tokens": 7566.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 7822.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              10.781647492898628,
+              12.30155274597928
+            ],
+            "median": 11.588054788997397
+          }
+        },
+        "engine_native_oracle": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              0,
+              0,
+              0
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 255.0,
+            "gpu_energy_joules": 6820.620803714973,
+            "injected_tokens": 99.0,
+            "peak_context_tokens": 7920.0,
+            "prefill_tokens": 7566.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 7920.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": 257.0,
+            "gpu_joules": 6845.592367228394,
+            "total_tokens": 7920.0,
+            "wall_time_seconds": 72.14661296069
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              71.72744934796356,
+              72.90335439098999
+            ],
+            "median": 71.80903514311649
+          }
+        },
+        "lmpu.model_async_2session": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 288.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 514.0,
+            "generated_tokens": 510.0,
+            "gpu_energy_joules": 14011.768121679646,
+            "injected_tokens": 198.0,
+            "peak_context_tokens": 16128.0,
+            "prefill_tokens": 15132.0,
+            "sleep_duration_seconds": 120.7162996029947,
+            "total_tokens": 16128.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 1.7351005226373672e-05
+          },
+          "per_correct_task": {
+            "forward_passes": 514.0,
+            "gpu_joules": 16148.265438859386,
+            "total_tokens": 16128.0,
+            "wall_time_seconds": 145.8133725350102
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              142.7674536490813,
+              147.59761506691575
+            ],
+            "median": 147.0750488890335
+          }
+        },
+        "lmpu.model_async_oracle": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 141.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 255.0,
+            "gpu_energy_joules": 6885.662327096957,
+            "injected_tokens": 99.0,
+            "peak_context_tokens": 8061.0,
+            "prefill_tokens": 7566.0,
+            "sleep_duration_seconds": 60.29082144587301,
+            "total_tokens": 8061.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 1.164991408586502e-05
+          },
+          "per_correct_task": {
+            "forward_passes": 257.0,
+            "gpu_joules": 6901.167792470056,
+            "total_tokens": 8061.0,
+            "wall_time_seconds": 72.88742419239134
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              71.26860899315216,
+              75.09301613993011
+            ],
+            "median": 72.30064744409174
+          }
+        },
+        "lmpu.model_sync_oracle": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 144.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 255.0,
+            "gpu_energy_joules": 6867.950141694045,
+            "injected_tokens": 99.0,
+            "peak_context_tokens": 8064.0,
+            "prefill_tokens": 7566.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 8064.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": 257.0,
+            "gpu_joules": 6966.786257183868,
+            "total_tokens": 8064.0,
+            "wall_time_seconds": 72.64841938670725
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              71.20398551202379,
+              73.51230948907323
+            ],
+            "median": 73.22896315902472
+          }
+        },
+        "session_reopen_oracle": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 15650.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 255.0,
+            "gpu_energy_joules": 1184.0457875119528,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 31136.0,
+            "prefill_tokens": 15231.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 31136.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": 257.0,
+            "gpu_joules": 1552.4163893251873,
+            "total_tokens": 31118.666666666668,
+            "wall_time_seconds": 74.3843292129847
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              71.64014440705068,
+              78.18441577884369
+            ],
+            "median": 73.3284274530597
+          }
+        }
+      },
+      "description": "16 MiB result, 60 s job, ~8k-token context, exact oracle (largest feasible subset)"
+    }
+  }
+}

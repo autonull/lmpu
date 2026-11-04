@@ -1,0 +1,48 @@
+{
+  "commit": "3c2c882f4d9e",
+  "config": {
+    "baselines": [
+      "lmpu.model_async_oracle",
+      "lmpu.model_sync_oracle",
+      "app_agent_oracle",
+      "engine_native_oracle",
+      "session_reopen_oracle",
+      "lmpu.model_async_2session",
+      "app_agent_2session",
+      "direct_cot"
+    ],
+    "device": "cuda",
+    "idle_seconds": 1.0,
+    "max_tokens": 256,
+    "model": "Qwen/Qwen3.5-0.8B",
+    "name": "lmpu-bench",
+    "poll_interval_ms": 50,
+    "results_root": "benchmarks/results/batch1-oracle-pilot",
+    "resume": true,
+    "seed": 20261103,
+    "trials": 3,
+    "warmups": 0,
+    "workloads": [
+      "best_case"
+    ]
+  },
+  "dirty": true,
+  "full_commit": "3c2c882f4d9eb65e775e8de6c9763edc9ec72484",
+  "hardware": {
+    "cpu_count": 16,
+    "device": "cuda",
+    "gpu": {
+      "cuda": "13.0",
+      "name": "NVIDIA GeForce RTX 3080",
+      "torch": "2.14.0+cu130",
+      "total_memory_bytes": 10409017344
+    },
+    "machine": "x86_64",
+    "platform": "Linux-7.2.11-1-cachyos-x86_64-with-glibc2.44",
+    "processor": "",
+    "python": "3.14.7"
+  },
+  "run_dir": "benchmarks/results/batch1-oracle-pilot/2026-11-04/NVIDIA-GeForce-RTX-3080/3c2c882f4d9e",
+  "schema": "lmpu.bench.manifest.v1",
+  "started_at": "2026-11-04T00:26:14.486169+00:00"
+}

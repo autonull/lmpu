@@ -1,0 +1,815 @@
+{
+  "commit": "cb000e530401",
+  "config": {
+    "baselines": [
+      "direct_cot",
+      "sync_tool_full_result",
+      "async_poll_programmatic",
+      "async_poll_model",
+      "session_reopen",
+      "app_agent",
+      "engine_native"
+    ],
+    "device": "cuda",
+    "idle_seconds": 1,
+    "max_tokens": 256,
+    "model": "Qwen/Qwen3.5-0.8B",
+    "name": "l0-pilot",
+    "poll_interval_ms": 50,
+    "results_root": "benchmarks/results/l0-pilot",
+    "resume": true,
+    "seed": 20261103,
+    "trials": 3,
+    "warmups": 0,
+    "workloads": [
+      "sleep",
+      "bigint_mul"
+    ]
+  },
+  "record_count": 42,
+  "run_id": "benchmarks/results/l0-pilot/2026-11-03/NVIDIA-GeForce-RTX-3080/cb000e530401",
+  "schema": "lmpu.bench.summary.v1",
+  "workloads": {
+    "bigint_mul": {
+      "baselines": {
+        "app_agent": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "invalid literal for int() with base 10: '<a>'",
+              "trial": 1
+            },
+            {
+              "error": "invalid literal for int() with base 10: '<a>'",
+              "trial": 2
+            },
+            {
+              "error": "invalid literal for int() with base 10: '<a>'",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              1,
+              1,
+              1
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 962.0424233553814,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 366.0,
+            "prefill_tokens": 110.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 366.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.853780819103122,
+              10.054769318783656
+            ],
+            "median": 10.033012371975929
+          }
+        },
+        "async_poll_model": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 1
+            },
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 2
+            },
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              2,
+              2,
+              2
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 55.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 323.0,
+            "generated_tokens": 320.0,
+            "gpu_energy_joules": 1235.7578958791005,
+            "injected_tokens": 82.0,
+            "peak_context_tokens": 567.0,
+            "prefill_tokens": 110.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 567.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              12.448466114001349,
+              12.774399096146226
+            ],
+            "median": 12.6953172350768
+          }
+        },
+        "async_poll_programmatic": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 1
+            },
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 2
+            },
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              10,
+              9,
+              2
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 174.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 540.0,
+            "prefill_tokens": 110.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 540.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              10.270556974923238,
+              21.957069305004552
+            ],
+            "median": 10.271467057056725
+          }
+        },
+        "direct_cot": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": null,
+              "trial": 1
+            },
+            {
+              "error": null,
+              "trial": 2
+            },
+            {
+              "error": null,
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 966.2375172843703,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 340.0,
+            "prefill_tokens": 84.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 340.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.777520245872438,
+              9.942887336947024
+            ],
+            "median": 9.942069411976263
+          }
+        },
+        "engine_native": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "invalid literal for int() with base 10: '<a>'",
+              "trial": 1
+            },
+            {
+              "error": "invalid literal for int() with base 10: '<a>'",
+              "trial": 2
+            },
+            {
+              "error": "invalid literal for int() with base 10: '<a>'",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              0,
+              0,
+              0
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 976.5380376042672,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 366.0,
+            "prefill_tokens": 110.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 366.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.833921805024147,
+              10.14724722201936
+            ],
+            "median": 9.885770689928904
+          }
+        },
+        "session_reopen": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 1
+            },
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 2
+            },
+            {
+              "error": "\"code=<ErrorCode.INTERNAL: 'internal'> message=\\\"invalid literal for int() with base 10: '<a>'\\\" job_id=None retriable=False details=None\"",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 79.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 514.0,
+            "generated_tokens": 512.0,
+            "gpu_energy_joules": 964.2961824703351,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 805.0,
+            "prefill_tokens": 214.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 805.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              19.713461289182305,
+              20.26362371002324
+            ],
+            "median": 19.749604924116284
+          }
+        },
+        "sync_tool_full_result": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "{\"code\": \"internal\", \"message\": \"invalid literal for int() with base 10: '<a>'\", \"retriable\": false}",
+              "trial": 1
+            },
+            {
+              "error": "{\"code\": \"internal\", \"message\": \"invalid literal for int() with base 10: '<a>'\", \"retriable\": false}",
+              "trial": 2
+            },
+            {
+              "error": "{\"code\": \"internal\", \"message\": \"invalid literal for int() with base 10: '<a>'\", \"retriable\": false}",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 61.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 427.0,
+            "prefill_tokens": 110.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 427.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.959469004068524,
+              10.300206679152325
+            ],
+            "median": 9.961714182980359
+          }
+        }
+      },
+      "description": "30-digit exact multiplication through the reference runtime"
+    },
+    "sleep": {
+      "baselines": {
+        "app_agent": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              0,
+              0,
+              0
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 967.8359335406874,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 305.0,
+            "prefill_tokens": 49.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 305.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.806582792894915,
+              9.951915635028854
+            ],
+            "median": 9.896563220070675
+          }
+        },
+        "async_poll_model": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              0,
+              0,
+              0
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 973.633741173767,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 305.0,
+            "prefill_tokens": 49.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 305.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.872827904066071,
+              9.942319536115974
+            ],
+            "median": 9.896515167085454
+          }
+        },
+        "async_poll_programmatic": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 986.9065604440104,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 305.0,
+            "prefill_tokens": 49.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 305.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.977619350887835,
+              10.163765595993027
+            ],
+            "median": 10.072737568989396
+          }
+        },
+        "direct_cot": {
+          "correctness": {
+            "passes": 3,
+            "rate": 1.0,
+            "total": 3
+          },
+          "failures": [],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 969.7096684120595,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 279.0,
+            "prefill_tokens": 23.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 279.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": 257.0,
+            "gpu_joules": 972.4212040928096,
+            "total_tokens": 279.0,
+            "wall_time_seconds": 10.018340703332797
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.978851960971951,
+              10.066718332935125
+            ],
+            "median": 10.009451816091314
+          }
+        },
+        "engine_native": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [
+              0,
+              0,
+              0
+            ],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 970.0216242049486,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 305.0,
+            "prefill_tokens": 49.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 305.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.87154744984582,
+              10.023064143955708
+            ],
+            "median": 9.910393727011979
+          }
+        },
+        "session_reopen": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 978.1468926896914,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 305.0,
+            "prefill_tokens": 49.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 305.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.952789394184947,
+              10.059511020081118
+            ],
+            "median": 9.963087324984372
+          }
+        },
+        "sync_tool_full_result": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 3
+          },
+          "failures": [
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 1
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 2
+            },
+            {
+              "error": "model did not emit a valid tool program",
+              "trial": 3
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 0.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 257.0,
+            "generated_tokens": 256.0,
+            "gpu_energy_joules": 959.5254176262184,
+            "injected_tokens": 0.0,
+            "peak_context_tokens": 305.0,
+            "prefill_tokens": 49.0,
+            "sleep_duration_seconds": 0.0,
+            "total_tokens": 305.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 0.0
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 3,
+          "wall_time_seconds": {
+            "ci95": [
+              9.752942708088085,
+              9.922596856020391
+            ],
+            "median": 9.85095726698637
+          }
+        }
+      },
+      "description": "3-second sleeping Python job for sleep/wake measurement"
+    }
+  }
+}

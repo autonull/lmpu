@@ -1,0 +1,76 @@
+{
+  "commit": "0a5fb556107d",
+  "config": {
+    "baselines": [
+      "lmpu.model_async",
+      "app_agent"
+    ],
+    "device": "cuda",
+    "idle_seconds": 0.0,
+    "max_tokens": 512,
+    "model": "Qwen/Qwen3.5-0.8B",
+    "name": "lmpu-bench",
+    "poll_interval_ms": 50,
+    "results_root": "benchmarks/results",
+    "resume": true,
+    "seed": 20261103,
+    "trials": 1,
+    "warmups": 0,
+    "workloads": [
+      "best_case"
+    ]
+  },
+  "record_count": 1,
+  "run_id": "benchmarks/results/2026-11-04/NVIDIA-GeForce-RTX-3080/0a5fb556107d",
+  "schema": "lmpu.bench.summary.v1",
+  "workloads": {
+    "best_case": {
+      "baselines": {
+        "lmpu.model_async": {
+          "correctness": {
+            "passes": 0,
+            "rate": 0.0,
+            "total": 1
+          },
+          "failures": [
+            {
+              "error": "Sizes of tensors must match except in dimension 3. Expected size 380 but got size 1 for tensor number 1 in the list.",
+              "trial": 1
+            }
+          ],
+          "kind": "end_to_end",
+          "metadata": {
+            "polls": [],
+            "simulated": false
+          },
+          "metrics": {
+            "control_tokens": 138.0,
+            "cpu_energy_joules": 0.0,
+            "forward_passes": 141.0,
+            "generated_tokens": 139.0,
+            "gpu_energy_joules": 0.0,
+            "injected_tokens": 99.0,
+            "peak_context_tokens": 517.0,
+            "prefill_tokens": 141.0,
+            "sleep_duration_seconds": 60.484604861121625,
+            "total_tokens": 517.0,
+            "vram_peak_mb": 0.0,
+            "wake_latency_seconds": 1.21300108730793e-05
+          },
+          "per_correct_task": {
+            "forward_passes": null,
+            "gpu_joules": null,
+            "total_tokens": null,
+            "wall_time_seconds": null
+          },
+          "trials": 1,
+          "wall_time_seconds": {
+            "ci95": null,
+            "median": 103.88653472601436
+          }
+        }
+      },
+      "description": "16 MiB result, 60 s job, ~8k-token context, exact oracle (largest feasible subset)"
+    }
+  }
+}

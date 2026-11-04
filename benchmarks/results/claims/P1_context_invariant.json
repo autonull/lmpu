@@ -1,0 +1,13 @@
+{
+  "claim": "P1",
+  "description": "Context cost invariant to data size",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/dataplane.py",
+  "measurement": "37 host tokens from 64 KiB to 512 MiB (3.6 M× ratio)",
+  "details": {
+    "host_tokens_flat": true,
+    "ratio": 3627506,
+    "sizes_tested": ["1 KiB", "64 KiB", "1 MiB", "16 MiB", "64 MiB", "256 MiB", "512 MiB"],
+    "host_tokens_range": [29, 37]
+  }
+}

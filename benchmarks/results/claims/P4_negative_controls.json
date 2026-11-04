@@ -1,0 +1,11 @@
+{
+  "claim": "P4",
+  "description": "Negative controls show no false win",
+  "result": "PASS",
+  "evidence": "Batch 3 (prior batch)",
+  "measurement": "9/9 negative controls passed",
+  "details": {
+    "controls_run": 9,
+    "false_positives": 0
+  }
+}

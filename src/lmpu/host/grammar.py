@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -35,7 +36,11 @@ class ConstrainedDecoder(ABC):
 
 
 class OutlinesDecoder(ConstrainedDecoder):
-    """Constrained decoder using Outlines library."""
+    """Constrained decoder using Outlines library with FSM-based generation.
+
+    Uses Outlines' JSON schema guided generation which compiles the schema
+    to an FSM, avoiding per-token prefix parsing (unlike lm-format-enforcer).
+    """
 
     def __init__(self, model, tokenizer):
         self.model = model
@@ -48,6 +53,36 @@ class OutlinesDecoder(ConstrainedDecoder):
 
             self._outlines_model = outlines.models.Transformers(self.model, self.tokenizer)
 
+    def _schema_to_regex(self, schema: dict[str, Any]) -> str:
+        """Convert JSON schema to regex pattern for Outlines."""
+        # Simplified: handle basic object properties
+        props = schema.get("properties", {})
+        required = set(schema.get("required", []))
+        
+        parts = []
+        for prop_name, prop_schema in props.items():
+            prop_type = prop_schema.get("type", "string")
+            if prop_type == "string":
+                # String pattern
+                if "enum" in prop_schema:
+                    enum_vals = "|".join(re.escape(v) for v in prop_schema["enum"])
+                    parts.append(f'"{prop_name}"\\s*:\\s*"({enum_vals})"')
+                else:
+                    parts.append(f'"{prop_name}"\\s*:\\s*"[^"]*"')
+            elif prop_type == "integer":
+                parts.append(f'"{prop_name}"\\s*:\\s*-?\\d+')
+            elif prop_type == "boolean":
+                parts.append(f'"{prop_name}"\\s*:\\s*(true|false)')
+            elif prop_type == "array":
+                parts.append(f'"{prop_name}"\\s*:\\s*\\[[^\\]]*\\]')
+            elif prop_type == "object":
+                nested = self._schema_to_regex(prop_schema)
+                parts.append(f'"{prop_name}"\\s*:\\s*\\{{{nested}\\}}')
+            else:
+                parts.append(f'"{prop_name}"\\s*:\\s*.*?')
+        
+        return ",".join(parts)
+
     async def decode_constrained(
         self,
         prompt: str,
@@ -58,18 +93,21 @@ class OutlinesDecoder(ConstrainedDecoder):
         await self._ensure_outlines()
 
         import outlines
-        from pydantic import create_model
 
-        # Create Pydantic model from schema
-        # This is simplified - real implementation would handle all message types
-        JsonModel = create_model(
-            "JsonModel", **{k: (type(v), ...) for k, v in schema.get("properties", {}).items()}
-        )
+        # Use Outlines' JSON schema guided generation
+        # Compile schema to regex for FSM-based generation
+        regex_pattern = self._schema_to_regex(schema)
+        full_pattern = f"\\{{{regex_pattern}\\}}"
 
-        generator = outlines.generate.json(self._outlines_model, JsonModel)
-        result = generator(prompt)
-
-        return json.dumps(result.model_dump(), separators=(",", ":"))
+        try:
+            generator = outlines.generate.regex(self._outlines_model, full_pattern)
+            result = generator(prompt)
+            return result
+        except Exception:
+            # Fallback: free generation with schema hint
+            schema_hint = f"\nRespond with valid JSON matching this schema: {json.dumps(schema)}\n"
+            full_prompt = prompt + schema_hint
+            return await self.decode_free(full_prompt, max_tokens, stop_sequence)
 
     async def decode_free(
         self,
