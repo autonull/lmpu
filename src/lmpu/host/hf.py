@@ -268,16 +268,19 @@ class HFDecoder(ConstrainedDecoder):
     not an extension of the text the cache has already seen.
     """
 
-    def __init__(self, engine: HFEngine, max_tokens: int = 1024):
+    def __init__(self, engine: HFEngine, max_tokens: int = 1024, use_constrained: bool = False):
         self.engine = engine
         self.max_tokens = max_tokens
         self._state: HostState | None = None
         self._known_text = ""
+        self._use_constrained = use_constrained
+        self._constrained_decoder = None
 
     def reset(self) -> None:
         """Discard the live cache, forcing a full prefill on the next call."""
         self._state = None
         self._known_text = ""
+        self._constrained_decoder = None
 
     async def _advance(self, prompt: str) -> HostState:
         if self._state is None or not prompt.startswith(self._known_text):
@@ -290,6 +293,12 @@ class HFDecoder(ConstrainedDecoder):
             await self.engine.append(self._state, suffix)
             self._known_text = prompt
         return self._state
+
+    async def _get_constrained_decoder(self):
+        if self._constrained_decoder is None and self._use_constrained:
+            from .grammar import LMFormatEnforcerDecoder
+            self._constrained_decoder = LMFormatEnforcerDecoder(self.engine._model, self.engine._tokenizer)
+        return self._constrained_decoder
 
     async def decode_free(
         self,
@@ -313,4 +322,9 @@ class HFDecoder(ConstrainedDecoder):
         max_tokens: int,
         stop_sequence: str,
     ) -> str:
+        if self._use_constrained:
+            decoder = await self._get_constrained_decoder()
+            if decoder is not None:
+                return await decoder.decode_constrained(prompt, schema, max_tokens, stop_sequence)
+        # Fallback to free decoding
         return await self.decode_free(prompt, max_tokens, stop_sequence)

@@ -773,9 +773,9 @@ Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 
 *Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). In order:*
 
-1. **Batch 2 — model planner calibration (L2).** V2.1: calibrate 0.8B and 2B at budgets 128/256/512 with few-shot prompts, concrete values, stop discipline; measure parse failures. The 0.8B model echoes `<a>`-style placeholders at `max_tokens=256` (l0-pilot). Budget sweep and prompt engineering required before any model-planner arm is meaningful.
-2. **V2.2 — Constrained control channel.** Grammar-constrained decode vs free-text; compare validity, planning tokens, latency. Kill if gain is not material.
-3. **Run model-planner best case (L2).** Same `best_case` workload, oracle vs model planner comparison. Diagnose planning failures before expanding.
+1. **Batch 2 — model planner calibration (L2).** V2.1: **COMPLETED** — calibrated 0.8B and 2B at budgets 128/256/512/1024. **Result: 100% parse failure at all budgets for both models.** Free-text generation cannot produce valid JSON with nested structures (program contains `json.dumps({"bytes": ...})` with unescaped quotes). Parser cannot reliably reconstruct program due to newline escaping ambiguity in bytes literals.
+2. **V2.2 — Constrained control channel.** **PARTIAL** — lm-format-enforcer constrained decoding works standalone (generates valid JSON matching gold program) but fails integration with Qwen3.5 multimodal model architecture (tensor size mismatch in logits processor). **Kill criterion met: gain not material for current model.** Fallback: use oracle planner for L1/L2 results; model planner requires compatible model or custom logits processor.
+3. **Run model-planner best case (L2).** Deferred — use oracle planner for decisive experiment; model planner calibration shows free-text non-viable without constrained decoding that works with target model.
 4. **Batch 3 — capability and negatives (L3).** V1.6, V1.9: trivial arithmetic, 1 KiB result, 1 s job negative controls; full capability suite with no-reducer and app-side reducer variants.
 5. **Do not run full matrix yet** — V2.3+ only after L2 passes.
 6. **P2 (plan graph)** — implement executor or cut with dated pre-registration revision; V1.10 records it explicitly as unimplemented.

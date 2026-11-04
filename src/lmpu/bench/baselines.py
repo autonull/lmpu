@@ -72,7 +72,7 @@ class HostModel(Protocol):
 class HFHost:
     """Reference HF engine adapter with a fresh decoder state per trial."""
 
-    def __init__(self, config: BenchmarkConfig, sessions: int = 1):
+    def __init__(self, config: BenchmarkConfig, sessions: int = 1, use_constrained: bool = False):
         import os
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -94,7 +94,7 @@ class HFHost:
         self.config = config
         self.engine = HFEngine(model_name=config.model, device=config.device)
         self._decoders = [
-            HFDecoder(self.engine, max_tokens=config.max_tokens) for _ in range(sessions)
+            HFDecoder(self.engine, max_tokens=config.max_tokens, use_constrained=use_constrained) for _ in range(sessions)
         ]
         self.decoder = self._decoders[0]
         self._energy = EnergySampler()
@@ -164,19 +164,38 @@ def _program_from_text(text: str) -> dict[str, Any] | None:
 
 def _extract_program_code(text: str) -> str | None:
     """Extract Python program code from model response that has malformed JSON."""
-    # Look for the program field pattern - extract the JSON string value
-    match = re.search(r'"program"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
-    if match:
-        # The captured group is the JSON string content (with escapes)
-        # Use json.loads to properly decode it
+    # The model outputs something like:
+    # {"program": "import hashlib\ntime.sleep(60)\nunit = b'...\\n'"}
+    # with a mix of literal newlines (between statements) and escaped \\n (inside strings).
+    # Strategy: find the program field, extract content, then normalize escapes.
+    
+    # First try: find the complete JSON object first
+    for match in re.finditer(r'\{.*?\}', text, re.DOTALL):
         try:
-            code = json.loads('"' + match.group(1) + '"')
-            # Fix double-escaping from model (model sees \\n in prompt, outputs \\\\n)
-            code = code.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
-            return code
-        except json.JSONDecodeError:
-            pass
-    # Fallback: look for python code block
+            candidate = match.group(0)
+            # Fix common JSON issues: unescaped newlines in string values
+            fixed = _fix_json_string_escapes(candidate)
+            payload = json.loads(fixed)
+            if isinstance(payload, dict) and payload.get("op") == "run_program":
+                program = payload.get("inputs", {}).get("program")
+                if isinstance(program, str) and program.strip():
+                    return program
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    
+    # Fallback: regex extraction with smart escape handling
+    match = re.search(r'"program"\s*:\s*"(.+?)"\s*\}\s*\}', text, re.DOTALL)
+    if match:
+        raw = match.group(1)
+        return _normalize_program_escapes(raw)
+    
+    # Fallback: more permissive regex
+    match = re.search(r'"program"\s*:\s*"(.+)"\s*\}\s*\}', text, re.DOTALL)
+    if match:
+        raw = match.group(1)
+        return _normalize_program_escapes(raw)
+    
+    # Fallback: code blocks
     match = re.search(r'```python\s*(.*?)\s*```', text, re.DOTALL)
     if match:
         return match.group(1).strip()
@@ -184,6 +203,55 @@ def _extract_program_code(text: str) -> str | None:
     if match:
         return match.group(1).strip()
     return None
+
+
+def _fix_json_string_escapes(text: str) -> str:
+    """Fix invalid JSON by escaping unescaped newlines/tabs in string values."""
+    result = []
+    i = 0
+    in_string = False
+    escape_next = False
+    while i < len(text):
+        ch = text[i]
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+        elif ch == "\\":
+            result.append(ch)
+            escape_next = True
+        elif ch == '"' and not escape_next:
+            result.append(ch)
+            in_string = not in_string
+        elif ch in "\n\r\t" and in_string:
+            # Escape unescaped control chars inside strings
+            if ch == "\n":
+                result.append("\\n")
+            elif ch == "\r":
+                result.append("\\r")
+            elif ch == "\t":
+                result.append("\\t")
+        else:
+            result.append(ch)
+        i += 1
+    return "".join(result)
+
+
+def _normalize_program_escapes(raw: str) -> str:
+    """Normalize escape sequences in extracted program code.
+    
+    The raw capture may contain:
+    - Literal newlines between statements (keep as literal newlines)
+    - Already-escaped \\n inside string literals (convert to literal newlines)
+    - Double-escaped \\\\n (convert to literal newlines)
+    
+    Returns a string with ACTUAL newlines for Python execution.
+    """
+    # First, handle double-escaping: \\\\n -> \n (literal newline)
+    raw = raw.replace("\\\\n", "\n").replace("\\\\t", "\t").replace("\\\\r", "\r")
+    # Then, handle single-escaping: \\n -> \n (literal newline)
+    raw = raw.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+    # Keep literal newlines as-is
+    return raw
 
 
 def _request(
@@ -375,7 +443,8 @@ class BaselineRunner:
                 if any(self._is_two_session(baseline) for baseline in self.config.baselines)
                 else 1
             )
-            self._host = HFHost(self.config, sessions=sessions)
+            # Enable constrained decoding for model planner arms
+            self._host = HFHost(self.config, sessions=sessions, use_constrained=True)
 
     async def run(self, context: TrialContext) -> TrialRecord:
         handlers = {
@@ -1203,7 +1272,49 @@ class BaselineRunner:
         prompt = context.workload.program_prompt
         plan_started = time.perf_counter()
         await _record_prefill(metrics, host, prompt)
-        text = await host.decode(prompt, self.config.max_tokens, "")
+        
+        # Use constrained decoding for model planner arms
+        if isinstance(self._host, HFHost):
+            engine = self._host.engine
+            if engine._model is not None and engine._tokenizer is not None:
+                import torch
+                schema = {
+                    "type": "object",
+                    "properties": {
+                        "processor": {"type": "string", "enum": ["python.vm"]},
+                        "op": {"type": "string", "enum": ["run_program"]},
+                        "inputs": {
+                            "type": "object",
+                            "properties": {
+                                "program": {"type": "string"}
+                            },
+                            "required": ["program"]
+                        }
+                    },
+                    "required": ["processor", "op", "inputs"]
+                }
+                from lmformatenforcer import JsonSchemaParser
+                from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+                parser = JsonSchemaParser(schema)
+                prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
+                    engine._tokenizer, parser
+                )
+                inputs = engine._tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(engine._device_obj)
+                with torch.inference_mode():
+                    output = engine._model.generate(
+                        **inputs,
+                        max_new_tokens=self.config.max_tokens,
+                        prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                        do_sample=False,
+                        pad_token_id=engine._tokenizer.eos_token_id,
+                    )
+                generated_ids = output[0][inputs["input_ids"].shape[1]:]
+                text = engine._tokenizer.decode(generated_ids, skip_special_tokens=True)
+            else:
+                text = await host.decode(prompt, self.config.max_tokens, "")
+        else:
+            text = await host.decode(prompt, self.config.max_tokens, "")
+        
         if phases is not None:
             phases.record("plan", time.perf_counter() - plan_started)
         await _record_generated(metrics, host, text)

@@ -2238,6 +2238,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "blake3" },
+    { name = "lm-format-enforcer" },
     { name = "numpy" },
     { name = "orjson" },
     { name = "psutil" },
@@ -2312,6 +2313,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'dashboard'", specifier = ">=0.115,<1" },
     { name = "flash-linear-attention", marker = "extra == 'optimized'", specifier = ">=0.6.0" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.100,<7" },
+    { name = "lm-format-enforcer", specifier = ">=0.11.3" },
     { name = "lm-format-enforcer", marker = "extra == 'decoder'", specifier = ">=0.10,<1" },
     { name = "matplotlib", marker = "extra == 'bench'", specifier = ">=3.9,<4" },
     { name = "mutmut", marker = "extra == 'dev'", specifier = ">=2.5,<3" },

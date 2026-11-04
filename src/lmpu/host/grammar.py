@@ -102,13 +102,6 @@ class LMFormatEnforcerDecoder(ConstrainedDecoder):
     def __init__(self, model, tokenizer):
         self.model = model
         self.tokenizer = tokenizer
-        self._token_enforcer = None
-    
-    async def _ensure_enforcer(self):
-        if self._token_enforcer is None:
-            from lmformatenforcer import TokenEnforcer
-            from lmformatenforcer.integrations.transformers import build_transformers_logits_processor
-            self._token_enforcer = TokenEnforcer(self.tokenizer)
     
     async def decode_constrained(
         self,
@@ -117,13 +110,11 @@ class LMFormatEnforcerDecoder(ConstrainedDecoder):
         max_tokens: int,
         stop_sequence: str,
     ) -> str:
-        await self._ensure_enforcer()
-        
         from lmformatenforcer import JsonSchemaParser
-        from lmformatenforcer.integrations.transformers import build_transformers_logits_processor
+        from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
         
         parser = JsonSchemaParser(schema)
-        logits_processor = build_transformers_logits_processor(
+        prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
             self.tokenizer,
             parser,
         )
@@ -133,15 +124,15 @@ class LMFormatEnforcerDecoder(ConstrainedDecoder):
         outputs = self.model.generate(
             **inputs,
             max_new_tokens=max_tokens,
-            logits_processor=[logits_processor],
-            stop_strings=[stop_sequence],
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            stop_strings=[stop_sequence] if stop_sequence else None,
             tokenizer=self.tokenizer,
             do_sample=False,
         )
         
         generated = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         
-        if stop_sequence in generated:
+        if stop_sequence and stop_sequence in generated:
             generated = generated[:generated.index(stop_sequence)]
         
         return generated
