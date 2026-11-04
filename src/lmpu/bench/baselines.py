@@ -1375,7 +1375,7 @@ class BaselineRunner:
             submit_started = time.perf_counter()
             submitted = await runtime._submit(request, session_id)
             phases.record("submit", time.perf_counter() - submit_started)
-            deadline = time.monotonic() + 60.0
+            deadline = time.monotonic() + context.workload.config.get("timeout_ms", 60_000) / 1000
             while True:
                 polls += 1
                 poll = await runtime._poll({"job_id": job_id}, session_id)
@@ -1555,7 +1555,9 @@ class BaselineRunner:
             execute_started = time.perf_counter()
             if polling:
                 task = asyncio.create_task(_execute_in_process(program, context.workload, job_id))
-                deadline = time.monotonic() + 60.0
+                deadline = (
+                    time.monotonic() + context.workload.config.get("timeout_ms", 60_000) / 1000
+                )
                 while not task.done():
                     polls += 1
                     if time.monotonic() > deadline:
