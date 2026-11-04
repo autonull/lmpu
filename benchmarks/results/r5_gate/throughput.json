@@ -1,0 +1,63 @@
+{
+  "gate_passed": false,
+  "free_tok_per_s": {
+    "numeric": 45.723900641175405,
+    "enum": 45.321932898331575,
+    "free_string": 31.02439558692511
+  },
+  "overhead_vs_free": {
+    "numeric": 1.7,
+    "enum": 1.86,
+    "free_string": 2.06
+  },
+  "rows": [
+    {
+      "schema": "numeric",
+      "mode": "free",
+      "tok_per_s": 45.723900641175405,
+      "tokens": 28,
+      "valid": false,
+      "hit_cap": false
+    },
+    {
+      "schema": "numeric",
+      "mode": "constrained",
+      "tok_per_s": 26.874457393690715,
+      "tokens": 25,
+      "valid": true,
+      "hit_cap": false
+    },
+    {
+      "schema": "enum",
+      "mode": "free",
+      "tok_per_s": 45.321932898331575,
+      "tokens": 28,
+      "valid": false,
+      "hit_cap": false
+    },
+    {
+      "schema": "enum",
+      "mode": "constrained",
+      "tok_per_s": 24.42952780761887,
+      "tokens": 17,
+      "valid": true,
+      "hit_cap": false
+    },
+    {
+      "schema": "free_string",
+      "mode": "free",
+      "tok_per_s": 31.02439558692511,
+      "tokens": 28,
+      "valid": false,
+      "hit_cap": false
+    },
+    {
+      "schema": "free_string",
+      "mode": "constrained",
+      "tok_per_s": 15.039177130637544,
+      "tokens": 24,
+      "valid": true,
+      "hit_cap": false
+    }
+  ]
+}

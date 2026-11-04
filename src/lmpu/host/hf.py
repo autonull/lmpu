@@ -7,7 +7,7 @@ from typing import Any
 import torch
 
 from .engine import HostEngine, HostState, HostStats, SleepLevel
-from .grammar import ConstrainedDecoder, OutlinesDecoder
+from .grammar import ConstrainedDecoder, LMFormatEnforcerDecoder
 from .metrics import EnergySampler, MetricsCollector, get_metrics_collector
 
 
@@ -323,7 +323,7 @@ class HFDecoder(ConstrainedDecoder):
 
     async def _get_constrained_decoder(self):
         if self._constrained_decoder is None and self._use_constrained:
-            self._constrained_decoder = OutlinesDecoder(
+            self._constrained_decoder = LMFormatEnforcerDecoder(
                 self.engine._model, self.engine._tokenizer
             )
         return self._constrained_decoder

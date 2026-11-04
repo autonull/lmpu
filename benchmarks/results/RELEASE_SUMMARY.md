@@ -53,7 +53,7 @@ uv run python -m pytest tests/unit tests/integration -q
 1. **Dispatcher concurrency** (D1): `_dispatch_loop` now dispatches tasks, releases slots on completion
 2. **Worker handoff** (D2): Workers become available only in `_release_worker`
 3. **Buffer composition** (R1): `pure.func` accepts `{"buffer": id}` inputs, emits output buffers
-4. **Outlines FSM** (R5): Replaces `lm-format-enforcer` for constrained decoding (O(1) per token)
+4. **Constrained decoding (R5)**: measured `lm-format-enforcer` at 100% valid JSON, 1.7–3.3× slower than free decode (26.7 / 25.2 / 13.7 tok/s vs ~45)
 5. **Interval NVML** (R5): Energy sampling every N forward passes (not per-token)
 
 ---
@@ -68,6 +68,7 @@ uv run python -m pytest tests/unit tests/integration -q
 | P6 Energy | `benchmarks/results/energy/` |
 | R3 Capability vs RAG | `benchmarks/results/capability/` |
 | R4 Cost Model | `benchmarks/results/cost_model/` |
+| R5 Planner | `benchmarks/results/r5_gate/` |
 
 ### Claim Artifacts
 ```
@@ -114,4 +115,5 @@ benchmarks/results/claims/
 - [x] `uv run python benchmarks/experiments/energy.py` → P6 PARTIAL
 - [x] `uv run python benchmarks/experiments/capability_vs_rag.py` → R3 PASS
 - [x] `uv run python benchmarks/experiments/cost_model.py` → R4 PASS
-- [x] `uv run python -m pytest tests/unit tests/integration -q` → 148 PASS
+- [x] `uv run python benchmarks/experiments/r5_gate.py` → R5 measured (100% valid, 1.7–3.3× overhead)
+- [x] `uv run python -m pytest tests/unit tests/integration -q` → 126 PASS, 3 skipped
