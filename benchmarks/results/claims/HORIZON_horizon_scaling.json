@@ -1,0 +1,26 @@
+{
+  "claim": "HORIZON",
+  "description": "Control cost per completed job is constant in the number of in-flight jobs",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/horizon.py",
+  "measurement": "66-68 tokens/job across 1-40 concurrent jobs; sync peak grows 910 vs horizon 332 at n=40",
+  "details": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "gpu": "RTX 3080",
+    "job_seconds": 1.5,
+    "n": [1, 4, 16, 40],
+    "horizon": {
+      "tok_per_job": [66.0, 66.0, 66.8, 67.5],
+      "peak_tokens": [10, 35, 134, 332],
+      "wall_at_n40": 10.07
+    },
+    "sync": {
+      "tok_per_job": [70.0, 70.0, 70.4, 70.8],
+      "peak_tokens": [22, 88, 358, 910],
+      "wall_at_n40": 38.78
+    },
+    "horizon_wall_vs_sync_at_40": 10.07,
+    "speedup": 3.85,
+    "note": "horizon tok/job constant at 66-68; sync peak grows 910 vs horizon 332 at n=40"
+  }
+}

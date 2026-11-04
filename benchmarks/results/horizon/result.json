@@ -1,0 +1,66 @@
+[
+  {
+    "arm": "sync",
+    "jobs": 1,
+    "wall_s": 1.861995151033625,
+    "control_tokens": 70,
+    "tokens_per_job": 70.0,
+    "peak_tokens": 22
+  },
+  {
+    "arm": "horizon",
+    "jobs": 1,
+    "wall_s": 1.6312379729934037,
+    "control_tokens": 66,
+    "tokens_per_job": 66.0,
+    "peak_tokens": 10
+  },
+  {
+    "arm": "sync",
+    "jobs": 4,
+    "wall_s": 4.821764111984521,
+    "control_tokens": 280,
+    "tokens_per_job": 70.0,
+    "peak_tokens": 88
+  },
+  {
+    "arm": "horizon",
+    "jobs": 4,
+    "wall_s": 2.1881990551482886,
+    "control_tokens": 264,
+    "tokens_per_job": 66.0,
+    "peak_tokens": 35
+  },
+  {
+    "arm": "sync",
+    "jobs": 16,
+    "wall_s": 19.392238832078874,
+    "control_tokens": 1126,
+    "tokens_per_job": 70.375,
+    "peak_tokens": 358
+  },
+  {
+    "arm": "horizon",
+    "jobs": 16,
+    "wall_s": 5.211696155136451,
+    "control_tokens": 1068,
+    "tokens_per_job": 66.75,
+    "peak_tokens": 134
+  },
+  {
+    "arm": "sync",
+    "jobs": 40,
+    "wall_s": 38.77760148909874,
+    "control_tokens": 2830,
+    "tokens_per_job": 70.75,
+    "peak_tokens": 910
+  },
+  {
+    "arm": "horizon",
+    "jobs": 40,
+    "wall_s": 10.072568356990814,
+    "control_tokens": 2700,
+    "tokens_per_job": 67.5,
+    "peak_tokens": 332
+  }
+]

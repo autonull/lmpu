@@ -68,6 +68,7 @@ from ..protocol.messages import (
     RPCNotification,
     RPCRequest,
     RPCResponse,
+    SleepCondition,
     SleepParams,
     SleepResult,
     SubmitParams,
@@ -212,6 +213,37 @@ class Runtime:
         self.job_table.release_grants(job.job_id)
         self.buffer_manager.release_grants(job.job_id)
         self.quota_manager.on_job_complete(job.session_id)
+        self._maybe_wake_sleep(job)
+
+    def _maybe_wake_sleep(self, job: JobRecord) -> None:
+        """Satisfy a registered sleep whose job condition this completion meets."""
+        session = self._sessions.get(job.session_id)
+        if session is None or session.sleep_registration is None:
+            return
+
+        condition: SleepCondition = session.sleep_registration["condition"]
+        watched = list(condition.all or condition.any)
+        if not watched:
+            return
+
+        terminal = [
+            (job_id, record)
+            for job_id in watched
+            if (record := self.job_table.get(job_id)) is not None and record.is_terminal()
+        ]
+        satisfied = len(terminal) == len(watched) if condition.all else bool(terminal)
+        if not satisfied:
+            return
+
+        session.sleep_registration = None
+        self.quota_manager.on_sleep_clear(job.session_id)
+        session.wake_result = {
+            "reason": "condition_met",
+            "satisfied_jobs": [job_id for job_id, _ in terminal],
+            "statuses": {job_id: record.to_model_status() for job_id, record in terminal},
+        }
+        if session.wake_event is not None:
+            session.wake_event.set()
 
     def _refresh_output_checksums(self, job: JobRecord) -> None:
         """Recompute cached checksums for buffers written directly by a worker."""
@@ -926,7 +958,11 @@ class Runtime:
 
         if session.wake_event:
             session.wake_event.set()
-            session.wake_result = {"reason": "forced_wake"}
+            if session.wake_result is None:
+                session.wake_result = {"reason": "forced_wake"}
+            if session.sleep_registration is not None:
+                session.sleep_registration = None
+                self.quota_manager.on_sleep_clear(session_id or "")
             return WakeResult(status="woken")
 
         return WakeResult(status="no_active_sleep")

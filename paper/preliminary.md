@@ -1,7 +1,9 @@
-# Supervising computation larger than the context window
+# The context window is a control channel
+
+### Typed, asynchronous, auditable jobs for language-model agents
 
 **Preliminary draft — 2026-11-04**
-**Status**: measured core complete; adaptive-supervision result pending (see §7).
+**Status**: measured core complete; horizon and adaptive-supervision results pending (§7).
 **Code**: `src/lmpu` · **Artifacts**: `benchmarks/results` · **Plan**: `TODO.5.md`
 
 ---
@@ -28,16 +30,25 @@ Measured on one RTX 3080 with Qwen2.5-0.5B-Instruct:
 We also report where the approach does **not** win. A competent agent that writes
 a script and runs it in a sandbox ties LMPU on control tokens, because both pay
 O(1) per decision. Token count alone is therefore not the contribution. What
-remains is capability beyond the window, per-job accounting, bounded-latency
-decisions *inside* the computation, and a worker plane that uses the GPU.
+remains is capability beyond the window, a horizon that grows with the number of
+jobs rather than with the model's memory of them, per-job accounting, and a worker
+plane that uses the GPU.
 
 ---
 
 ## 1. Claim, and three non-claims
 
-**Claim.** A fixed-context model can supervise computation whose in-context
-representation exceeds its window, at control cost independent of data size,
-with zero marginal cost while parked, and with the workers using the accelerator.
+**Claim.** The context window is a control channel, not a memory. State lives in
+the runtime; the model holds only decisions. Cost scales with decisions — in bytes
+and in job count — while the model's memory of the work stays O(1).
+
+This covers three utilities, only one of which is measured here:
+
+| Utility | What it buys | Status |
+|---|---|---|
+| Horizon | 40 long jobs in one session without 40 results in context | primitives exist, unmeasured |
+| Capability | queries whose in-context cost exceeds the window | measured §3.1–3.2 |
+| Governance | data stays local; budgets enforced; ledger reconciles | partly exists, unmeasured |
 
 **Non-claim 1 — fewer tokens than a sandbox agent.** Measured as a tie. Any
 comparison that puts N bytes into a context-only baseline conflates the encoding
@@ -70,6 +81,33 @@ model ──submit(op, inputs, outputs)──► kernel ──job──► worke
 - **Summary** returned to the model is O(1): status, checksum, shape, counts.
 
 The model therefore never holds the data, only the decision.
+
+---
+
+## 2.5 Why this is useful
+
+Three workflows, and what is worse without the runtime.
+
+**Long-horizon work.** An agent making a 15-minute tool call blocks; with forty
+such calls its context holds forty results. Here the model submits forty jobs,
+sleeps, wakes on each completion, and reads forty summaries. Context grows with
+decisions, not with work done. This is the horizon axis, and it is unmeasured
+(§5, item 1).
+
+**Governed data.** A hosted model must supervise data it may not receive. Shipping
+rows is often forbidden; letting an agent write unbounded code is unauditable.
+Here data stays in local shared memory, the model receives typed summaries, each
+job carries declared limits, and a ledger reconciles bytes, FLOPs, tokens, and
+energy per job.
+
+**Any controller.** Scripts, human approval (`needs_input`), and model decisions
+share one primitive: pause this computation until X decides. Today that is custom
+glue in every pipeline.
+
+The counterfactual is fair: an agent framework *can* implement async tools. What
+differs here is that budgets, cancellation, composition, parking, and the ledger
+are kernel primitives rather than prompt conventions. That is an engineering
+position, and §5 lists the measurements that would substantiate it.
 
 ---
 
@@ -179,18 +217,21 @@ Neither would have been found by a gigabyte demo.
 
 These are unmeasured. Each has a concrete experiment in `TODO.5.md`.
 
-1. **Adaptive supervision.** Does a model that inspects samples and revises a
+1. **Horizon scaling.** Does control cost per completed job stay flat as the job
+   count grows (N = 1 → 40)? The primitives exist (`submit`, `sleep`, `wake`,
+   `cancel`); nobody has measured them. Cheapest real result available.
+2. **Adaptive supervision.** Does a model that inspects samples and revises a
    criterion beat a fixed one-shot script on drifted data, at equal model cost?
-   This is the only claim a sandbox cannot tie. If it fails, say so.
-2. **Decision-cost law.** Is control cost `a + b·decisions` with `b` measurable
+   This is the claim a sandbox cannot tie. If it fails, say so.
+3. **Decision-cost law.** Is control cost `a + b·decisions` with `b` measurable
    and `a` below a system prompt? One figure, two slopes.
-3. **Replay and ledger.** Are pipelines bit-identical across runs, and is the
-   per-job accounting (bytes, FLOPs, tokens, energy) sufficient to audit them?
-4. **Crash-resume.** Does a killed worker yield identical results after retry, or
+4. **Replay, ledger, budgets.** Are pipelines bit-identical across runs; does the
+   per-job ledger reconcile; do over-budget jobs fail closed?
+5. **Crash-resume.** Does a killed worker yield identical results after retry, or
    duplicated side effects? The failure harness already exists.
-5. **Multi-tenant economics.** With 8 sessions waking and parking at random, what
+6. **Multi-tenant economics.** With 8 sessions waking and parking at random, what
    happens to GPU-seconds per completed task?
-6. **Descriptor handoff.** `python.vm` currently copies buffers to a temp file.
+7. **Descriptor handoff.** `python.vm` currently copies buffers to a temp file.
    Passing the shm descriptor would remove an O(size) copy.
 
 ---
@@ -216,17 +257,22 @@ Every number in this paper is regenerated by one of the commands above.
 
 ## 7. Status and how to help
 
-Measured: control-cost invariance, capability beyond the window, zero-cost
-parking, buffer composition, accelerator-positive worker plane, planner overhead.
+Measured: control-cost invariance in data size, capability beyond the window,
+zero-cost parking, buffer composition, accelerator-positive worker plane, planner
+overhead.
 
-Not yet measured: adaptive supervision, the decision-cost law, replay, crash
-resume, multi-tenant economics.
+Not yet measured: horizon scaling, adaptive supervision, the decision-cost law,
+replay/ledger/budgets, crash resume, multi-tenant economics.
 
-The keystone is adaptive supervision. If a model that only sees aggregates and
-samples can steer a computation better than a fixed script over the same bytes,
-LMPU is a control plane for computation, not a data-transfer optimisation. If it
-cannot, the honest result is the capability claim in §3.2 plus an accounting and
-reliability story — still useful, and much narrower.
+The cheapest useful result is **horizon scaling** (item 1): the async primitives
+already exist and the experiment is half a day. It answers the question this
+draft invites — *what is this for?* — better than any byte count.
+
+The scientific keystone is **adaptive supervision** (item 2). If a model that
+sees only aggregates and samples can steer a computation better than a fixed
+script over the same bytes, LMPU is a control plane for computation. If it cannot,
+the honest result is the capability claim in §3.2 plus the accounting and
+reliability story — narrower, still useful.
 
 We would rather publish the narrow version than defend a claim that a 20-line
 script can tie.
