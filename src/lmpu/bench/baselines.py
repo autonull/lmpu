@@ -139,16 +139,51 @@ def _program_from_text(text: str) -> dict[str, Any] | None:
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", candidate, re.DOTALL)
-        if not match:
-            return None
-        try:
-            payload = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
+        # The model outputs JSON with unescaped content in the "program" field.
+        # Try to extract the program code directly from the response.
+        program_code = _extract_program_code(candidate)
+        if program_code:
+            return {
+                "processor": "python.vm",
+                "op": "run_program",
+                "inputs": {"program": program_code},
+            }
+        # Fallback: try regex matches
+        for match in re.finditer(r"\{.*\}", candidate, re.DOTALL):
+            try:
+                payload = json.loads(match.group(0))
+                if isinstance(payload, dict) and "op" in payload and "inputs" in payload:
+                    return payload
+            except json.JSONDecodeError:
+                continue
+        return None
     if not isinstance(payload, dict) or "op" not in payload or "inputs" not in payload:
         return None
     return payload
+
+
+def _extract_program_code(text: str) -> str | None:
+    """Extract Python program code from model response that has malformed JSON."""
+    # Look for the program field pattern - extract the JSON string value
+    match = re.search(r'"program"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if match:
+        # The captured group is the JSON string content (with escapes)
+        # Use json.loads to properly decode it
+        try:
+            code = json.loads('"' + match.group(1) + '"')
+            # Fix double-escaping from model (model sees \\n in prompt, outputs \\\\n)
+            code = code.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+            return code
+        except json.JSONDecodeError:
+            pass
+    # Fallback: look for python code block
+    match = re.search(r'```python\s*(.*?)\s*```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return None
 
 
 def _request(

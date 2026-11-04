@@ -28,6 +28,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+optimized = [
+    "flash-linear-attention>=0.6.0",
+    "causal-conv1d>=1.7.0",
+]
 host = [
     "torch>=2.5,<3",
     "transformers>=5.16,<6",

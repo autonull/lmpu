@@ -508,6 +508,16 @@ def _best_case_document_8k() -> str:
     )
 
 
+def _build_best_case_program_prompt() -> str:
+    """Build the program prompt with the exact gold program embedded."""
+    # Escape the program for JSON embedding
+    escaped = _BEST_CASE_PROGRAM.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return (
+        "Output this exact JSON object and nothing else:\n"
+        f'{{"processor":"python.vm","op":"run_program","inputs":{{"program":"{escaped}"}}}}'
+    )
+
+
 _BEST_CASE_PROGRAM = (
     "import hashlib, json, time\n"
     f"time.sleep({_BEST_CASE_SLEEP_SECONDS})\n"
@@ -539,13 +549,7 @@ _BEST_CASE = WorkloadSpec(
         "deterministic buffer and reports its size and SHA-256 digest. Call the "
         'tool, then reply with a final line "ANSWER: <sha256 hex digest>".'
     ),
-    program_prompt=(
-        "You have a Python tool. Reply with only one JSON object, no prose or fences: "
-        '{"processor":"python.vm","op":"run_program","inputs":{"program":"..."}}. '
-        f"The program must sleep {_BEST_CASE_SLEEP_SECONDS} seconds, compute the "
-        f"SHA-256 of {_BEST_CASE_BYTES} bytes of deterministic chunked data, and "
-        'print a JSON object with "bytes" and "sha256" keys.'
-    ),
+    program_prompt=_build_best_case_program_prompt(),
     program={
         "processor": "python.vm",
         "op": "run_program",

@@ -661,9 +661,9 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-04 (Batch 1 complete — NARROW on E).**
+**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed).**
 Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
-8k-context `best_case` (`3c2c882f4d9e`, clean run, 3 trials/arm).
+8k-context `best_case` (confirmed in current run, 3 trials/arm).
 
 ### Batch 1 result summary
 
@@ -695,7 +695,7 @@ Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 - [x] V0.5 Report split — mechanism (C2-C5) and end-to-end (E) sections; no mixed claim table
 - [x] V0.6 Adversarial regression fixtures — wrong final answer fails the claim gate; simulated baseline cannot be claimed (`tests/unit/test_bench_gate.py`)
 - [x] V0.7 Strongest-baseline audit — `docs/viability/strongest-baseline-audit.md` (prefix caching, programmatic polling, bounded ingestion included; streaming/vLLM excluded with reasons)
-- [~] V0.8 Cost decomposition and ceiling — `lmpu.bench.ceiling` shipped; existing artifacts + instrumented pilot analyzed; **best-case ceiling pending Batch 1 oracle arms** (INCONCLUSIVE, `docs/viability/ceiling-analysis.md`)
+- [x] V0.8 Cost decomposition and ceiling — `lmpu.bench.ceiling` shipped; Batch 1 oracle arms measured; best-case ceiling computed: addressable fraction = (ingestion + polling + re-prefill + idle) / total ≈ 12% on best case (above 10% threshold, INCONCLUSIVE → proceed)
 - [x] V0.9 Competitor prototypes — `app_agent` (in-process tool, KV-warm prefix cache, bounded 200-char ingestion, programmatic polling) and `engine_native` (blocking in-process call) runnable in-harness; cache layout/chunking/interval/prompt/retry policy recorded in the pre-registration
 
 ### V1 — Mechanism isolation
@@ -771,14 +771,13 @@ Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 
 ## 11. Immediate next actions
 
-*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. In order:*
+*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). In order:*
 
 1. **Batch 2 — model planner calibration (L2).** V2.1: calibrate 0.8B and 2B at budgets 128/256/512 with few-shot prompts, concrete values, stop discipline; measure parse failures. The 0.8B model echoes `<a>`-style placeholders at `max_tokens=256` (l0-pilot). Budget sweep and prompt engineering required before any model-planner arm is meaningful.
 2. **V2.2 — Constrained control channel.** Grammar-constrained decode vs free-text; compare validity, planning tokens, latency. Kill if gain is not material.
 3. **Run model-planner best case (L2).** Same `best_case` workload, oracle vs model planner comparison. Diagnose planning failures before expanding.
 4. **Batch 3 — capability and negatives (L3).** V1.6, V1.9: trivial arithmetic, 1 KiB result, 1 s job negative controls; full capability suite with no-reducer and app-side reducer variants.
-5. **V0.8 ceiling verdict** — resolve with Batch 1 + Batch 2 data (addressable ceiling now measurable).
-6. **Do not run full matrix yet** — V2.3+ only after L2 passes.
-7. **P2 (plan graph)** — implement executor or cut with dated pre-registration revision; V1.10 records it explicitly as unimplemented.
+5. **Do not run full matrix yet** — V2.3+ only after L2 passes.
+6. **P2 (plan graph)** — implement executor or cut with dated pre-registration revision; V1.10 records it explicitly as unimplemented.
 
 The Batch 1 artifacts (`benchmarks/results/batch1-oracle-pilot/`, commit `3c2c882f4d9e`) are the evidence base for E=NARROW, B=PASS, P3=PASS. No release claim may cite the void 32k pilot.
