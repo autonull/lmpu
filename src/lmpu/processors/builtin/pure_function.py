@@ -66,28 +66,40 @@ class PureFunctionProcessor(Processor):
         return value
 
     def _resolve_output(
-        self, ctx: JobContext, output_name: str, data: Any, checksum: str
+        self, ctx: JobContext, output_name: str, data: Any, checksum: str, outputs_spec: dict | None = None
     ) -> tuple[dict[str, Any], list[str]]:
-        """Resolve output: write to buffer if specified, otherwise return inline."""
+        """Resolve output: write to buffer if specified in outputs_spec, otherwise return inline."""
         buffer_refs: list[str] = []
-        output_spec = ctx._buffers.get(output_name)
-        if isinstance(output_spec, np.ndarray):
-            # Output buffer is mapped; write to it
-            # Convert data to numpy array matching output_spec shape
-            if isinstance(data, str):
-                # String data (e.g., hex digest) - encode to bytes
-                data_bytes = data.encode()
-                data_arr = np.frombuffer(data_bytes, dtype=np.uint8)
-            elif isinstance(data, bytes):
-                data_arr = np.frombuffer(data, dtype=np.uint8)
-            else:
-                data_arr = np.asarray(data)
+        # Only treat as output buffer if the job's outputs spec maps this output_name to a buffer
+        if outputs_spec and output_name in outputs_spec:
+            output_buffer_spec = outputs_spec[output_name]
+            if isinstance(output_buffer_spec, dict) and output_buffer_spec.get("buffer"):
+                buffer_id = output_buffer_spec["buffer"]
+                # Find the mapped buffer in ctx._buffers by buffer_id
+                output_spec = None
+                for k, v in ctx._buffers.items():
+                    if isinstance(v, np.ndarray) and hasattr(v, 'buffer_id') and v.buffer_id == buffer_id:
+                        output_spec = v
+                        break
+                if output_spec is None:
+                    # Buffer might be mapped under the buffer_id key
+                    output_spec = ctx._buffers.get(buffer_id)
+                
+                if isinstance(output_spec, np.ndarray):
+                    # Output buffer is mapped; write to it
+                    if isinstance(data, str):
+                        data_bytes = data.encode()
+                        data_arr = np.frombuffer(data_bytes, dtype=np.uint8)
+                    elif isinstance(data, bytes):
+                        data_arr = np.frombuffer(data, dtype=np.uint8)
+                    else:
+                        data_arr = np.asarray(data)
 
-            if data_arr.size != output_spec.size:
-                raise ValueError(f"Output size mismatch: {data_arr.size} != {output_spec.size}")
-            np.copyto(output_spec.reshape(data_arr.shape), data_arr, casting="same_kind")
-            buffer_refs = [output_name]
-            return {}, buffer_refs
+                    if data_arr.size != output_spec.size:
+                        raise ValueError(f"Output size mismatch: {data_arr.size} != {output_spec.size}")
+                    np.copyto(output_spec.reshape(data_arr.shape), data_arr, casting="same_kind")
+                    buffer_refs = [buffer_id]
+                    return {}, buffer_refs
         # No mapped output buffer; return data inline
         return data, []
 
@@ -95,6 +107,19 @@ class PureFunctionProcessor(Processor):
         op = job.get("op")
         inputs = job.get("inputs", {})
         outputs = job.get("outputs", {})
+        
+        # Resolve buffer references: inputs dict keys are logical names matching ctx._buffers
+        resolved_inputs = {}
+        for field_name, value in inputs.items():
+            if isinstance(value, dict) and value.get("buffer"):
+                # Buffer reference: {"buffer": "buf_xxx"} -> look up by logical field name
+                if field_name in ctx._buffers:
+                    resolved_inputs[field_name] = ctx._buffers[field_name]
+                else:
+                    resolved_inputs[field_name] = b""  # fallback
+            else:
+                resolved_inputs[field_name] = value
+
         # A batch is signalled either by the top-level `batch` field or by the
         # declared `batch` op, whose inputs carry `items`.
         if job.get("batch") is not None or op == "batch":
@@ -102,23 +127,23 @@ class PureFunctionProcessor(Processor):
 
         try:
             if op == "bigint_add":
-                return await self._bigint_add(inputs)
+                return await self._bigint_add(resolved_inputs)
             elif op == "bigint_mul":
-                return await self._bigint_mul(inputs)
+                return await self._bigint_mul(resolved_inputs)
             elif op == "matmul":
-                return await self._matmul(inputs)
+                return await self._matmul(resolved_inputs)
             elif op == "text_stats":
-                return await self._text_stats(inputs, ctx, outputs)
+                return await self._text_stats(resolved_inputs, ctx, outputs)
             elif op == "mod_pow":
-                return await self._mod_pow(inputs)
+                return await self._mod_pow(resolved_inputs)
             elif op == "sha256":
-                return await self._sha256(inputs, ctx, outputs)
+                return await self._sha256(resolved_inputs, ctx, outputs)
             elif op == "blake3":
-                return await self._blake3(inputs, ctx, outputs)
+                return await self._blake3(resolved_inputs, ctx, outputs)
             elif op == "json_query":
-                return await self._json_query(inputs)
+                return await self._json_query(resolved_inputs)
             elif op == "lookup":
-                return await self._lookup(inputs)
+                return await self._lookup(resolved_inputs)
             elif op == "batch":
                 return await self._batch(job, ctx)
             else:
@@ -188,7 +213,7 @@ class PureFunctionProcessor(Processor):
             "checksum": checksum[:16],
             "secret": match.group(1) if match else None,
         }
-        inline_data, buffer_refs = self._resolve_output(ctx, "text", data, checksum)
+        inline_data, buffer_refs = self._resolve_output(ctx, "text", data, checksum, outputs)
         return Result(
             success=True,
             data=inline_data or data,
@@ -219,7 +244,10 @@ class PureFunctionProcessor(Processor):
         hash_obj = hashlib.sha256(data)
         hex_digest = hash_obj.hexdigest()
 
-        inline_data, buffer_refs = self._resolve_output(ctx, "hash", hex_digest, hex_digest)
+        inline_data, buffer_refs = self._resolve_output(ctx, "hash", hex_digest, hex_digest, outputs)
+        # Wrap inline result in dict with output field name
+        if not buffer_refs and not isinstance(inline_data, dict):
+            inline_data = {"hash": inline_data}
         return Result(
             success=True,
             data=inline_data,
@@ -247,7 +275,10 @@ class PureFunctionProcessor(Processor):
 
             hex_digest = hl.sha256(data).hexdigest()
 
-        inline_data, buffer_refs = self._resolve_output(ctx, "hash", hex_digest, hex_digest)
+        inline_data, buffer_refs = self._resolve_output(ctx, "hash", hex_digest, hex_digest, outputs)
+        # Wrap inline result in dict with output field name
+        if not buffer_refs and not isinstance(inline_data, dict):
+            inline_data = {"hash": inline_data}
         return Result(
             success=True,
             data=inline_data,
