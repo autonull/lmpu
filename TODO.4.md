@@ -1,7 +1,11 @@
 # LMPU Development Plan — TODO.4.md
 
-**Revision 3** · 2026-11-04 · supersedes revisions 1–2
+**Revision 3** · 2026-11-04 · **superseded by `TODO.5.md`**
 **Status**: two primary claims measured and passing. Trajectory corrected.
+
+> Superseded. TODO.4 chased data size; measurement showed a script-writing
+> sandbox agent ties on control tokens, so size was the wrong axis. See
+> `TODO.5.md` §0 for what retired it and §1 for the claim that survives.
 
 ---
 

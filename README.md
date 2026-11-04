@@ -1,5 +1,12 @@
 # Abstract Computational Co-Processor for Language Models
 
+> **Measured status** — preliminary paper: [`paper/preliminary.md`](paper/preliminary.md) ·
+> development plan: [`TODO.5.md`](TODO.5.md) · claim artifacts: `benchmarks/results/claims/`.
+> Headline: 93–95 control tokens from 1.2 KiB to 256 MiB; 3,200 records exceed a
+> 32 k window in-context but answer in 94 tokens; a 2048³ matmul runs 14.4× faster
+> and 16.4× more efficiently on the GPU than the CPU. A script-writing sandbox
+> agent ties on tokens — see the paper's non-claims.
+
 ### 1. Goals
 
 Design a clean, high-performance interface between a host language model (or any autoregressive / generative model) and one or more external computational units (“co-processors”).
