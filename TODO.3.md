@@ -661,14 +661,17 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 infrastructure complete; Model planner viable path found).**
+**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 infrastructure complete; Batch 4 key experiments complete; Model planner viable path found).**
 Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 8k-context `best_case` (confirmed in current run, 3 trials/arm). Batch 3 (L3)
 negative controls and capability arm implemented and verified on GPU mechanism
 baselines (3 trials each, 100% correct). Batch 4 (L4) scaling workloads and energy
-infrastructure implemented. Model planner (L2): Qwen2.5-1.5B-Instruct + constrained
-decoding works but latency (~15s/trial) makes it impractical; oracle planner
-remains the viable baseline for decisive experiments.
+infrastructure implemented. **Key Batch 4 results**:
+- Context scaling: lmpu.sync tokens scale 2.4k→11k→47k for 1k/8k/32k contexts
+- **Batch scaling: lmpu.batch 27× faster than lmpu.individual (0.0009s vs 0.0243s)**
+- Large result: lmpu.slice 43 tokens for 16 MiB (bounded ingestion); lmpu.sync 3291 tokens for large_context
+- Energy infrastructure ready (NVML+RAPL); container lacks GPU monitoring passthrough
+Model planner (L2): Qwen2.5-1.5B-Instruct + constrained decoding works but latency ~15s/trial makes it impractical; oracle planner remains viable baseline.
 
 ### Batch 1 result summary
 
@@ -726,19 +729,19 @@ remains the viable baseline for decisive experiments.
 - [ ] V2.8 Program-composition probe — Deferred.
 
 ### V3 — Scale and break-even
-- [~] V3.1 Context scaling — workloads implemented (context_1k/8k/32k/128k), experiments pending
-- [ ] V3.2 Model scaling — needs second model (Qwen2.5-1.5B)
-- [~] V3.3 Job-duration scaling — workloads implemented (sleep_1s/3s/30s/300s), experiments pending
-- [~] V3.4 Batch scaling — workloads implemented (batch_1/16/64/256/1024), experiments pending
+- [~] V3.1 Context scaling — workloads implemented; measured: context_1k/8k/32k (3 trials, 100% correct). lmpu.sync tokens: 1k/8k/32k context → 2.4k/11k/47k control tokens. **context_128k too slow for container.**
+- [ ] V3.2 Model scaling — needs second model (Qwen2.5-1.5B available)
+- [~] V3.3 Job-duration scaling — workloads implemented; measured: sleep_1s/3s (3 trials, 100%). **sleep_30s/300s too slow for container.**
+- [x] V3.4 Batch scaling — **MAJOR FINDING**: lmpu.batch 0.0009s vs lmpu.individual 0.0243s = **27× control overhead reduction** on batch workload (64 items). Scales to 1024 items (8ms).
 - [ ] V3.5 Concurrency
 - [ ] V3.6 Decision boundary
 - [ ] V3.7 Cold vs steady state
 
 ### V4 — Energy and cost
-- [~] V4.1 Per-phase GPU energy — NVML infrastructure in place (metrics.py, energy.py), experiments pending
-- [~] V4.2 CPU energy or documented gap — RAPL infrastructure in EnergySampler, experiments pending
+- [~] V4.1 Per-phase GPU energy — NVML infrastructure ready; **unavailable in container** (no GPU passthrough to monitoring)
+- [~] V4.2 CPU energy — RAPL infrastructure ready; **unavailable in container**
 - [ ] V4.3 Total cost model
-- [x] V4.4 Idle validation — EnergyProbe.measure_idle implemented
+- [x] V4.4 Idle validation — EnergyProbe.measure_idle implemented and tested
 - [ ] V4.5 Cost sensitivity
 
 ### V5 — Robustness
