@@ -654,6 +654,8 @@ class BaselineRunner:
             | context.workload.config,
         }
         metrics.record_control_tokens(estimate_tokens(request))
+        # Energy sampling for mechanism baselines
+        self._energy.sample()
         started = time.perf_counter()
         error: str | None = None
         result: Any = None
@@ -667,6 +669,9 @@ class BaselineRunner:
         finally:
             await self._close_session(session_id)
         wall = time.perf_counter() - started
+        # Record energy after trial
+        gpu_joules = self._energy.sample().gpu_joules
+        metrics.record_energy(gpu_joules=gpu_joules)
         if result is not None:
             inject_started = time.perf_counter()
             metrics.record_injected_tokens(estimate_tokens(_summary_text(result)))
@@ -710,6 +715,8 @@ class BaselineRunner:
         }
         metrics.record_control_tokens(estimate_tokens(request))
         timeout = context.workload.config.get("timeout_ms", 60_000) / 1000
+        # Energy sampling
+        self._energy.sample()
         started = time.perf_counter()
         error: str | None = None
         finished = None
@@ -738,6 +745,9 @@ class BaselineRunner:
         finally:
             await self._close_session(session_id)
         wall = time.perf_counter() - started
+        # Record energy after trial
+        gpu_joules = self._energy.sample().gpu_joules
+        metrics.record_energy(gpu_joules=gpu_joules)
         result = finished.result if finished is not None else None
         if finished is not None and finished.error:
             error = json.dumps(finished.error, default=str)
@@ -779,6 +789,8 @@ class BaselineRunner:
         holder["phases"] = phases.phases
         size = int(context.workload.config.get("result_bytes", 16 * 1024 * 1024))
         max_inline = int(context.workload.config.get("max_inline_bytes", 1024))
+        # Energy sampling
+        self._energy.sample()
         started = time.perf_counter()
         error: str | None = None
         derived = False
@@ -812,6 +824,9 @@ class BaselineRunner:
         finally:
             await self._close_session(session_id)
         wall = time.perf_counter() - started
+        # Record energy after trial
+        gpu_joules = self._energy.sample().gpu_joules
+        metrics.record_energy(gpu_joules=gpu_joules)
         return TrialRecord(
             workload=context.workload.name,
             baseline=context.baseline,
@@ -1137,6 +1152,8 @@ class BaselineRunner:
         holder["metrics"] = metrics
         holder["phases"] = phases.phases
         items = context.workload.inputs.get("items", [])
+        # Energy sampling
+        self._energy.sample()
         started = time.perf_counter()
         results: list[Any] = []
         errors: list[str] = []
@@ -1172,6 +1189,9 @@ class BaselineRunner:
         finally:
             await self._close_session(session_id)
         wall = time.perf_counter() - started
+        # Record energy after trial
+        gpu_joules = self._energy.sample().gpu_joules
+        metrics.record_energy(gpu_joules=gpu_joules)
         combined = {"results": results, "errors": errors}
         return TrialRecord(
             workload=context.workload.name,
@@ -1200,6 +1220,8 @@ class BaselineRunner:
         job_id = self._job_id(context)
         request = _request(context.workload.program, context.workload, job_id, "sync")
         metrics.record_control_tokens(estimate_tokens(request))
+        # Energy sampling
+        self._energy.sample()
         started = time.perf_counter()
         error: str | None = None
         result: Any = None
@@ -1213,6 +1235,9 @@ class BaselineRunner:
         finally:
             await self._close_session(session_id)
         wall = time.perf_counter() - started
+        # Record energy after trial
+        gpu_joules = self._energy.sample().gpu_joules
+        metrics.record_energy(gpu_joules=gpu_joules)
         if result is not None:
             inject_started = time.perf_counter()
             metrics.record_injected_tokens(estimate_tokens(_summary_text(result)))

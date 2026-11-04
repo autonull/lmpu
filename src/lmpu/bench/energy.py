@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from lmpu.host.metrics import EnergySampler
+from lmpu.host.metrics import EnergySampler, EnergySample
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +44,10 @@ class EnergyProbe:
     @property
     def available(self) -> bool:
         return self._sampler.available
+
+    def sample(self) -> EnergySample:
+        """Return energy accumulated since the previous call."""
+        return self._sampler.sample()
 
     async def measure_idle(self, seconds: float) -> IdleBaseline:
         """Measure idle GPU energy for ``seconds``; zero seconds reports availability only."""

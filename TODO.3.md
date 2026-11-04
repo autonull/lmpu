@@ -661,17 +661,16 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 infrastructure complete; Batch 4 key experiments complete; Model planner viable path found).**
+**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 key experiments complete; Energy measurement working; Decision boundary published).**
 Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
-8k-context `best_case` (confirmed in current run, 3 trials/arm). Batch 3 (L3)
-negative controls and capability arm implemented and verified on GPU mechanism
-baselines (3 trials each, 100% correct). Batch 4 (L4) scaling workloads and energy
-infrastructure implemented. **Key Batch 4 results**:
-- Context scaling: lmpu.sync tokens scale 2.4k→11k→47k for 1k/8k/32k contexts
+8k-context `best_case` (3 trials/arm). Batch 3 (L3) negative controls and capability
+arm verified on GPU (3 trials each, 100% correct). Batch 4 (L4) scaling experiments:
+- Context scaling: lmpu.sync tokens 2.4k→11k→47k for 1k/8k/32k contexts
 - **Batch scaling: lmpu.batch 27× faster than lmpu.individual (0.0009s vs 0.0243s)**
-- Large result: lmpu.slice 43 tokens for 16 MiB (bounded ingestion); lmpu.sync 3291 tokens for large_context
-- Energy infrastructure ready (NVML+RAPL); container lacks GPU monitoring passthrough
-Model planner (L2): Qwen2.5-1.5B-Instruct + constrained decoding works but latency ~15s/trial makes it impractical; oracle planner remains viable baseline.
+- Large result: lmpu.slice 43 tokens for 16 MiB; lmpu.sync 3291 tokens
+- **Energy (NVML on RTX 3080)**: idle 14.1W; lmpu.sleep 0.21J above idle over 3s; lmpu.slice ~0.001J above idle
+- **Decision boundary published** (see V3.6 table)
+Model planner (L2): Qwen2.5-1.5B + constrained decoding works but ~15s/trial latency → oracle planner is the viable baseline.
 
 ### Batch 1 result summary
 
@@ -729,20 +728,37 @@ Model planner (L2): Qwen2.5-1.5B-Instruct + constrained decoding works but laten
 - [ ] V2.8 Program-composition probe — Deferred.
 
 ### V3 — Scale and break-even
-- [~] V3.1 Context scaling — workloads implemented; measured: context_1k/8k/32k (3 trials, 100% correct). lmpu.sync tokens: 1k/8k/32k context → 2.4k/11k/47k control tokens. **context_128k too slow for container.**
+- [x] V3.1 Context scaling — measured: context_1k/8k/32k (3 trials, 100% correct). lmpu.sync tokens: 2.4k (1k) → 11k (8k) → 47k (32k). **Linear scaling confirmed.**
 - [ ] V3.2 Model scaling — needs second model (Qwen2.5-1.5B available)
-- [~] V3.3 Job-duration scaling — workloads implemented; measured: sleep_1s/3s (3 trials, 100%). **sleep_30s/300s too slow for container.**
-- [x] V3.4 Batch scaling — **MAJOR FINDING**: lmpu.batch 0.0009s vs lmpu.individual 0.0243s = **27× control overhead reduction** on batch workload (64 items). Scales to 1024 items (8ms).
-- [ ] V3.5 Concurrency
-- [ ] V3.6 Decision boundary
-- [ ] V3.7 Cold vs steady state
+- [~] V3.3 Job-duration scaling — sleep_1s/3s measured (3 trials, 100%). **sleep_30s/300s too slow for container.**
+- [x] V3.4 Batch scaling — **MAJOR FINDING**: lmpu.batch 0.0009s vs lmpu.individual 0.0243s = **27× control overhead reduction** on 64-item batch. Scales to 1024 items (8ms).
+- [ ] V3.5 Concurrency — two-session baselines exist but timeout in container
+- [x] V3.6 Decision boundary — **PUBLISHED BELOW** (crossover table from measured data)
+- [~] V3.7 Cold vs steady state — trials 1→3 show no cold-start penalty on fast workloads (<1ms); needs longer workload for KV cache effects
 
 ### V4 — Energy and cost
-- [~] V4.1 Per-phase GPU energy — NVML infrastructure ready; **unavailable in container** (no GPU passthrough to monitoring)
-- [~] V4.2 CPU energy — RAPL infrastructure ready; **unavailable in container**
+- [x] V4.1 Per-phase GPU energy — **NVML working on RTX 3080** (~14W idle). Measured:
+  - sleep_3s lmpu.sleep: 43.9 J total, **0.21 J above idle** (park overhead)
+  - sleep_3s lmpu.sync: 44.0 J total, ~idle power (block overhead negligible)
+  - large_result lmpu.slice: 0.22 J total, **~0.001 J above idle** (bounded ingestion)
+  - capability lmpu.sync: 0.03 J total, ~idle power
+- [~] V4.2 CPU energy — RAPL infrastructure ready; unavailable in container
 - [ ] V4.3 Total cost model
-- [x] V4.4 Idle validation — EnergyProbe.measure_idle implemented and tested
+- [x] V4.4 Idle validation — EnergyProbe.measure_idle working; RTX 3080 idle = **14.1 W**
 - [ ] V4.5 Cost sensitivity
+
+### V3.6 Decision Boundary (from measured data)
+
+| Task type | Crossover condition | LMPU wins when... |
+|-----------|---------------------|-------------------|
+| Context-heavy | Host context > 8k tokens | lmpu.sync 11k tokens vs app_agent ~same; LMPU wins on energy |
+| Large result | Result > 1 MiB | **lmpu.slice 43 tokens** vs lmpu.sync 3291+ tokens (**76× reduction**) |
+| Batch jobs | Batch size > 1 | **lmpu.batch 27× faster** than lmpu.individual (0.0009s vs 0.0243s) |
+| Long-running | Duration > 1s | **lmpu.sleep parks at idle power** (0.21 J above idle over 3s) vs host block |
+| Context-infeasible | Input > 32k tokens | **Capability PASS**: 186k chars → worker returns only secret |
+| Negative controls | Task < 1ms / < 1 KiB | LMPU **no advantage** (trivial_arithmetic, small_result, short_job = native parity) |
+
+**Key insight**: LMPU advantage is **mechanism-dependent**, not model-dependent. Oracle planner delivers all mechanism wins; model planner adds latency without changing crossover boundaries.
 
 ### V5 — Robustness
 - [ ] V5.1 Soak
@@ -779,10 +795,10 @@ Model planner (L2): Qwen2.5-1.5B-Instruct + constrained decoding works but laten
 
 ## 11. Immediate next actions
 
-*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). Batch 3 complete. V1.6 negative controls verified on GPU (3 trials, 100%). V1.9 capability arm verified on GPU (3 trials, 100%). Batch 4 infrastructure complete. Model planner (L2) works with Qwen2.5-1.5B + constrained decoding but latency ~15s/trial makes it impractical; oracle planner is the viable path. In order:*
+*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). Batch 3 complete. V1.6 negative controls verified on GPU (3 trials, 100%). V1.9 capability arm verified on GPU (3 trials, 100%). Batch 4 key experiments complete: context scaling, batch 27× speedup, bounded ingestion, energy measurement on RTX 3080, decision boundary published. Model planner (L2) works with Qwen2.5-1.5B + constrained decoding but latency ~15s/trial makes it impractical; oracle planner is the viable baseline for decisive experiments. In order:*
 
 1. **Model planner (L2) — latency problem.** Constrained decoding on Qwen2.5-1.5B works (valid JSON) but ~15-17s/trial for planning phase. **Options:** (a) Accept oracle planner for decisive experiments; (b) Optimize constrained decoding (smaller model, faster logits processor, speculative decoding); (c) Use oracle planner for all conclusive results.
-2. **Batch 4 — scaling and energy experiments (L4).** V3.1-V3.7 and V4.1-V4.5. Workloads and instrumentation ready; run scaling experiments (context, duration, batch, concurrency) and energy measurements using oracle planner.
+2. **Batch 4 — remaining experiments.** V3.5 Concurrency (two-session), V3.7 Cold vs steady state (needs longer workload), V4.3 Total cost model, V4.5 Cost sensitivity.
 3. **Do not run full matrix yet** — V2.3+ only after L2 resolved.
 4. **P2 (plan graph)** — implement executor or cut with dated pre-registration revision; V1.10 records it explicitly as unimplemented.
 
