@@ -1,13 +1,20 @@
 {
   "claim": "P1",
-  "description": "Context cost invariant to data size",
+  "description": "Control cost invariant to data size",
   "result": "PASS",
-  "evidence": "benchmarks/experiments/dataplane.py",
-  "measurement": "37 host tokens from 64 KiB to 512 MiB (3.6 M× ratio)",
+  "evidence": "benchmarks/experiments/baseline_law.py",
+  "measurement": "93-95 host tokens from 1.2 KiB to 256 MiB (218,000x), 5/5 correct",
   "details": {
-    "host_tokens_flat": true,
-    "ratio": 3627506,
-    "sizes_tested": ["1 KiB", "64 KiB", "1 MiB", "16 MiB", "64 MiB", "256 MiB", "512 MiB"],
-    "host_tokens_range": [29, 37]
+    "host_tokens_range": [93, 95],
+    "data_range_kib": [1.2, 262144],
+    "ratio": 218000,
+    "correct": "5/5",
+    "context_arm": {
+      "tokens_by_records": {"50": 782, "200": 3218, "800": 13154},
+      "fails_at_records": 3200,
+      "tokens_at_failure": 55421,
+      "context_limit": 32768
+    },
+    "note": "A script-writing sandbox agent also pays O(1) control tokens and ties LMPU. Reported as a tie, not a win."
   }
 }

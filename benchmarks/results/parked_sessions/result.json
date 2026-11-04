@@ -1,0 +1,30 @@
+{
+  "solo": {
+    "wall_s": 0.6991196109447628,
+    "forwards": 33
+  },
+  "parked": {
+    "wall_s": 0.6955875239800662,
+    "forwards": 33,
+    "other_forwards": {
+      "b": 0,
+      "c": 0,
+      "d": 0
+    }
+  },
+  "active": {
+    "wall_s": 2.8252111880574375,
+    "forwards": {
+      "a": 32,
+      "b": 32,
+      "c": 32,
+      "d": 32
+    }
+  },
+  "vram_mib": {
+    "context_tokens": 4001,
+    "base": 958.2919921875,
+    "with_4_sessions": 1147.1689453125,
+    "after_s2_park": 959.5751953125
+  }
+}

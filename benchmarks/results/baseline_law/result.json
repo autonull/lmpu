@@ -1,0 +1,74 @@
+[
+  {
+    "records": 50,
+    "kib": 1.1640625,
+    "arm": "context",
+    "host_tokens": 782,
+    "wall_s": 0.41267673089168966,
+    "correct": true
+  },
+  {
+    "records": 50,
+    "kib": 1.1640625,
+    "arm": "lmpu",
+    "host_tokens": 93,
+    "wall_s": 0.367387177888304,
+    "correct": true
+  },
+  {
+    "records": 200,
+    "kib": 4.77734375,
+    "arm": "context",
+    "host_tokens": 3218,
+    "wall_s": 0.15450130496174097,
+    "correct": true
+  },
+  {
+    "records": 200,
+    "kib": 4.77734375,
+    "arm": "lmpu",
+    "host_tokens": 93,
+    "wall_s": 0.10321567091159523,
+    "correct": true
+  },
+  {
+    "records": 800,
+    "kib": 19.42578125,
+    "arm": "context",
+    "host_tokens": 13154,
+    "wall_s": 0.4396350299939513,
+    "correct": true
+  },
+  {
+    "records": 800,
+    "kib": 19.42578125,
+    "arm": "lmpu",
+    "host_tokens": 94,
+    "wall_s": 0.10669686109758914,
+    "correct": true
+  },
+  {
+    "records": 3200,
+    "kib": 80.16796875,
+    "arm": "context",
+    "host_tokens": 55421,
+    "wall_s": 0.0,
+    "correct": false
+  },
+  {
+    "records": 3200,
+    "kib": 80.16796875,
+    "arm": "lmpu",
+    "host_tokens": 94,
+    "wall_s": 0.13621467002667487,
+    "correct": true
+  },
+  {
+    "records": 200000,
+    "kib": 262144.0,
+    "arm": "lmpu",
+    "host_tokens": 95,
+    "wall_s": 0.5837793629616499,
+    "correct": true
+  }
+]

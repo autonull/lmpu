@@ -1,13 +1,20 @@
 {
   "claim": "P2",
-  "description": "Parked sessions overlap",
+  "description": "Parked sessions cost nothing",
   "result": "PASS",
-  "evidence": "benchmarks/experiments/multisession.py",
-  "measurement": "4 sessions 4.23s vs 12s serial (2.84×); 8 sessions 7.37s vs 24s serial (3.26×)",
+  "evidence": "benchmarks/experiments/parked_sessions.py",
+  "measurement": "3 parked sessions perform 0 forwards and do not slow the decoder; concurrent decoders contend 4.04x",
   "details": {
-    "overlap_4_sessions": 2.84,
-    "overlap_8_sessions": 3.26,
-    "sessions_tested": [1, 2, 3, 4, 8],
-    "ideal_3s": true
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "gpu": "RTX 3080",
+    "solo": {"wall_s": 0.699, "decoder_forwards": 33},
+    "one_decoding_three_parked": {
+      "wall_s": 0.696,
+      "decoder_forwards": 33,
+      "parked_forwards": {"b": 0, "c": 0, "d": 0}
+    },
+    "four_concurrent": {"wall_s": 2.825, "slowdown_vs_solo": 4.04},
+    "vram_mib": {"base": 958.3, "four_live_kv": 1147.2, "after_s2_park": 959.6},
+    "note": "The concurrent-decoder contrast shows parked != active; without it, the zero-forward result would be vacuous."
   }
 }

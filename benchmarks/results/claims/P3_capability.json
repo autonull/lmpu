@@ -1,13 +1,20 @@
 {
   "claim": "P3",
-  "description": "Capability beyond context window",
+  "description": "Capability beyond the context window",
   "result": "PASS",
-  "evidence": "Batch 3 (prior batch)",
-  "measurement": "186 k chars solved by a 32 k model, 3/3",
+  "evidence": "benchmarks/experiments/baseline_law.py",
+  "measurement": "3,200 records require 55,421 tokens in-context (>32,768 limit); LMPU answers with 94 tokens and 5/5 correctness",
   "details": {
-    "model_context": 32768,
-    "problem_size": 186000,
-    "success_rate": "3/3",
-    "mechanism": "worker reduction over full data"
+    "context_fails_at_records": 3200,
+    "tokens_if_in_context": 55421,
+    "context_limit": 32768,
+    "lmpu_tokens": 94,
+    "bulk": {
+      "size_mib": 256,
+      "lmpu_tokens": 95,
+      "context_tokens_required": 67108864,
+      "overshoot_factor": 2048
+    },
+    "mechanism": "buffer import + python.vm reading the buffer via read_buffer()"
   }
 }

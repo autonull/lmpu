@@ -24,16 +24,19 @@ Two of the three primary claims are now measured. See
 
 | Claim | Result | Evidence |
 |---|---|---|
-| **P1** Context cost invariant to data size | **PASS** — 37 host tokens from 64 KiB to 512 MiB (3.6 M× ratio) | `experiments/dataplane.py` |
-| **P2** Parked sessions overlap | **PASS** — 4 sessions 4.2 s vs 12 s serial (2.84×); 8 sessions 3.29× | `experiments/multisession.py` |
-| **P3** Capability beyond context window | **PASS** — 186 k chars solved by a 32 k model, 3/3 | Batch 3 |
+| **P1** Control cost invariant to data size | **PASS** — 93–95 host tokens from 1.2 KiB to 256 MiB (218,000×), 5/5 correct; context arm fails at 3,200 records | `experiments/baseline_law.py` |
+| **P2** Parked sessions cost nothing | **PASS** — 3 parked sessions: 0 forwards, 0.696 s vs 0.699 s solo; 4 concurrent decoders 4.04× slower (the contrast) | `experiments/parked_sessions.py` |
+| **P3** Capability beyond context window | **PASS** — 3200-record query needs 55 k tokens in-context (>32 k) but 94 tokens via LMPU | `experiments/baseline_law.py` |
 | **P4** Negative controls show no false win | **PASS** — 9/9 | Batch 3 |
 | **P5** Buffer output composes into another processor | **PASS** — host tokens flat (168±0) across 1–256 MiB, 3-stage pipe | `experiments/buffer_composition.py` |
-| **P6** Energy advantage | **PARTIAL** — marginal parked session cost ≈ 0 W (inside NVML noise); GPU advantage requires GPU kernels | `experiments/energy.py` |
+| **P6** Energy advantage | **PASS (kernel scale)** — 2048³ matmul: GPU 14.4× faster, 16.4× less energy (5.91 J → 0.36 J); parked marginal cost ≈ 0 W | `experiments/gpu_plane.py` |
+| **P7** Protocol overhead is flat | **PASS** — 37 tokens across 64 KiB–512 MiB; 66 tokens for an import→CUDA→read pipeline | `experiments/dataplane.py` |
 
 The value proposition is now precise: **cost is O(decisions), not O(bytes);
-and marginal session cost is ~0 while parked.** P5 holds: a whole pipeline
-never round-trips data through the host.
+and marginal session cost is ~0 while parked.** A script-writing agent also pays
+O(1) control tokens, so token count alone is not the differentiator — the
+differentiators are a typed job with per-job accounting, bounded-latency
+decisions inside the compute, and a data plane that actually uses the GPU.
 
 ---
 
@@ -63,6 +66,16 @@ Both made the system look worse than the design allows. Neither was fundamental.
   worker to `_available_workers` before returning it, so two jobs shared one
   worker. Now a worker becomes available only in `_release_worker`.
   *N=4 wall: 6.8 s → 4.22 s; N=8: 13.0 s → 7.3 s.*
+- **D3 — `python.vm` could not read buffers.** `_run_program` set
+  `buffer_data = {}` and the helper's `read_buffer()` had nothing behind it, so
+  the only general-purpose sandbox could not touch the data plane. Buffers are
+  now staged as `.npy` and mapped read-only in the child; user programs call
+  `read_buffer(name)`. This is what makes "arbitrary compute over data the host
+  never sees" true rather than aspirational.
+- **D4 — S2 parking never offloaded the KV cache.** `_offload_kv_cache` keyed on
+  `to_legacy_cache`, which transformers 5.x removed, so it returned the live GPU
+  cache unchanged. Now iterates `cache.layers` and restores via `DynamicCache.update`.
+  *4 sessions at 4k context: 1147.2 MiB → 959.6 MiB (baseline 958.3).*
 
 Regression check: 102 unit/integration tests pass.
 
@@ -149,10 +162,38 @@ moves. Constrained output is 100% valid in every run.
 
 ---
 
+### R7 — Small-scale signal · **DONE**
+
+The GiB-scale demo was theatre: a competent agent that writes a script ties LMPU
+on tokens for one-shot computation. Four measurements that survive that objection,
+all at kilobyte-to-megabyte scale:
+
+- [x] **Parked cost is zero.** One 0.5B model, 4 sessions sharing it:
+      solo 0.699 s / 33 forwards; one decoding with three parked 0.696 s / 33
+      forwards with **0, 0, 0** forwards for the parked sessions; four concurrent
+      decoders 2.825 s (4.04× contention). S2 park returns VRAM to baseline.
+      `experiments/parked_sessions.py`
+- [x] **The boundary, measured.** Membership query over records, real 0.5B model:
+      context arm 782 → 3,218 → 13,154 tokens, then **fails at 3,200 records**
+      (55,421 tokens > 32 k). LMPU 93–95 tokens, **5/5 correct from 1.2 KiB to
+      256 MiB** (218,000× range). LMPU's fixed cost is *below* the agent's system
+      prompt, so the crossover is below the smallest tested size.
+      `experiments/baseline_law.py`
+- [x] **Script-sandbox tie, stated not hidden.** A script-writing agent pays O(1)
+      control tokens too. LMPU does not beat it on tokens; LMPU's difference is a
+      typed job with accounting and bounded-latency decisions. Reported as a tie.
+- [x] **The data plane uses the GPU.** `vector.engine` matmul has an opt-in CUDA
+      path (`LMPU_VECTOR_DEVICE=cuda`, default CPU to keep bit-determinism).
+      2048³: CPU 63.5 ms / 270 GFLOPS / 5.91 J vs GPU 4.41 ms / 3,894 GFLOPS /
+      0.36 J — **14.4× faster, 16.4× less energy**. Through the runtime:
+      import → CUDA matmul → read at **66 host tokens**. `experiments/gpu_plane.py`
+
 ## 5. Cut list
 
 | Item | Why |
 |---|---|
+| GiB-scale demos | A script-writing agent ties on tokens; size is theatre, not signal |
+| Token counts as the *headline* vs a script agent | It is a tie; lead with determinism, accounting, and bounded-latency decisions |
 | Token parity vs prefix-cached agent as a *headline* | It is a boundary, already measured, and repeats the same result |
 | Qwen3.5 multimodal planner | Structural tensor mismatch in the logits processor |
 | Model scaling beyond 1.5B | 3.1 GB/10 GB already permits 3 concurrent sessions; a second scale adds little |
@@ -172,6 +213,7 @@ moves. Constrained output is 100% valid in every run.
 | R4 cost model | ½ d | 5 min | **DONE** — advantage grows 51x→51kx with data |
 | R5 planner | 1 d | 1 h | **DONE** — 100% valid, 1.7–3.3× free-decode overhead; absolute gate rejected as mis-specified |
 | R6 release | 1 d | 5 min | **DONE** — claim↔artifact map complete |
+| R7 small-scale signal | ½ d | 10 min | **DONE** — parked=0, boundary measured, GPU plane 16× energy win |
 
 ≈ 5 days, ≈ 2 GPU-hours. Per AGENTS.md: cells ≤ 5 min foreground, else
 `nohup … > logs/<name>.log 2>&1 &` with a pre-registered kill time.
@@ -200,12 +242,16 @@ not hidden.
 ## 8. Reproduction
 
 ```bash
-uv run python benchmarks/experiments/dataplane.py
-uv run python benchmarks/experiments/multisession.py
-uv run python benchmarks/experiments/buffer_composition.py
-uv run python benchmarks/experiments/energy.py
+# claims
+uv run python benchmarks/experiments/baseline_law.py      # P1, P3
+uv run python benchmarks/experiments/parked_sessions.py   # P2
+uv run python benchmarks/experiments/buffer_composition.py # P5
+uv run python benchmarks/experiments/gpu_plane.py         # P6
+uv run python benchmarks/experiments/dataplane.py         # P7
+# secondary
 uv run python benchmarks/experiments/capability_vs_rag.py
-uv run python benchmarks/experiments/cost_model.py
 uv run python benchmarks/experiments/r5_gate.py
+uv run python benchmarks/experiments/energy.py
+uv run python benchmarks/experiments/cost_model.py
 uv run python -m pytest tests/unit tests/integration -q
 ```

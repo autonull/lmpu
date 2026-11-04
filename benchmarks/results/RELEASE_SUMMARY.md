@@ -1,7 +1,7 @@
 # LMPU Release Artifacts — Claim↔Artifact Map
 
 **Generated**: 2026-11-04
-**Revision**: TODO.4.md Rev 3
+**Revision**: TODO.4.md Rev 4
 
 ---
 
@@ -9,14 +9,17 @@
 
 | Claim | Result | Evidence | Key Metric |
 |-------|--------|----------|------------|
-| **P1** Context cost invariant to data size | **PASS** | `dataplane.py` | 37 host tokens, 64 KiB → 512 MiB (3.6M×) |
-| **P2** Parked sessions overlap | **PASS** | `multisession.py` | 2.84× (4 sess), 3.26× (8 sess) |
-| **P3** Capability beyond context window | **PASS** | Batch 3 | 186k chars by 32k model (3/3) |
+| **P1** Control cost invariant to data size | **PASS** | `baseline_law.py` | 93–95 tokens, 1.2 KiB → 256 MiB (218,000×), 5/5 correct |
+| **P2** Parked sessions cost nothing | **PASS** | `parked_sessions.py` | 3 parked: 0 forwards, 0.696 s vs 0.699 s; 4 concurrent: 4.04× |
+| **P3** Capability beyond context window | **PASS** | `baseline_law.py` | 3,200 records needs 55 k tokens in-context; LMPU 94 |
 | **P4** Negative controls show no false win | **PASS** | Batch 3 | 9/9 controls |
 | **P5** Buffer output composes into processor | **PASS** | `buffer_composition.py` | 168±0 host tokens, 3-stage pipe |
-| **P6** Energy advantage | **PARTIAL** | `energy.py` | Marginal parked cost ≈ 0 W |
+| **P6** Energy advantage | **PASS (kernel scale)** | `gpu_plane.py` | 2048³: 14.4× faster, 16.4× less energy |
+| **P7** Protocol overhead is flat | **PASS** | `dataplane.py` | 37 tokens, 64 KiB → 512 MiB |
 
-**Boundary**: **E=NARROW** — Token parity with prefix-cached agent on fixed-size tasks is a *bound*, not the thesis.
+**Boundary**: a script-writing agent also pays O(1) control tokens. LMPU does not
+beat it on tokens; it ties. The differentiators are a typed job with per-job
+accounting, bounded-latency decisions inside the compute, and a GPU data plane.
 
 ---
 
@@ -26,8 +29,11 @@
 
 This is a **systems claim with a clean scaling law**, not a token-savings claim.
 
-**Applies to**: Data-heavy, long-running, multi-tenant workloads.
-**Does not apply to**: Small fixed-size tasks (competent tool call ties it).
+**Applies to**: Data-heavy, long-running, multi-tenant workloads. Measured
+crossover is below the smallest tested size (LMPU's fixed cost, 93 tokens, is
+below a typical agent system prompt).
+**Does not apply to**: One-shot scripted computation, where a sandbox agent ties
+on tokens; and small tasks where a single call suffices.
 
 ---
 
@@ -35,12 +41,15 @@ This is a **systems claim with a clean scaling law**, not a token-savings claim.
 
 ### Experiments (Reproducible)
 ```bash
-uv run python benchmarks/experiments/dataplane.py          # P1
-uv run python benchmarks/experiments/multisession.py       # P2
+uv run python benchmarks/experiments/baseline_law.py       # P1, P3
+uv run python benchmarks/experiments/parked_sessions.py    # P2
 uv run python benchmarks/experiments/buffer_composition.py # P5
-uv run python benchmarks/experiments/energy.py             # P6
-uv run python benchmarks/experiments/capability_vs_rag.py  # P3 (vs RAG)
-uv run python benchmarks/experiments/cost_model.py         # R4
+uv run python benchmarks/experiments/gpu_plane.py          # P6
+uv run python benchmarks/experiments/dataplane.py          # P7
+uv run python benchmarks/experiments/capability_vs_rag.py  # secondary
+uv run python benchmarks/experiments/r5_gate.py            # planner
+uv run python benchmarks/experiments/energy.py             # energy noise floor
+uv run python benchmarks/experiments/cost_model.py         # cost model
 ```
 
 ### Test Suite
@@ -53,8 +62,15 @@ uv run python -m pytest tests/unit tests/integration -q
 1. **Dispatcher concurrency** (D1): `_dispatch_loop` now dispatches tasks, releases slots on completion
 2. **Worker handoff** (D2): Workers become available only in `_release_worker`
 3. **Buffer composition** (R1): `pure.func` accepts `{"buffer": id}` inputs, emits output buffers
-4. **Constrained decoding (R5)**: measured `lm-format-enforcer` at 100% valid JSON, 1.7–3.3× slower than free decode (26.7 / 25.2 / 13.7 tok/s vs ~45)
-5. **Interval NVML** (R5): Energy sampling every N forward passes (not per-token)
+4. **General-purpose sandbox over buffers** (D3): `python.vm` stages job buffers as
+   `.npy` and maps them read-only; `read_buffer()` finally works
+5. **S2 parking** (D4): KV offload used `to_legacy_cache`, removed in transformers
+   5.x, so it never freed VRAM. Now walks `cache.layers`; 1147 → 960 MiB
+6. **GPU data plane** (R7): `vector.engine` matmul has an opt-in CUDA path
+   (`LMPU_VECTOR_DEVICE=cuda`); 2048³ at 14.4× faster / 16.4× less energy
+7. **Constrained decoding (R5)**: measured `lm-format-enforcer` at 100% valid JSON,
+   1.7–2.1× slower than free decode
+8. **Interval NVML** (R5): Energy sampling every N forward passes (not per-token)
 
 ---
 
@@ -62,13 +78,15 @@ uv run python -m pytest tests/unit tests/integration -q
 
 | Experiment | Raw Data |
 |------------|----------|
-| P1 Dataplane | `benchmarks/results/dataplane/` |
-| P2 Multisession | `benchmarks/results/multisession/` |
+| P1/P3 Baseline law | `benchmarks/results/baseline_law/` |
+| P2 Parked sessions | `benchmarks/results/parked_sessions/` |
 | P5 Buffer Composition | `benchmarks/results/buffer_composition/` |
-| P6 Energy | `benchmarks/results/energy/` |
-| R3 Capability vs RAG | `benchmarks/results/capability/` |
-| R4 Cost Model | `benchmarks/results/cost_model/` |
+| P6 GPU plane | `benchmarks/results/gpu_plane/` |
+| P7 Dataplane | `benchmarks/results/dataplane/` |
+| Capability vs RAG | `benchmarks/results/capability/` |
+| Cost Model | `benchmarks/results/cost_model/` |
 | R5 Planner | `benchmarks/results/r5_gate/` |
+| Energy noise floor | `benchmarks/results/energy/` |
 
 ### Claim Artifacts
 ```
@@ -103,17 +121,25 @@ benchmarks/results/claims/
 
 **Not**: "We save tokens on every task."
 
-**Differentiator** (R3): LMPU solves needle-outside-top-k and cross-chunk aggregation where RAG provably cannot — this is the *capability* win; the token/session claims are the *enabling mechanism*.
+**Not**: "We beat a sandboxed script agent on tokens." That is a tie, measured and
+stated. Against a sandbox agent the differentiators are per-job accounting,
+bounded-latency model decisions inside the compute, and a GPU data plane.
+
+**Differentiator** (capability): LMPU answers queries whose in-context cost
+exceeds the model's window — 3,200 records need 55 k tokens, LMPU uses 94 with
+zero loss of correctness.
 
 ---
 
 ## Reproduction Checklist
 
-- [x] `uv run python benchmarks/experiments/dataplane.py` → P1 PASS
-- [x] `uv run python benchmarks/experiments/multisession.py` → P2 PASS
+- [x] `uv run python benchmarks/experiments/baseline_law.py` → P1, P3 PASS
+- [x] `uv run python benchmarks/experiments/parked_sessions.py` → P2 PASS
 - [x] `uv run python benchmarks/experiments/buffer_composition.py` → P5 PASS
-- [x] `uv run python benchmarks/experiments/energy.py` → P6 PARTIAL
-- [x] `uv run python benchmarks/experiments/capability_vs_rag.py` → R3 PASS
-- [x] `uv run python benchmarks/experiments/cost_model.py` → R4 PASS
-- [x] `uv run python benchmarks/experiments/r5_gate.py` → R5 measured (100% valid, 1.7–3.3× overhead)
+- [x] `uv run python benchmarks/experiments/gpu_plane.py` → P6 PASS (kernel scale)
+- [x] `uv run python benchmarks/experiments/dataplane.py` → P7 PASS
+- [x] `uv run python benchmarks/experiments/capability_vs_rag.py` → secondary
+- [x] `uv run python benchmarks/experiments/r5_gate.py` → planner measured
+- [x] `uv run python benchmarks/experiments/energy.py` → noise floor
+- [x] `uv run python benchmarks/experiments/cost_model.py` → cost model
 - [x] `uv run python -m pytest tests/unit tests/integration -q` → 126 PASS, 3 skipped

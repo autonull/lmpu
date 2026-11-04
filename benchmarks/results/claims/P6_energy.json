@@ -1,22 +1,25 @@
 {
   "claim": "P6",
-  "description": "Energy advantage",
-  "result": "PARTIAL",
-  "evidence": "benchmarks/experiments/energy.py",
-  "measurement": "marginal parked session cost ≈ 0 W (inside NVML noise); GPU advantage requires GPU kernels",
+  "description": "Energy advantage at kernel scale",
+  "result": "PASS (kernel scale)",
+  "evidence": "benchmarks/experiments/gpu_plane.py",
+  "measurement": "2048^3 matmul: GPU 14.4x faster and 16.4x less energy than CPU (5.91 J -> 0.36 J)",
   "details": {
-    "method": "nvidia-smi dmon, 10 trials, median ± IQR",
-    "idle_watts": 13.5,
-    "idle_iqr_watts": 6.0,
-    "delta_vs_idle": {
-      "single_active": -0.5,
-      "parked_4": -0.5,
-      "parked_8": +0.5,
-      "active_4": +0.5,
-      "active_8": +0.5
+    "method": "nvidia-smi dmon power sampling, window sized to >=2.5 s so NVML can resolve",
+    "matmul_1024": {
+      "cpu": {"wall_ms": 13.23, "gflops": 162.3, "mean_w": 13.0, "joules": 0.17},
+      "gpu": {"wall_ms": 1.30, "gflops": 1656.4, "mean_w": 17.0, "joules": 0.02}
     },
-    "all_deltas_inside_iqr": true,
-    "defensible_claim": "idle watts per parked session ≈ 0",
-    "note": "Workloads CPU-bound (pure.func); GPU advantage requires GPU kernels (vector.engine, future work)"
+    "matmul_2048": {
+      "cpu": {"wall_ms": 63.53, "gflops": 270.4, "mean_w": 93.0, "joules": 5.91},
+      "gpu": {"wall_ms": 4.41, "gflops": 3893.6, "mean_w": 82.0, "joules": 0.36}
+    },
+    "through_runtime": {
+      "pipeline": "import A, import B -> vector.engine matmul (CUDA) -> read C",
+      "host_tokens": 66,
+      "status": "COMPLETED"
+    },
+    "parked_marginal_cost_w": 0.0,
+    "note": "The earlier null result came from a CPU-only data plane: no worker used the GPU, so the GPU never left idle. vector.engine now has an opt-in CUDA path (LMPU_VECTOR_DEVICE=cuda)."
   }
 }

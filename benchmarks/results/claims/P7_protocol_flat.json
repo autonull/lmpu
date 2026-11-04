@@ -1,0 +1,12 @@
+{
+  "claim": "P7",
+  "description": "Protocol control cost is flat in data size",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/dataplane.py",
+  "measurement": "37 host tokens from 64 KiB to 512 MiB (3.6Mx)",
+  "details": {
+    "host_tokens_range": [29, 37],
+    "sizes": ["1 KiB", "64 KiB", "1 MiB", "16 MiB", "64 MiB", "256 MiB", "512 MiB"],
+    "scope": "Protocol overhead only: what the host must emit to reference a buffer and read a summary. This is not a comparison against a baseline."
+  }
+}

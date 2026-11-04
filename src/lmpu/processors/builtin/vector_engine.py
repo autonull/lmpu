@@ -45,6 +45,10 @@ class VectorEngineProcessor(Processor):
     def __init__(self):
         super().__init__()
         self._blas_threads = int(os.environ.get("OMP_NUM_THREADS", "1"))
+        # Opt-in: GPU matmul changes the last bits versus numpy, so CPU stays
+        # the default and the flag is explicit.
+        self._cuda = os.environ.get("LMPU_VECTOR_DEVICE", "cpu").lower() == "cuda"
+        self._cuda_min_dim = int(os.environ.get("LMPU_VECTOR_CUDA_MIN_DIM", "256"))
 
     async def setup(self, ctx: ProcessorContext) -> None:
         # Configure BLAS threads for determinism
@@ -155,7 +159,7 @@ class VectorEngineProcessor(Processor):
                     error_code="shape_mismatch",
                     error_message=f"matmul shape mismatch: {A.shape} @ {B.shape}",
                 )
-            C = A @ B
+            C = self._matmul_compute(A, B)
         ctx.progress(1.0, "matmul complete")
 
         summary = {
@@ -165,6 +169,18 @@ class VectorEngineProcessor(Processor):
             "max": float(C.max()),
         }
         return self._finalize(ctx, "C", C, summary)
+
+    def _matmul_compute(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
+        """Multiply on GPU when enabled and the operand is large enough to pay off."""
+        if not self._cuda or A.shape[0] < self._cuda_min_dim:
+            return A @ B
+
+        import torch
+
+        with torch.inference_mode():
+            a = torch.tensor(np.ascontiguousarray(A, dtype=np.float32), device="cuda")
+            b = torch.tensor(np.ascontiguousarray(B, dtype=np.float32), device="cuda")
+            return (a @ b).cpu().numpy()
 
     async def _dot(self, inputs: dict[str, Any], ctx: JobContext) -> Result:
         a = self._get_buffer(ctx, "a")

@@ -148,25 +148,45 @@ class PythonVMProcessor(Processor):
 
         # Prepare execution environment
         with tempfile.TemporaryDirectory() as tmpdir:
+            boot = self._write_buffer_files(ctx, tmpdir)
+
             # Write program to file
             program_path = os.path.join(tmpdir, "program.py")
             with open(program_path, "w") as f:
-                f.write(self._helper_code + "\n\n" + program)
-
-            # Prepare buffer data
-            buffer_data = {}
-            # This would be populated from ctx._buffers
+                f.write(self._helper_code + "\n\n" + boot + "\n\n" + program)
 
             # Execute in subprocess
             result = await self._execute_in_sandbox(
                 program_path,
-                buffer_data,
+                {},
                 ctx,
                 timeout,
             )
 
         ctx.progress(1.0, "finished")
         return result
+
+    def _write_buffer_files(self, ctx: JobContext, tmpdir: str) -> str:
+        """Stage job buffers as .npy files and return boot code that maps them.
+
+        The sandbox is a separate process, so buffers cannot be shared in memory
+        without handing over descriptors. Staging keeps isolation and lets user
+        programs call ``read_buffer(name)``, which returns a read-only memmap.
+        """
+        entries = []
+        for idx, (name, arr) in enumerate(getattr(ctx, "_buffers", {}).items()):
+            if not isinstance(arr, np.ndarray):
+                continue
+            path = os.path.join(tmpdir, f"buf_{idx}.npy")
+            np.save(path, arr, allow_pickle=False)
+            entries.append((str(name), path))
+
+        if not entries:
+            return ""
+        items = ",\n    ".join(
+            f"{name!r}: np.load({path!r}, mmap_mode='r')" for name, path in entries
+        )
+        return f"_buffers.update({{\n    {items},\n}})"
 
     async def _run_file(
         self,
@@ -190,17 +210,17 @@ class PythonVMProcessor(Processor):
 
             dest = os.path.join(tmpdir, "program.py")
             shutil.copy2(path, dest)
+            boot = self._write_buffer_files(ctx, tmpdir)
 
             # Prepend helper
             with open(dest) as f:
                 content = f.read()
             with open(dest, "w") as f:
-                f.write(self._helper_code + "\n\n" + content)
+                f.write(self._helper_code + "\n\n" + boot + "\n\n" + content)
 
-            buffer_data = {}
             result = await self._execute_in_sandbox(
                 dest,
-                buffer_data,
+                {},
                 ctx,
                 timeout,
             )

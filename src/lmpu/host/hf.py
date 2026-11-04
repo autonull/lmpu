@@ -254,24 +254,31 @@ class HFEngine(HostEngine):
         state.sleep_level = None
 
     def _offload_kv_cache(self, past_key_values) -> Any:
-        """Offload KV cache to CPU memory."""
-        if hasattr(past_key_values, "to_legacy_cache"):
-            legacy = past_key_values.to_legacy_cache()
-            return tuple((k.cpu(), v.cpu()) for k, v in legacy)
-        elif isinstance(past_key_values, tuple):
-            return tuple((k.cpu(), v.cpu()) for k, v in past_key_values)
-        return past_key_values
+        """Copy the live KV cache to CPU and drop the GPU tensors."""
+        pairs = self._kv_pairs(past_key_values)
+        return tuple((k.cpu(), v.cpu()) for k, v in pairs)
 
     def _restore_kv_cache(self, cpu_kv_cache) -> Any:
-        """Restore KV cache from CPU to GPU."""
-        if isinstance(cpu_kv_cache, tuple):
-            restored = tuple(
-                (k.to(self._device_obj), v.to(self._device_obj)) for k, v in cpu_kv_cache
-            )
-            from transformers.cache_utils import DynamicCache
+        """Restore a CPU KV cache to the device as a live DynamicCache."""
+        from transformers.cache_utils import DynamicCache
 
-            return DynamicCache.from_legacy_cache(restored)
-        return cpu_kv_cache
+        cache = DynamicCache()
+        for layer_idx, (k, v) in enumerate(cpu_kv_cache):
+            cache.update(k.to(self._device_obj), v.to(self._device_obj), layer_idx)
+        return cache
+
+    @staticmethod
+    def _kv_pairs(past_key_values) -> list[tuple[Any, Any]]:
+        """Return per-layer (key, value) tensors for any cache layout."""
+        if hasattr(past_key_values, "layers"):  # transformers >= 5 Cache
+            return [
+                (layer.keys, layer.values)
+                for layer in past_key_values.layers
+                if layer.keys is not None
+            ]
+        if hasattr(past_key_values, "to_legacy_cache"):
+            return list(past_key_values.to_legacy_cache())
+        return list(past_key_values)
 
     def stats(self) -> HostStats:
         return self.stats_

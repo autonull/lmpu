@@ -1,13 +1,24 @@
 {
-  "claim": "E=NARROW",
-  "description": "Token parity boundary vs prefix-cached agent",
-  "status": "BOUNDARY (not a headline result)",
-  "evidence": "Batch 1 (prior batch)",
-  "measurement": "Parity with prefix-cached agent on fixed-size task (N=5, 30-60 chars)",
-  "details": {
-    "context": "Original baselines were direct CoT and Qwenputer trace-tokens, not prefix-cached agent",
-    "framing_error": "Batch 1 added prefix-cached agent, found parity, wrote as conclusion. It is a BOUND, not the conclusion.",
-    "boundary": "On small fixed-size tasks, a competent tool call ties LMPU. The value is NOT 'we save tokens on every task'.",
-    "honest_framing": "Cost scales with decisions, not bytes. Marginal wait cost is zero. Applies to data-heavy, long-running, multi-tenant workloads."
-  }
+  "claim": "BOUNDARY",
+  "description": "Where LMPU stops winning",
+  "status": "STATED, NOT HIDDEN",
+  "evidence": "benchmarks/experiments/baseline_law.py, r5_gate.py",
+  "boundaries": [
+    {
+      "case": "one-shot scripted computation",
+      "result": "tie",
+      "why": "a script-writing sandbox agent also pays O(1) control tokens, independent of data size. Token count alone does not distinguish LMPU."
+    },
+    {
+      "case": "small fixed-size tasks",
+      "result": "tie",
+      "why": "a single model call answers without any pipeline; 93 tokens of protocol buys nothing."
+    },
+    {
+      "case": "constrained decoding throughput",
+      "result": "1.7-2.1x slower than free decode",
+      "why": "per-token cost is a tokenizer-trie walk sized by the allowed-character set of the FSM state; free-string values walk nearly the whole vocabulary."
+    }
+  ],
+  "honest_framing": "Lead with capability (queries whose in-context cost exceeds the window), per-job accounting, bounded-latency decisions inside the compute, and the GPU data plane. Do not lead with token counts against a script."
 }
