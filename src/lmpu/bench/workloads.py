@@ -458,12 +458,13 @@ _BATCH = WorkloadSpec(
     program_prompt=(
         "You have a tool that accepts a batch of operations. Reply with only one "
         'JSON object: '
-        '{"processor":"pure.func","op":"bigint_add","inputs":{"items":[...]}}.'
+        '{"processor":"pure.func","op":"bigint_add","inputs":{},"batch":{"items":[...]}}.'
     ),
     program={
         "processor": "pure.func",
         "op": "bigint_add",
-        "inputs": {"items": list(_BATCH_ITEMS)},
+        "inputs": {},
+        "batch": {"items": list(_BATCH_ITEMS)},
     },
     parse_answer=_parse_integer_answer,
     verify_answer=lambda value: value == str(len(_BATCH_ITEMS)),
@@ -1053,8 +1054,8 @@ def _make_batch_workload(name: str, count: int) -> WorkloadSpec:
     return WorkloadSpec(
         name=name,
         processor="pure.func",
-        op="batch",
-        inputs={"items": items},  # batch processor expects 'items' not 'jobs'
+        op="bigint_mul",
+        inputs={"items": items},  # consumed by lmpu.individual
         verify=verify,
         answer=str(count),
         prompt=(
@@ -1063,13 +1064,15 @@ def _make_batch_workload(name: str, count: int) -> WorkloadSpec:
         ),
         program_prompt=(
             "You have a batch tool. Reply with only one JSON object: "
-            '{"processor":"pure.func","op":"batch","inputs":{"items":[...]}}. '
+            '{"processor":"pure.func","op":"bigint_mul","inputs":{},'
+            '"batch":{"items":[...]}}. '
             f"Include {count} multiplication jobs."
         ),
         program={
             "processor": "pure.func",
-            "op": "batch",
-            "inputs": {"items": items},
+            "op": "bigint_mul",
+            "inputs": {},
+            "batch": {"items": items},
         },
         parse_answer=_parse_integer_answer,
         verify_answer=lambda v: v == str(count),

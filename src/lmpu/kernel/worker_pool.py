@@ -182,7 +182,6 @@ class WorkerPool:
         )
 
         self._workers[worker_id] = worker
-        self._available_workers.setdefault(processor, set()).add(worker_id)
 
         # Start heartbeat monitor
         asyncio.create_task(self._monitor_worker(worker_id))
@@ -650,7 +649,10 @@ class WorkerPool:
 
             # Spawn new worker (manifest would come from registry)
             manifest = {"name": processor, "version": "0.1.0"}
-            return await self._spawn_worker(processor, manifest)
+            worker = await self._spawn_worker(processor, manifest)
+            worker.current_job = job.job_id
+            worker.last_heartbeat = get_clock().monotonic()
+            return worker
 
     async def send_command(self, worker_id: str, command: dict[str, Any]) -> None:
         """Send command to worker."""

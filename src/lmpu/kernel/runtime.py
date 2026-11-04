@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,6 +104,9 @@ class SessionState:
     authorized_processors: set[str] | None = None
 
 
+logger = logging.getLogger(__name__)
+
+
 class Runtime:
     """LMPU Runtime - main kernel facade."""
 
@@ -159,6 +163,7 @@ class Runtime:
         self._server: asyncio.Server | None = None
         self._running = False
         self._dispatcher_tasks: list[asyncio.Task[None]] = []
+        self._job_tasks: set[asyncio.Task[None]] = set()
 
         # Register built-in processors
         self._register_builtin_processors()
@@ -291,7 +296,11 @@ class Runtime:
             )
 
     async def _dispatch_loop(self, processor: str) -> None:
-        """Dequeue and execute jobs for one processor."""
+        """Dequeue and execute jobs for one processor, overlapping up to its limit.
+
+        Jobs must not be awaited inline: a parked session's job runs off-host and
+        other sessions must be able to dispatch while it does.
+        """
         while self._running:
             try:
                 scheduled = await self.scheduler.next_job(processor)
@@ -305,10 +314,17 @@ class Runtime:
                 continue
 
             await self.scheduler.acquire_slot(processor)
-            try:
-                await self._run_job(job)
-            finally:
-                self.scheduler.release_slot(processor)
+            task = asyncio.create_task(self._run_job(job))
+            self._job_tasks.add(task)
+            task.add_done_callback(lambda t, p=processor: self._release_job_slot(p, t))
+
+    def _release_job_slot(self, processor: str, task: asyncio.Task[None]) -> None:
+        self._job_tasks.discard(task)
+        self.scheduler.release_slot(processor)
+        if not task.cancelled():
+            exc = task.exception()
+            if exc is not None:
+                logger.error("dispatch job failed", exc_info=exc)
 
     async def _run_job(self, job: JobRecord) -> None:
         """Assign a job to a worker and wait for its terminal state."""

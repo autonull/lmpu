@@ -59,6 +59,7 @@ class FakeModel:
         past_key_values=None,
         use_cache=True,
         return_dict=True,
+        logits_to_keep=None,
     ):
         fed = input_ids.shape[1]
         self.calls.append(fed)

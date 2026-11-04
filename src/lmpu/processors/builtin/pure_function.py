@@ -55,8 +55,9 @@ class PureFunctionProcessor(Processor):
     async def execute(self, job: dict[str, Any], ctx: JobContext) -> Result:
         op = job.get("op")
         inputs = job.get("inputs", {})
-        # Batch jobs have items in inputs, not a separate "batch" key
-        if inputs.get("items") is not None or op == "batch":
+        # A batch is signalled either by the top-level `batch` field or by the
+        # declared `batch` op, whose inputs carry `items`.
+        if job.get("batch") is not None or op == "batch":
             return await self._batch(job, ctx)
 
         try:
@@ -242,9 +243,7 @@ class PureFunctionProcessor(Processor):
 
     async def _batch(self, job: dict[str, Any], ctx: JobContext) -> Result:
         """Execute batch of operations."""
-        # Batch data is in job["inputs"]["items"], not job["batch"]
-        inputs = job.get("inputs", {})
-        items = inputs.get("items", [])
+        items = (job.get("batch") or {}).get("items") or (job.get("inputs") or {}).get("items") or []
         default_op = job.get("op", "bigint_mul")
 
         results = []
