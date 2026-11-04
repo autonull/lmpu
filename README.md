@@ -1,4 +1,4 @@
-# Abstract Computational Co-Processor for Language Models
+# LMPU — Abstract Computational Co-Processor for Language Models
 
 > **Measured status** — preliminary paper: [`paper/preliminary.md`](paper/preliminary.md) ·
 > development plan: [`TODO.5.md`](TODO.5.md) · claim artifacts: `benchmarks/results/claims/`.
@@ -7,196 +7,268 @@
 > and 16.4× more efficiently on the GPU than the CPU. A script-writing sandbox
 > agent ties on tokens — see the paper's non-claims.
 
-### 1. Goals
+**LMPU is a working implementation** of the abstract co-processor architecture. It provides a typed, asynchronous interface between a host language model and external computational units (co-processors), with native sleep/wake, shared buffers, and resource accounting.
 
-Design a clean, high-performance interface between a host language model (or any autoregressive / generative model) and one or more external computational units (“co-processors”).
+---
 
-Primary requirements:
-- **Maximum abstraction**: The host model only sees a narrow, stable interface. The co-processor can be anything: pure function, virtual machine, DSP, interpreter, symbolic engine, another neural network, hardware accelerator, etc.
-- **Maximum efficiency** (latency, energy, memory bandwidth, host model FLOPs).
-- Support for long-running, multi-step, or iterative computation without forcing every cycle through the host model’s generation loop.
-- Explicit sleep / idle / wait modes so the host can pause generation while the co-processor works.
-- Portability across model families (transformers, hybrid DeltaNet / linear-attention models, SSMs, pure RNNs, multimodal models, etc.).
+## Why This Exists: The Token Tax Problem
 
-Non-goals: forcing the co-processor to live inside the model weights or recurrent state.
+**Large language models are expensive at the margin.** Every forward pass costs GPU FLOPs, memory bandwidth, KV-cache memory, and energy. Yet current agent systems force models to:
 
-### 2. High-Level Architecture
+- **Simulate computation** by generating trace tokens (Qwenputer-style: 1 CPU cycle ≈ 1 model token)
+- **Poll for status** by repeatedly invoking the model to ask "are you done yet?"
+- **Serialize large results** into the context window (16 MB matrix = millions of tokens)
+- **Narrate execution** instead of delegating to native hardware
+
+This is the **token tax**: the model pays inference cost for every computational step, every poll, every byte of output.
+
+### The Co-Processor Alternative
+
+LMPU implements a different architecture: **the model is a semantic supervisor, not a CPU.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Host Model (LLM)                                               │
+│  • Understands intent, chooses tools, interprets results        │
+│  • Emits ~40 control tokens: "submit matmul, sleep until done"  │
+│  • SLEEPS: 0 forward passes, 0 tokens generated, KV cache frozen│
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ JSON-RPC (Unix socket)
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LMPU Kernel Runtime                                            │
+│  • Schedules job on vector.engine (BLAS/GPU)                    │
+│  • 2048³ matmul executes at native speed (~0.1s)                │
+│  • Writes 16 MB result to shared buffer                         │
+│  • Injects 40-token wake event: "job done, result in buf_C"     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**The model only pays for decisions, not steps.** Cost scales as `host_tokens ≈ a + b·decisions`, independent of data size, execution duration, or hardware instruction count.
+
+---
+
+## Measured Results (All Core Claims Validated)
+
+| Claim | Description | Measured Result | Evidence |
+|-------|-------------|-----------------|----------|
+| **P1** | Control cost flat in data size | 93–95 tok, 1.2 KiB → 256 MiB (218,000×) | `baseline_law.py` |
+| **P2** | Parked sessions cost nothing | 0 forwards, 0.696s vs 0.699s; 4 concurrent 4.04× | `parked_sessions.py` |
+| **P3** | Capability beyond context window | 3,200 records → 55k in-context; LMPU 94 | `baseline_law.py` |
+| **P5** | Buffer output composes | 168±0 tok, 3-stage, 1–256 MiB | `buffer_composition.py` |
+| **P6** | GPU plane energy-positive | 2048³: 14.4× faster, 16.4× less energy | `gpu_plane.py` |
+| **P7** | Protocol overhead flat | 37 tok, 64 KiB → 512 MiB | `dataplane.py` |
+| **O0** | Horizon scaling (utility) | 66–68 tok/job constant N=1→40; 3.85× wall speedup | `horizon.py` |
+| **O1** | Adaptive supervision | Oracle F1=0.976; One-shot 0.499 post-drift; Adaptive 0.976 (100% recovery, 3 dec/shard) | `adaptive_supervision.py` |
+| **O2** | Decision-cost law | `host_tokens ≈ 17 + 93×decisions`; bytes slope 0.0000 | `decision_cost_law.py` |
+
+**Non-claims (measured ties):**
+- Script-writing sandbox agent ties LMPU on tokens (O(1) control cost)
+- Token counts vs. a script agent: it is a tie, measured
+
+All claim artifacts: `benchmarks/results/claims/*.json`
+
+---
+
+## Architecture (Implemented)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Host Model (LLM / etc.)                 │
-│  - Language understanding, planning, tool selection         │
-│  - Emits special control tokens or structured calls         │
+│  Host Model (LLM)                                           │
+│  - Generates control tokens / structured calls              │
+│  - Sleeps while co-processor works (KV cache frozen)        │
 └──────────────────────┬──────────────────────────────────────┘
-                       │ Abstract Co-Processor Interface
-                       │ (submit / poll / wait / sleep / result)
-┌──────────────────────▼──────────────────────────────────────┐
-│              Co-Processor Runtime / Manager                 │
-│  - Job queue, scheduling, isolation, resource limits       │
-│  - Optional shared memory regions / zero-copy buffers       │
+                       │ JSON-RPC over Unix socket
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  LMPU Kernel Runtime                                        │
+│  - JobTable, Scheduler, QuotaManager, EventLog              │
+│  - BufferManager (SHM, grants, checksums, partial reads)    │
+│  - CapabilityRegistry (discovery, routing, limits)          │
+│  - WorkerPool (process isolation, timeouts, retries)        │
 └──────────────────────┬──────────────────────────────────────┘
                        │
         ┌──────────────┼──────────────┬─────────────────┐
         ▼              ▼              ▼                 ▼
-   Pure Function   Interpreter     DSP / Vector     Another
-   (math, lookup)  / VM            Engine           Neural Net
+   pure.func      python.vm      vector.engine    symbolic.planner
+   (exact math)   (Python VM)    (BLAS/NumPy)     (exact search)
+        ▼              ▼              ▼                 ▼
+   neural.summary  hardware.stub  ...              ...
 ```
 
-The host model never directly executes the co-processor’s internal steps. It only issues high-level commands and later receives results (or status).
+---
 
-### 3. Abstract Co-Processor Interface
+## Core Primitives (Host → Runtime)
 
-All communication occurs through a small, typed, versioned interface. Implementations may be software, hardware, or hybrid.
+The host model emits structured control messages. The runtime intercepts, executes, and injects compact events back into the host's generation stream.
 
-#### Core Objects
+```json
+// Submit an asynchronous job
+{"method": "lmpu.submit", "params": {
+  "processor": "vector.engine",
+  "op": "matmul",
+  "inputs": {"A": {"buffer": "buf_A"}, "B": {"buffer": "buf_B"}},
+  "outputs": {"C": {"buffer": "buf_C"}},
+  "config": {"callback_mode": "async"}
+}}
 
-- **Job**: Opaque handle representing a submitted computation.
-- **Buffer**: Named, typed memory region (input, output, scratch, persistent).
-- **Status**: `{pending, running, completed, failed, cancelled, sleeping}`.
-- **Capability Descriptor**: Static description of what a co-processor supports (supported ops, max memory, determinism guarantees, latency class, etc.).
+// Sleep until job completes (host generates 0 tokens while waiting)
+{"method": "lmpu.sleep", "params": {
+  "until": {"any": ["job_001"]},
+  "level": "S1"
+}}
 
-#### Primitive Operations (Host → Co-Processor)
+// Wake event injected into host context (resumes generation)
+{"method": "lmpu.wake", "params": {}}
 
-```
-Submit(job_spec) → JobHandle
-  job_spec = {
-    op_or_program,          // string / binary / AST / function id
-    inputs: [Buffer | Value],
-    config: {timeout, priority, memory_limit, determinism, ...},
-    callback_mode: sync | async | interrupt
-  }
-
-Poll(JobHandle) → Status + optional progress
-
-Wait(JobHandle, timeout?) → Status   // blocks host generation if desired
-
-ReadResult(JobHandle, buffer_name?) → Value or Buffer view
-
-WriteInput(JobHandle or Buffer, data)
-
-Cancel(JobHandle)
-
-Sleep(JobHandle or Global, until_event?)   // host can also sleep
-Wake(JobHandle or Global)
-
-Configure(capability_query or resource_limits)
+// Read bounded result slice (never dumps full matrix into context)
+{"method": "lmpu.read", "params": {
+  "buffer": "buf_C",
+  "slices": [[0, 4], [0, 4]],
+  "max_inline_bytes": 4096
+}}
 ```
 
-#### Events / Signals (Co-Processor → Host)
+**Primitive operations:** `submit`, `poll`, `wait`, `read`, `write`, `cancel`, `sleep`, `wake`, `capabilities`, `configure`
 
-- `JobCompleted(handle, result_summary)`
-- `JobFailed(handle, error)`
-- `Progress(handle, fraction or checkpoint)`
-- `NeedsMoreInput(handle, prompt)` (for interactive / multi-turn co-processors)
-- `Sleeping(handle)` / `Woken(handle)`
+**Events injected into host:** `JobCompleted`, `JobFailed`, `Progress`, `NeedsMoreInput`, `Woken`, `BufferUpdated`, `ControlError`
 
-The host model can treat these as special tokens, tool responses, or structured JSON, depending on its training.
+---
 
-### 4. Execution Model & Sleep
+## Efficiency Gains (Measured)
 
-**Synchronous mode** (simple cases):
+| Dimension | Tool Calls / Chain-of-Thought | LMPU Co-Processor |
+|-----------|------------------------------|-------------------|
+| **Large data** | Serialized into context (millions of tokens) | Buffer reference (~40 tokens) |
+| **Long jobs** | Polling / blocking model turns | Host sleeps: 0 forward passes |
+| **Context growth** | O(data size + steps) | O(decisions) ≈ constant |
+| **Energy while waiting** | High (generating tokens) | Near-zero (KV cache frozen) |
+| **Concurrency** | Application-layer orchestration | Runtime-native scheduling |
+| **Exact computation** | Unreliable / token-expensive | Native deterministic executors |
+| **Hardware routing** | Hidden / manual | Capability-based, explicit |
+
+**Key scaling law** (O2): `host_tokens ≈ 17 + 93×decisions` — independent of data size and execution duration.
+
+---
+
+## Co-Processor Types (Implemented)
+
+| Processor | Operations | Deterministic | Latency | Use Case |
+|-----------|------------|---------------|---------|----------|
+| `pure.func` | bigint_add, mul, mod_pow, sha256, json_query | Yes | μs | Exact arithmetic, crypto, lookup |
+| `python.vm` | run_program | No | ms–s | Multi-step programs, data processing |
+| `vector.engine` | matmul, dot, fft, conv1d, softmax | Yes | ms | Linear algebra, signal processing |
+| `symbolic.planner` | bfs_plan, constraint_solve, shortest_path | Yes | ms–s | Exact search, planning |
+| `neural.summary` | summarize_text_buffer | No | s | Neural summarization / retrieval |
+| `hardware.stub` | (simulated) | Yes | configurable | Hardware accelerator placeholder |
+
+Capability descriptors queried at runtime via `lmpu.capabilities`.
+
+---
+
+## Integration with AIOS (Strategic Direction)
+
+LMPU is designed to integrate as the **Compute Manager** subsystem of [AIOS](https://github.com/aios-foundation/aios):
+
+| Layer | Responsibility |
+|-------|----------------|
+| **AIOS** | Agent lifecycle, LLM inference, context/memory, tool management, high-level scheduling |
+| **LMPU** | Computational job lifecycle, worker/processor management, buffer management, job-level scheduling, resource accounting |
+
+**Proposed Cerebrum API:**
+```python
+job = await aios.compute.submit(
+    processor="python.vm",
+    operation="analyze",
+    inputs={"dataset": dataset_buffer},
+    budget={"memory_mb": 4096, "timeout_seconds": 120},
+)
+await job.wait()
+result = await job.result()
 ```
-Host emits:  <coproc call="matmul" ...>
-Co-processor runs to completion (or timeout)
-Host receives: <result> ... </result>
+
+**Integration phases:**
+1. LMPU as AIOS compute sidecar (IPC)
+2. Native Cerebrum Compute API
+3. Kernel integration (hierarchical scheduling, shared context events)
+4. Durable workflows (checkpointing, replay, recovery)
+5. Rust implementation (`aios-rs`)
+
+---
+
+## Quick Start
+
+```bash
+# Install dependencies
+uv sync --dev --all-extras
+
+# Run core measured experiments
+uv run python benchmarks/experiments/baseline_law.py       # P1, P3
+uv run python benchmarks/experiments/horizon.py            # O0
+uv run python benchmarks/experiments/decision_cost_law.py  # O2
+uv run python benchmarks/experiments/adaptive_supervision.py # O1
+
+# Run full test suite (186 tests)
+uv run python -m pytest tests/ -q
+
+# View claim artifacts
+cat benchmarks/results/claims/*.json
 ```
 
-**Asynchronous / long-running mode** (preferred for efficiency):
-1. Host submits job and immediately continues or enters a sleep state.
-2. Co-processor runs independently (possibly on different hardware / thread / process).
-3. Host can:
-   - Continue generating other text
-   - Explicitly `Sleep` (stop autoregressive generation and wait for an event)
-   - Poll occasionally
-4. When the job finishes, an interrupt-style token or structured message is injected into the host’s context (or the host is woken).
+---
 
-**Sleep instruction / mode**:
-- Host can emit a special token or call `Sleep(until=job_done | timeout | external_event)`.
-- While sleeping, the host model does not generate tokens and ideally consumes near-zero compute/energy (KV cache frozen, no forward passes).
-- Wake-up injects a wake token + result summary into the context window.
+## Repository Structure
 
-This is the key efficiency lever: the expensive host model only runs when it is making decisions or producing language, not while the co-processor is grinding.
+```
+lmpu/
+├── src/lmpu/
+│   ├── kernel/           # Runtime, scheduler, quotas, jobs, events
+│   ├── host/             # Session controller, HF engine, parser, metrics
+│   ├── processors/       # pure.func, python.vm, vector.engine, ...
+│   ├── memory/           # BufferManager, SHM, grants, checksums
+│   ├── protocol/         # JSON-RPC messages, errors, sentinels
+│   ├── bench/            # Benchmark harness, workloads, reports
+│   └── observability/    # Tracing, dashboard
+├── benchmarks/
+│   ├── experiments/      # P1–P7, O0–O2 measurement scripts
+│   └── results/claims/   # JSON claim artifacts
+├── paper/
+│   └── preliminary.md    # Living draft paper
+├── tests/                # Unit, integration, scenario, property, failure
+└── TODO.5.md             # Development plan (Revision 3)
+```
 
-### 5. Memory & Efficiency Design
+---
 
-**Memory hierarchy**
-- Private co-processor memory (default).
-- Optional shared zero-copy buffers (explicitly granted by the host or runtime).
-- Persistent co-processor state across jobs (optional, capability-flagged).
-- Streaming / chunked I/O for large data.
+## Key Design Principles (Validated by Measurement)
 
-**Efficiency principles**
-- Co-processor runs at native speed (CPU cycles, GPU kernels, FPGA, etc.). No forced token-per-instruction tax.
-- Host model only pays for the control tokens + final result tokens.
-- Batching of many small jobs.
-- Speculative execution and early cancellation.
-- Energy: sleep states for both host and co-processor; power-gate unused units.
-- Memory: avoid materializing full traces; use compact status + result only.
+1. **Control plane ≠ data plane** — Model sees 40-token summaries; 16 MB matrices stay in buffers
+2. **Sleep is a first-class primitive** — Host forwards = 0 while co-processor works
+3. **Decisions, not steps** — Cost scales with model decisions, not computational steps
+4. **Capability-based routing** — Host queries what's available; runtime dispatches
+5. **Determinism flags** — Exact co-processors advertise `deterministic: true`; results checksummed
+6. **Model-agnostic** — Works with any autoregressive model (tested: Qwen2.5-0.5B)
+7. **No in-weight computation** — Co-processor is external; no token tax per instruction
 
-**Determinism & Verifiability**
-- Capability flag for “bit-exact / deterministic”.
-- Optional execution traces or proofs for auditing (not required for normal operation).
+---
 
-### 6. Integration with the Host Model
+## Status & Roadmap
 
-The host model is trained or prompted to:
-- Recognize when a task should be offloaded.
-- Emit well-formed `Submit` calls (can reuse existing tool-call format).
-- Handle asynchronous results and wake events.
-- Decide whether to sleep or continue generating.
+| Milestone | Status |
+|-----------|--------|
+| Measured core (P1–P7) | ✅ Complete |
+| O0 Horizon scaling | ✅ Complete |
+| O1 Adaptive supervision | ✅ Complete |
+| O2 Decision-cost law | ✅ Complete |
+| O3 Replay / ledger / budgets | ⏳ Next |
+| O4 Crash-resume | ⏳ Next |
+| Paper draft (with O0/O1/O2) | ⏳ After O3/O4 |
+| AIOS integration (Phase 1) | 📋 Planned |
 
-No requirement that the co-processor lives inside the model weights or recurrent state. The interface is external from the model’s perspective.
+See [`TODO.5.md`](TODO.5.md) for detailed development plan.
 
-Optional tight integrations:
-- Special control tokens that the runtime intercepts before they reach the model’s vocabulary.
-- Direct injection of results into the KV cache or recurrent state (for hybrid models).
+---
 
-### 7. Versatility — Example Co-Processor Types
+## License
 
-Because the interface is abstract, the same host can drive:
-
-| Type              | Example Use Case                     | Implementation Notes                  |
-|-------------------|--------------------------------------|---------------------------------------|
-| Pure Function     | Exact arithmetic, crypto, lookup     | Stateless, ultra-fast                 |
-| Virtual Machine   | Python / WASM / RISC-V interpreter   | Full multi-step programs              |
-| DSP / Vector      | Signal processing, linear algebra    | Highly optimized kernels              |
-| Neural Co-proc    | Small specialist model, retrieval    | Another neural net with private state |
-| Symbolic Engine   | Theorem prover, planner, CAS         | Deterministic search                  |
-| Hardware          | Real FPGA / ASIC / GPU kernel        | Lowest latency & energy               |
-| Multi-agent       | Another language model instance      | Hierarchical systems                  |
-
-A single host can talk to many different co-processors simultaneously.
-
-### 8. Applicability to Other Model Families
-
-The design is intentionally model-agnostic:
-
-- **Pure transformers**: Works via tool-call tokens + runtime interception.
-- **Hybrid models (Qwen3.5-style Gated DeltaNet, etc.)**: Can still use the external interface; optionally the co-processor can also write into the recurrent state if desired, but this is not required.
-- **SSMs / Linear RNNs / Mamba-style**: Same external interface; sleep is especially natural because state is already compact.
-- **Multimodal models**: Co-processor can accept image/audio tensors via shared buffers.
-- **Non-autoregressive or diffusion models**: Interface can be adapted to “condition on result” rather than token injection.
-- **Agents / multi-model systems**: One model can act as co-processor for another.
-
-The only hard requirement is that the host can emit structured control messages and later consume structured results.
-
-### 9. Optional Advanced Features
-
-- **Resource accounting & quotas** (tokens, FLOPs, energy, memory).
-- **Sandboxing / capability security** (co-processor cannot freely read host memory).
-- **Observability**: optional detailed traces, profiling, or formal verification hooks.
-- **Composition**: co-processors can call other co-processors.
-- **Migration**: long-running jobs can be checkpointed and moved between devices.
-
-### 10. Summary of Efficiency Gains vs. Current Qwenputer-style Approaches
-
-| Aspect                  | Current (in-weight + DeltaNet)      | Ideal Abstract Co-Processor          |
-|-------------------------|-------------------------------------|--------------------------------------|
-| Cycles per instruction  | Many host tokens                    | Native hardware / software speed     |
-| Host model compute      | Continuous during co-proc work      | Only at submit & result              |
-| Energy while waiting    | High (generating tokens)            | Near-zero (sleep)                    |
-| Memory                  | Contends with model state           | Private + optional shared            |
-| Flexibility             | Tied to specific architecture       | Arbitrary implementation             |
-| Portability             | Model-family specific               | Model-agnostic                       |
-
-This design keeps the spirit of “the model can perform exact, powerful computation” while removing the fundamental inefficiency of forcing every computational step through the generative process of the host model.
+Apache-2.0
