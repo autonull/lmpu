@@ -2237,6 +2237,7 @@ name = "lmpu"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "accelerate" },
     { name = "blake3" },
     { name = "lm-format-enforcer" },
     { name = "numpy" },
@@ -2308,6 +2309,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "accelerate", specifier = ">=0.34.2" },
     { name = "accelerate", marker = "extra == 'host'", specifier = ">=0.33,<1" },
     { name = "blake3", specifier = ">=0.4,<1" },
     { name = "causal-conv1d", marker = "extra == 'optimized'", specifier = ">=1.7.0" },

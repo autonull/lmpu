@@ -107,13 +107,12 @@ A job must accept a `BufferRef` input and write a `BufferRef` output.
 - [x] Gate R4: a chart where LMPU's advantage *grows* with data size and session
       count — that is the thesis in one figure.
 
-### R5 — Planner, bounded · ~1 day, then stop **DONE (code complete)**
+### R5 — Planner, bounded · ~1 day, then stop **CODE DONE, GATE UNMEASURED**
 
 - [x] `outlines` FSM behind the existing decoder seam (lm-format-enforcer
       re-parses the prefix per token: 16 tok/s, O(n²)).
 - [x] Fix per-token NVML sampling in `HFEngine._record` (syscall per token).
-- [ ] Gate R5: constrained ≥ 45 tok/s at ≥ 95 % valid JSON, or accept the oracle
-      planner and close this line.
+- [ ] Gate R5: constrained ≥ 45 tok/s at ≥ 95 % valid JSON — **BLOCKED** by outlines-core build failure in this environment. Code implemented in `src/lmpu/host/grammar.py` (OutlinesDecoder with schema→regex compilation). Accept oracle planner and close line, or measure in proper build environment.
 
 ### R6 — Release artifacts · ~1 day **DONE**
 
