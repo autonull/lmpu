@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 class LMPUError(Exception):
     """Base LMPU exception."""
-    
+
     def __init__(
         self,
         message: str,
@@ -27,6 +27,7 @@ class LMPUError(Exception):
 
     def to_rpc_error(self) -> "RPCError":
         from .messages import RPCError
+
         return RPCError(
             code=self.code,
             message=self.message,
@@ -38,41 +39,49 @@ class LMPUError(Exception):
 
 class ProtocolError(LMPUError):
     """Protocol-level errors."""
+
     pass
 
 
 class ValidationError(LMPUError):
     """Schema validation errors."""
+
     pass
 
 
 class QuotaExceededError(LMPUError):
     """Resource quota exceeded."""
+
     pass
 
 
 class BufferError(LMPUError):
     """Buffer-related errors."""
+
     pass
 
 
 class JobError(LMPUError):
     """Job execution errors."""
+
     pass
 
 
 class ProcessorError(LMPUError):
     """Processor-specific errors."""
+
     pass
 
 
 class SandboxError(LMPUError):
     """Sandbox/execution environment errors."""
+
     pass
 
 
 class HostEngineError(LMPUError):
     """Host engine errors."""
+
     pass
 
 

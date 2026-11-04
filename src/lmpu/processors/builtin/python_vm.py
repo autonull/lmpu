@@ -187,6 +187,7 @@ class PythonVMProcessor(Processor):
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy file to temp dir
             import shutil
+
             dest = os.path.join(tmpdir, "program.py")
             shutil.copy2(path, dest)
 
@@ -266,16 +267,14 @@ exec(open('{program_path}').read())
         # Parse result from stdout (last line should be JSON)
         output = stdout.decode().strip()
         try:
-            result_data = json.loads(output.split('\n')[-1])
+            result_data = json.loads(output.split("\n")[-1])
         except json.JSONDecodeError:
             result_data = {"output": output}
 
         return Result(
             success=True,
             data=result_data,
-            checksum=compute_checksum(
-                json.dumps(result_data, sort_keys=True).encode()
-            ),
+            checksum=compute_checksum(json.dumps(result_data, sort_keys=True).encode()),
         )
 
     async def cancel(self, job_id: str) -> None:

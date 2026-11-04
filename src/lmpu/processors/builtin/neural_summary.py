@@ -52,6 +52,7 @@ class NeuralSummaryProcessor(Processor):
             # Lazy load model
             try:
                 from sentence_transformers import SentenceTransformer
+
                 model_name = ctx.runtime_config.get("summary_model", "all-MiniLM-L6-v2")
                 self._model = SentenceTransformer(model_name)
             except ImportError:
@@ -113,7 +114,7 @@ class NeuralSummaryProcessor(Processor):
     async def _summarize_textrank(self, text: str) -> str:
         """Extractive summarization using TextRank algorithm."""
         # Simple sentence splitting
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
 
         if len(sentences) <= 3:
@@ -124,7 +125,7 @@ class NeuralSummaryProcessor(Processor):
         from collections import Counter
 
         def sentence_vector(sentence):
-            words = re.findall(r'\w+', sentence.lower())
+            words = re.findall(r"\w+", sentence.lower())
             return Counter(words)
 
         vectors = [sentence_vector(s) for s in sentences]
@@ -159,7 +160,7 @@ class NeuralSummaryProcessor(Processor):
         num_sentences = max(1, min(3, n // 3))
         selected = sorted(ranked[:num_sentences])
 
-        return ' '.join(sentences[i] for i in selected)
+        return " ".join(sentences[i] for i in selected)
 
     async def _summarize_model(self, text: str) -> str:
         """Model-based summarization (placeholder)."""

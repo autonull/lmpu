@@ -16,6 +16,7 @@ from .jobs import JobRecord, JobStatus, JobTable
 @dataclass
 class ScheduledJob:
     """Job in scheduler queue with effective priority."""
+
     job: JobRecord
     effective_priority: int
     enqueued_at: float
@@ -120,9 +121,7 @@ class Scheduler:
             self._batch_buffers[batch_key].append(scheduled)
             # Start batch timer if not already running
             if batch_key not in self._batch_timers:
-                self._batch_timers[batch_key] = asyncio.create_task(
-                    self._flush_batch(batch_key)
-                )
+                self._batch_timers[batch_key] = asyncio.create_task(self._flush_batch(batch_key))
         else:
             # Direct to processor queue
             await self._queues[job.processor].put(scheduled)
@@ -140,8 +139,8 @@ class Scheduler:
         jobs.sort()
 
         # Take up to max_batch_size
-        batch_jobs = jobs[:self.max_batch_size]
-        remaining = jobs[self.max_batch_size:]
+        batch_jobs = jobs[: self.max_batch_size]
+        remaining = jobs[self.max_batch_size :]
 
         # Re-enqueue remaining
         for job in remaining:

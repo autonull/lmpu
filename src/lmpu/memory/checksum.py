@@ -9,6 +9,7 @@ from typing import Optional
 # Try to import blake3, fallback to blake2b if not available
 try:
     import blake3
+
     HAS_BLAKE3 = True
 except ImportError:
     HAS_BLAKE3 = False
@@ -16,6 +17,7 @@ except ImportError:
 
 class ChecksumAlgorithm(str, Enum):
     """Supported checksum algorithms."""
+
     BLAKE3 = "blake3"
     BLAKE2B = "blake2b"
     SHA256 = "sha256"
@@ -23,7 +25,7 @@ class ChecksumAlgorithm(str, Enum):
 
 def _get_blake3_hasher():
     """Get a BLAKE3 hasher, using built-in hashlib if available, otherwise blake3 module."""
-    if hasattr(hashlib, 'blake3'):
+    if hasattr(hashlib, "blake3"):
         return hashlib.blake3()
     elif HAS_BLAKE3:
         return blake3.blake3()
@@ -70,8 +72,13 @@ def compute_checksum_file(
         while chunk := f.read(chunk_size):
             hasher.update(chunk)
 
-    prefix = "blake3" if algorithm == ChecksumAlgorithm.BLAKE3 else \
-             "blake2b" if algorithm == ChecksumAlgorithm.BLAKE2B else "sha256"
+    prefix = (
+        "blake3"
+        if algorithm == ChecksumAlgorithm.BLAKE3
+        else "blake2b"
+        if algorithm == ChecksumAlgorithm.BLAKE2B
+        else "sha256"
+    )
     return f"{prefix}:{hasher.hexdigest()}"
 
 
@@ -95,8 +102,13 @@ def compute_checksum_mmap(
         end = min(offset + chunk_size, size)
         hasher.update(mmap_obj[offset:end])
 
-    prefix = "blake3" if algorithm == ChecksumAlgorithm.BLAKE3 else \
-             "blake2b" if algorithm == ChecksumAlgorithm.BLAKE2B else "sha256"
+    prefix = (
+        "blake3"
+        if algorithm == ChecksumAlgorithm.BLAKE3
+        else "blake2b"
+        if algorithm == ChecksumAlgorithm.BLAKE2B
+        else "sha256"
+    )
     return f"{prefix}:{hasher.hexdigest()}"
 
 

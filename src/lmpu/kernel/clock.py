@@ -50,7 +50,7 @@ class RealClock(Clock):
 
 class FakeClock(Clock):
     """Deterministic fake clock for testing."""
-    
+
     def __init__(self, initial_time: float = 0.0):
         self._time = initial_time
         self._monotonic = initial_time
@@ -95,6 +95,7 @@ class FakeClock(Clock):
 @dataclass
 class FakeTimerHandle:
     """Timer handle for fake clock."""
+
     clock: FakeClock
     when: float
     counter: int

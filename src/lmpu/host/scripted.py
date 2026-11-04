@@ -68,9 +68,7 @@ class ScriptedDecoder(ConstrainedDecoder):
         if kind == "event":
             event = segment.get("event", {})
             body = (
-                json.dumps(event, separators=(",", ":"))
-                if isinstance(event, dict)
-                else str(event)
+                json.dumps(event, separators=(",", ":")) if isinstance(event, dict) else str(event)
             )
             return f"{PROC_EVENT_OPEN}{body}{PROC_EVENT_CLOSE}"
         if kind == "error":

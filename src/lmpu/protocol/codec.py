@@ -20,6 +20,7 @@ from .messages import (
 @dataclass
 class Frame:
     """Length-prefixed JSON-RPC frame."""
+
     data: bytes
 
     def encode(self) -> bytes:
@@ -35,8 +36,8 @@ class Frame:
         length = struct.unpack(">I", data[:4])[0]
         if len(data) < 4 + length:
             raise ValueError("Incomplete frame body")
-        frame_data = data[4:4+length]
-        remaining = data[4+length:]
+        frame_data = data[4 : 4 + length]
+        remaining = data[4 + length :]
         return cls(frame_data), remaining
 
 
@@ -103,8 +104,8 @@ class RPCStream:
             if len(self._buffer) >= 4:
                 length = struct.unpack(">I", self._buffer[:4])[0]
                 if len(self._buffer) >= 4 + length:
-                    frame_data = bytes(self._buffer[4:4+length])
-                    del self._buffer[:4+length]
+                    frame_data = bytes(self._buffer[4 : 4 + length])
+                    del self._buffer[: 4 + length]
                     frame = Frame(frame_data)
                     return RPCCodec.decode_frame(frame)
 

@@ -314,7 +314,10 @@ class HFDecoder(ConstrainedDecoder):
     async def _get_constrained_decoder(self):
         if self._constrained_decoder is None and self._use_constrained:
             from .grammar import LMFormatEnforcerDecoder
-            self._constrained_decoder = LMFormatEnforcerDecoder(self.engine._model, self.engine._tokenizer)
+
+            self._constrained_decoder = LMFormatEnforcerDecoder(
+                self.engine._model, self.engine._tokenizer
+            )
         return self._constrained_decoder
 
     async def decode_free(

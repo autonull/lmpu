@@ -94,7 +94,8 @@ class HFHost:
         self.config = config
         self.engine = HFEngine(model_name=config.model, device=config.device)
         self._decoders = [
-            HFDecoder(self.engine, max_tokens=config.max_tokens, use_constrained=use_constrained) for _ in range(sessions)
+            HFDecoder(self.engine, max_tokens=config.max_tokens, use_constrained=use_constrained)
+            for _ in range(sessions)
         ]
         self.decoder = self._decoders[0]
         self._energy = EnergySampler()
@@ -249,9 +250,9 @@ def _extract_program_code(text: str) -> str | None:
     # {"program": "import hashlib\ntime.sleep(60)\nunit = b'...\\n'"}
     # with a mix of literal newlines (between statements) and escaped \\n (inside strings).
     # Strategy: find the program field, extract content, then normalize escapes.
-    
+
     # First try: find the complete JSON object first
-    for match in re.finditer(r'\{.*?\}', text, re.DOTALL):
+    for match in re.finditer(r"\{.*?\}", text, re.DOTALL):
         try:
             candidate = match.group(0)
             # Fix common JSON issues: unescaped newlines in string values
@@ -263,24 +264,24 @@ def _extract_program_code(text: str) -> str | None:
                     return program
         except (json.JSONDecodeError, AttributeError):
             continue
-    
+
     # Fallback: regex extraction with smart escape handling
     match = re.search(r'"program"\s*:\s*"(.+?)"\s*\}\s*\}', text, re.DOTALL)
     if match:
         raw = match.group(1)
         return _normalize_program_escapes(raw)
-    
+
     # Fallback: more permissive regex
     match = re.search(r'"program"\s*:\s*"(.+)"\s*\}\s*\}', text, re.DOTALL)
     if match:
         raw = match.group(1)
         return _normalize_program_escapes(raw)
-    
+
     # Fallback: code blocks
-    match = re.search(r'```python\s*(.*?)\s*```', text, re.DOTALL)
+    match = re.search(r"```python\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
-    match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+    match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
     return None
@@ -319,12 +320,12 @@ def _fix_json_string_escapes(text: str) -> str:
 
 def _normalize_program_escapes(raw: str) -> str:
     """Normalize escape sequences in extracted program code.
-    
+
     The raw capture may contain:
     - Literal newlines between statements (keep as literal newlines)
     - Already-escaped \\n inside string literals (convert to literal newlines)
     - Double-escaped \\\\n (convert to literal newlines)
-    
+
     Returns a string with ACTUAL newlines for Python execution.
     """
     # First, handle double-escaping: \\\\n -> \n (literal newline)
@@ -1378,23 +1379,29 @@ class BaselineRunner:
         prompt = context.workload.program_prompt
         plan_started = time.perf_counter()
         await _record_prefill(metrics, host, prompt)
-        
+
         # Use constrained decoding for model planner arms
         if isinstance(self._host, HFHost):
             engine = self._host.engine
             if engine._model is not None and engine._tokenizer is not None:
                 import torch
+
                 # Dynamic schema based on workload's processor and op
                 proc = context.workload.processor
                 op = context.workload.op
                 schema = _schema_for_workload(proc, op)
                 from lmformatenforcer import JsonSchemaParser
-                from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+                from lmformatenforcer.integrations.transformers import (
+                    build_transformers_prefix_allowed_tokens_fn,
+                )
+
                 parser = JsonSchemaParser(schema)
                 prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
                     engine._tokenizer, parser
                 )
-                inputs = engine._tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(engine._device_obj)
+                inputs = engine._tokenizer(
+                    prompt, return_tensors="pt", add_special_tokens=False
+                ).to(engine._device_obj)
                 with torch.inference_mode():
                     output = engine._model.generate(
                         **inputs,
@@ -1403,13 +1410,13 @@ class BaselineRunner:
                         do_sample=False,
                         pad_token_id=engine._tokenizer.eos_token_id,
                     )
-                generated_ids = output[0][inputs["input_ids"].shape[1]:]
+                generated_ids = output[0][inputs["input_ids"].shape[1] :]
                 text = engine._tokenizer.decode(generated_ids, skip_special_tokens=True)
             else:
                 text = await host.decode(prompt, self.config.max_tokens, "")
         else:
             text = await host.decode(prompt, self.config.max_tokens, "")
-        
+
         if phases is not None:
             phases.record("plan", time.perf_counter() - plan_started)
         await _record_generated(metrics, host, text)

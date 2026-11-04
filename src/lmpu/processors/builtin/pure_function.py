@@ -7,6 +7,8 @@ import json
 import re
 from typing import Any
 
+import numpy as np
+
 from ..base import JobContext, Manifest, Processor, ProcessorContext, Result
 
 
@@ -44,7 +46,7 @@ class PureFunctionProcessor(Processor):
         interactive=False,
         persistent_state=False,
         batching=True,
-        zero_copy=False,
+        zero_copy=True,
         sandbox=["subprocess"],
         executor="inline",
     )
@@ -52,9 +54,47 @@ class PureFunctionProcessor(Processor):
     async def setup(self, ctx: ProcessorContext) -> None:
         pass
 
+    def _resolve_input(self, ctx: JobContext, value: Any) -> Any:
+        """Resolve a job input value, handling buffer references."""
+        if isinstance(value, dict) and value.get("buffer"):
+            # Buffer reference: {"buffer": "buf_xxx"} or {"buffer": "buf_xxx", "view": ...}
+            buffer_name = value["buffer"]
+            if buffer_name in ctx._buffers:
+                return ctx._buffers[buffer_name]
+            # Fallback: return empty bytes if buffer not found
+            return b""
+        return value
+
+    def _resolve_output(
+        self, ctx: JobContext, output_name: str, data: Any, checksum: str
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Resolve output: write to buffer if specified, otherwise return inline."""
+        buffer_refs: list[str] = []
+        output_spec = ctx._buffers.get(output_name)
+        if isinstance(output_spec, np.ndarray):
+            # Output buffer is mapped; write to it
+            # Convert data to numpy array matching output_spec shape
+            if isinstance(data, str):
+                # String data (e.g., hex digest) - encode to bytes
+                data_bytes = data.encode()
+                data_arr = np.frombuffer(data_bytes, dtype=np.uint8)
+            elif isinstance(data, bytes):
+                data_arr = np.frombuffer(data, dtype=np.uint8)
+            else:
+                data_arr = np.asarray(data)
+
+            if data_arr.size != output_spec.size:
+                raise ValueError(f"Output size mismatch: {data_arr.size} != {output_spec.size}")
+            np.copyto(output_spec.reshape(data_arr.shape), data_arr, casting="same_kind")
+            buffer_refs = [output_name]
+            return {}, buffer_refs
+        # No mapped output buffer; return data inline
+        return data, []
+
     async def execute(self, job: dict[str, Any], ctx: JobContext) -> Result:
         op = job.get("op")
         inputs = job.get("inputs", {})
+        outputs = job.get("outputs", {})
         # A batch is signalled either by the top-level `batch` field or by the
         # declared `batch` op, whose inputs carry `items`.
         if job.get("batch") is not None or op == "batch":
@@ -68,13 +108,13 @@ class PureFunctionProcessor(Processor):
             elif op == "matmul":
                 return await self._matmul(inputs)
             elif op == "text_stats":
-                return await self._text_stats(inputs)
+                return await self._text_stats(inputs, ctx, outputs)
             elif op == "mod_pow":
                 return await self._mod_pow(inputs)
             elif op == "sha256":
-                return await self._sha256(inputs)
+                return await self._sha256(inputs, ctx, outputs)
             elif op == "blake3":
-                return await self._blake3(inputs)
+                return await self._blake3(inputs, ctx, outputs)
             elif op == "json_query":
                 return await self._json_query(inputs)
             elif op == "lookup":
@@ -116,8 +156,6 @@ class PureFunctionProcessor(Processor):
         )
 
     async def _matmul(self, inputs: dict[str, Any]) -> Result:
-        import numpy as np
-
         size = int(inputs.get("size", 256))
         seed = int(inputs.get("seed", 0))
         rng = np.random.default_rng(seed)
@@ -134,18 +172,28 @@ class PureFunctionProcessor(Processor):
             checksum=hashlib.sha256(product.tobytes()).hexdigest()[:16],
         )
 
-    async def _text_stats(self, inputs: dict[str, Any]) -> Result:
-        text = str(inputs.get("text", ""))
+    async def _text_stats(
+        self, inputs: dict[str, Any], ctx: JobContext, outputs: dict[str, Any]
+    ) -> Result:
+        text_data = self._resolve_input(ctx, inputs.get("text", ""))
+        if isinstance(text_data, np.ndarray):
+            text = text_data.tobytes().decode("utf-8", errors="ignore")
+        else:
+            text = str(text_data)
         match = re.search(r"SECRET:\s*([A-Za-z0-9-]+)", text)
+        checksum = hashlib.sha256(text.encode()).hexdigest()
+        data = {
+            "chars": len(text),
+            "words": len(text.split()),
+            "checksum": checksum[:16],
+            "secret": match.group(1) if match else None,
+        }
+        inline_data, buffer_refs = self._resolve_output(ctx, "text", data, checksum)
         return Result(
             success=True,
-            data={
-                "chars": len(text),
-                "words": len(text.split()),
-                "checksum": hashlib.sha256(text.encode()).hexdigest()[:16],
-                "secret": match.group(1) if match else None,
-            },
-            checksum=hashlib.sha256(text.encode()).hexdigest()[:16],
+            data=inline_data or data,
+            buffer_refs=buffer_refs,
+            checksum=checksum[:16],
         )
 
     async def _mod_pow(self, inputs: dict[str, Any]) -> Result:
@@ -159,43 +207,51 @@ class PureFunctionProcessor(Processor):
             checksum=hashlib.sha256(str(result).encode()).hexdigest()[:16],
         )
 
-    async def _sha256(self, inputs: dict[str, Any]) -> Result:
-        data = inputs.get("data", b"")
-        if isinstance(data, str):
+    async def _sha256(
+        self, inputs: dict[str, Any], ctx: JobContext, outputs: dict[str, Any]
+    ) -> Result:
+        data = self._resolve_input(ctx, inputs.get("data", b""))
+        if isinstance(data, np.ndarray):
+            data = data.tobytes()
+        elif isinstance(data, str):
             data = data.encode()
-        elif isinstance(data, dict) and data.get("buffer"):
-            # Buffer reference - would need buffer manager
-            data = b""  # Placeholder
 
         hash_obj = hashlib.sha256(data)
         hex_digest = hash_obj.hexdigest()
+
+        inline_data, buffer_refs = self._resolve_output(ctx, "hash", hex_digest, hex_digest)
         return Result(
             success=True,
-            data={"hash": hex_digest},
+            data=inline_data,
+            buffer_refs=buffer_refs,
             checksum=hex_digest[:16],
         )
 
-    async def _blake3(self, inputs: dict[str, Any]) -> Result:
+    async def _blake3(
+        self, inputs: dict[str, Any], ctx: JobContext, outputs: dict[str, Any]
+    ) -> Result:
+        data = self._resolve_input(ctx, inputs.get("data", b""))
+        if isinstance(data, np.ndarray):
+            data = data.tobytes()
+        elif isinstance(data, str):
+            data = data.encode()
+
         try:
             import blake3
 
-            data = inputs.get("data", b"")
-            if isinstance(data, str):
-                data = data.encode()
             hash_obj = blake3.blake3(data)
             hex_digest = hash_obj.hexdigest()
         except ImportError:
             # Fallback to sha256
-            import hashlib
+            import hashlib as hl
 
-            data = inputs.get("data", b"")
-            if isinstance(data, str):
-                data = data.encode()
-            hex_digest = hashlib.sha256(data).hexdigest()
+            hex_digest = hl.sha256(data).hexdigest()
 
+        inline_data, buffer_refs = self._resolve_output(ctx, "hash", hex_digest, hex_digest)
         return Result(
             success=True,
-            data={"hash": hex_digest},
+            data=inline_data,
+            buffer_refs=buffer_refs,
             checksum=hex_digest[:16],
         )
 
@@ -243,7 +299,9 @@ class PureFunctionProcessor(Processor):
 
     async def _batch(self, job: dict[str, Any], ctx: JobContext) -> Result:
         """Execute batch of operations."""
-        items = (job.get("batch") or {}).get("items") or (job.get("inputs") or {}).get("items") or []
+        items = (
+            (job.get("batch") or {}).get("items") or (job.get("inputs") or {}).get("items") or []
+        )
         default_op = job.get("op", "bigint_mul")
 
         results = []

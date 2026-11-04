@@ -13,6 +13,7 @@ from ..protocol.errors import QuotaExceededError
 @dataclass
 class QuotaConfig:
     """Per-session quota configuration."""
+
     max_outstanding_jobs: int = 32
     max_buffer_bytes: int = 2_147_483_648  # 2 GiB
     max_sleep_seconds: int = 300
@@ -24,6 +25,7 @@ class QuotaConfig:
 @dataclass
 class SessionQuotaState:
     """Current quota usage for a session."""
+
     session_id: str
     outstanding_jobs: int = 0
     buffer_bytes: int = 0
@@ -45,9 +47,13 @@ class QuotaManager:
     def set_session_quotas(self, session_id: str, quotas: QuotaConfig) -> None:
         """Set custom quotas for a session (cannot exceed global)."""
         # Clamp to global limits
-        quotas.max_outstanding_jobs = min(quotas.max_outstanding_jobs, self.global_quotas.max_outstanding_jobs)
+        quotas.max_outstanding_jobs = min(
+            quotas.max_outstanding_jobs, self.global_quotas.max_outstanding_jobs
+        )
         quotas.max_buffer_bytes = min(quotas.max_buffer_bytes, self.global_quotas.max_buffer_bytes)
-        quotas.max_sleep_seconds = min(quotas.max_sleep_seconds, self.global_quotas.max_sleep_seconds)
+        quotas.max_sleep_seconds = min(
+            quotas.max_sleep_seconds, self.global_quotas.max_sleep_seconds
+        )
         quotas.max_injected_tokens_per_turn = min(
             quotas.max_injected_tokens_per_turn,
             self.global_quotas.max_injected_tokens_per_turn,
@@ -110,7 +116,10 @@ class QuotaManager:
             raise QuotaExceededError(
                 message="Session sleep registrations quota exceeded",
                 code=ErrorCode.QUOTA_EXCEEDED,
-                details={"limit": quotas.max_sleep_registrations, "current": state.sleep_registrations},
+                details={
+                    "limit": quotas.max_sleep_registrations,
+                    "current": state.sleep_registrations,
+                },
             )
 
     def check_buffer_create(
@@ -141,7 +150,7 @@ class QuotaManager:
     ) -> None:
         """Check if event injection is within budget."""
         quotas = self.get_quotas(session_id)
-        
+
         if tokens > quotas.max_injected_tokens_per_turn:
             raise QuotaExceededError(
                 message="Injected tokens per turn limit exceeded",
@@ -210,9 +219,15 @@ class QuotaManager:
         state = self.get_state(session_id)
         quotas = self.get_quotas(session_id)
         return {
-            "outstanding_jobs": {"current": state.outstanding_jobs, "limit": quotas.max_outstanding_jobs},
+            "outstanding_jobs": {
+                "current": state.outstanding_jobs,
+                "limit": quotas.max_outstanding_jobs,
+            },
             "buffer_bytes": {"current": state.buffer_bytes, "limit": quotas.max_buffer_bytes},
-            "sleep_registrations": {"current": state.sleep_registrations, "limit": quotas.max_sleep_registrations},
+            "sleep_registrations": {
+                "current": state.sleep_registrations,
+                "limit": quotas.max_sleep_registrations,
+            },
             "cpu_seconds_used": state.cpu_seconds_used,
             "gpu_seconds_used": state.gpu_seconds_used,
             "wall_time_used": state.wall_time_used,

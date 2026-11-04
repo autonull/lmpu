@@ -10,6 +10,7 @@ import ulid
 
 class GrantType(str, Enum):
     """Grant permission types."""
+
     READ = "read"
     WRITE = "write"
     READ_WRITE = "read_write"
@@ -23,20 +24,21 @@ def _new_ulid() -> str:
 @dataclass(frozen=True)
 class Grant:
     """A grant allowing a job to access a buffer."""
+
     grant_id: str = field(default_factory=_new_ulid)
     job_id: str = ""
     buffer_id: str = ""
     grant_type: GrantType = GrantType.READ
     offset: int = 0
     length: Optional[int] = None  # None means full buffer
-    
+
     def covers(self, offset: int, length: int) -> bool:
         """Check if this grant covers the requested range."""
         if self.grant_type == GrantType.READ and offset >= self.offset:
-            end = self.offset + (self.length or float('inf'))
+            end = self.offset + (self.length or float("inf"))
             return offset + length <= end
         if self.grant_type in (GrantType.WRITE, GrantType.READ_WRITE) and offset >= self.offset:
-            end = self.offset + (self.length or float('inf'))
+            end = self.offset + (self.length or float("inf"))
             return offset + length <= end
         return False
 

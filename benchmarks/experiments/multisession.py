@@ -48,9 +48,7 @@ async def run_case(n: int) -> None:
                     session_id,
                 )
                 jobs.append(job_id)
-            await asyncio.gather(
-                *(rt.job_table.wait_terminal(job, timeout=120) for job in jobs)
-            )
+            await asyncio.gather(*(rt.job_table.wait_terminal(job, timeout=120) for job in jobs))
             wall = time.perf_counter() - t0
             print(
                 f"n={n}  wall={wall:6.2f}s  ideal={SLEEP}s  "

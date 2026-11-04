@@ -17,6 +17,7 @@ from .checksum import ChecksumAlgorithm, compute_checksum_mmap
 
 class SHMError(Exception):
     """Shared memory errors."""
+
     pass
 
 
@@ -48,12 +49,12 @@ class SHMBackend:
         size: int,
     ) -> tuple[mmap.mmap, BinaryIO]:
         """Create a new shared memory buffer.
-        
+
         Returns:
             Tuple of (mmap object, file handle). Caller must close both.
         """
         path = self._buffer_path(session_id, buffer_id)
-        
+
         # Create file with exact size
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         try:
@@ -135,7 +136,7 @@ class SHMBackend:
         try:
             if length is None:
                 length = len(mm) - offset
-            return bytes(mm[offset:offset + length])
+            return bytes(mm[offset : offset + length])
         finally:
             mm.close()
             f.close()
@@ -150,7 +151,7 @@ class SHMBackend:
         """Write bytes to buffer."""
         mm, f = self.open_buffer(session_id, buffer_id, writable=True)
         try:
-            mm[offset:offset + len(data)] = data
+            mm[offset : offset + len(data)] = data
             mm.flush()
             return len(data)
         finally:
@@ -196,7 +197,7 @@ class SHMBackend:
 
 class TempSHMBackend(SHMBackend):
     """Temporary SHM backend for testing (uses temp directory)."""
-    
+
     def __init__(self):
         self.temp_dir = Path(tempfile.mkdtemp(prefix="lmpu_test_"))
         super().__init__(str(self.temp_dir))

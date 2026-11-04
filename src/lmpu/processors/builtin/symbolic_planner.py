@@ -19,10 +19,22 @@ class SymbolicPlannerProcessor(Processor):
         version="0.1.0",
         protocol="lmpu/1",
         ops=[
-            {"name": "shortest_path", "inputs": ["graph", "source", "target"], "outputs": ["path", "distance"]},
+            {
+                "name": "shortest_path",
+                "inputs": ["graph", "source", "target"],
+                "outputs": ["path", "distance"],
+            },
             {"name": "bfs_plan", "inputs": ["graph", "start", "goals"], "outputs": ["plan"]},
-            {"name": "constraint_solve", "inputs": ["variables", "constraints"], "outputs": ["solution"]},
-            {"name": "schedule", "inputs": ["tasks", "resources", "constraints"], "outputs": ["schedule"]},
+            {
+                "name": "constraint_solve",
+                "inputs": ["variables", "constraints"],
+                "outputs": ["solution"],
+            },
+            {
+                "name": "schedule",
+                "inputs": ["tasks", "resources", "constraints"],
+                "outputs": ["schedule"],
+            },
         ],
         limits={
             "max_buffer_bytes": 10_000_000,
@@ -110,7 +122,7 @@ class SymbolicPlannerProcessor(Processor):
 
             for v, w in adj.get(u, {}).items():
                 alt = d + w
-                if alt < dist.get(v, float('inf')):
+                if alt < dist.get(v, float("inf")):
                     dist[v] = alt
                     prev[v] = u
                     heapq.heappush(pq, (alt, v))
@@ -216,7 +228,7 @@ class SymbolicPlannerProcessor(Processor):
         constraints = inputs.get("constraints", [])
 
         # Placeholder: return tasks in order
-        schedule = [{"task": t, "start": i, "end": i+1} for i, t in enumerate(tasks)]
+        schedule = [{"task": t, "start": i, "end": i + 1} for i, t in enumerate(tasks)]
 
         result_data = {
             "schedule": schedule,

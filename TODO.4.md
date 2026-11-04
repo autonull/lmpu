@@ -28,11 +28,11 @@ Two of the three primary claims are now measured. See
 | **P2** Parked sessions overlap | **PASS** — 4 sessions 4.2 s vs 12 s serial (2.84×); 8 sessions 3.29× | `experiments/multisession.py` |
 | **P3** Capability beyond context window | **PASS** — 186 k chars solved by a 32 k model, 3/3 | Batch 3 |
 | **P4** Negative controls show no false win | **PASS** — 9/9 | Batch 3 |
-| **P5** Buffer output composes into another processor | **UNTESTED** — no processor accepts a buffer ref | next |
+| **P5** Buffer output composes into another processor | **PASS** — host tokens flat (163±1) across 1–256 MiB, 3-stage pipe | `experiments/buffer_composition.py` |
 | **P6** Energy advantage | **NOT ESTABLISHED** — below NVML noise | must be withdrawn as a point claim |
 
 The value proposition is now precise: **cost is O(decisions), not O(bytes);
-and marginal session cost is ~0 while parked.** If P5 holds, a whole pipeline
+and marginal session cost is ~0 while parked.** P5 holds: a whole pipeline
 never round-trips data through the host.
 
 ---
@@ -75,11 +75,11 @@ Regression check: 102 unit/integration tests pass.
 The strongest untested claim: **co-processor → co-processor without host data.**
 A job must accept a `BufferRef` input and write a `BufferRef` output.
 
-- [ ] Teach `pure.func` / `vector.engine` to accept `{"buffer": id}` inputs and
+- [x] Teach `pure.func` / `vector.engine` to accept `{"buffer": id}` inputs and
       emit output buffers.
-- [ ] Chain `import → reduce → hash → read` and count host tokens; expect ~40
+- [x] Chain `import → reduce → hash → read` and count host tokens; expect ~40
       regardless of pipe length.
-- [ ] Gate R1: host tokens flat across a 3-stage pipeline on ≥ 64 MiB.
+- [x] Gate R1: host tokens flat across a 3-stage pipeline on ≥ 64 MiB.
 - [ ] If R1 fails, the data plane is only a storage trick, not a compute plane;
       record that and re-rank the paper.
 
@@ -140,7 +140,7 @@ A job must accept a `BufferRef` input and write a `BufferRef` output.
 
 | Phase | Wall | GPU | Gate |
 |---|---|---|---|
-| R1 composition | 1 d | 10 min | host tokens flat across a 3-stage pipe |
+| R1 composition | 1 d | 10 min | **DONE** — host tokens flat across a 3-stage pipe |
 | R2 energy | ½ d | 20 min | figure with error bars |
 | R3 capability vs RAG | 1 d | 1 h | LMPU wins where RAG cannot |
 | R4 cost model | ½ d | 5 min | advantage grows with data and sessions |
@@ -154,7 +154,7 @@ A job must accept a `BufferRef` input and write a `BufferRef` output.
 
 ## 7. Interpretation of the potential
 
-If R1 passes, the architecture's claim is not "we save tokens." It is:
+R1 passes: the architecture's claim is not "we save tokens." It is:
 
 > **A computation pipeline whose context footprint is independent of its data
 > volume, and whose marginal cost while waiting is zero.**
@@ -165,10 +165,6 @@ multi-tenant workloads. It does not apply to small fixed-size tasks, where a
 competent tool call ties it — and that boundary should be stated in the paper,
 not hidden.
 
-If R1 fails, the honest result is: context cost is bounded for *results*, but
-pipelines still round-trip through the host, and the value is confined to
-bounded ingestion plus capability.
-
 ---
 
 ## 8. Reproduction
@@ -176,5 +172,6 @@ bounded ingestion plus capability.
 ```bash
 uv run python benchmarks/experiments/dataplane.py
 uv run python benchmarks/experiments/multisession.py
+uv run python benchmarks/experiments/buffer_composition.py
 uv run python -m pytest tests/unit tests/integration -q
 ```

@@ -457,7 +457,7 @@ _BATCH = WorkloadSpec(
     ),
     program_prompt=(
         "You have a tool that accepts a batch of operations. Reply with only one "
-        'JSON object: '
+        "JSON object: "
         '{"processor":"pure.func","op":"bigint_add","inputs":{},"batch":{"items":[...]}}.'
     ),
     program={
@@ -686,9 +686,7 @@ _SMALL_RESULT = WorkloadSpec(
     inputs={"program": _SMALL_RESULT_PROGRAM},
     verify=_verify_small_result,
     answer=str(_SMALL_RESULT_BYTES),
-    prompt=(
-        "A tool returns a 1 KiB buffer. Call the tool and report the byte count."
-    ),
+    prompt=("A tool returns a 1 KiB buffer. Call the tool and report the byte count."),
     program_prompt=(
         "You have a Python tool. Reply with only one JSON object, no prose or fences: "
         '{"processor":"python.vm","op":"run_program","inputs":{"program":"..."}}. '
@@ -880,8 +878,10 @@ _CAPABILITY = WorkloadSpec(
 
 # --- Context scaling workloads (V3.1) --------------------------------------
 
+
 def _make_context_workload(name: str, lines: int, secret_line: int, secret: str) -> WorkloadSpec:
     """Factory for context-scaling text_stats workloads."""
+
     @lru_cache(maxsize=1)
     def document() -> str:
         dlines = []
@@ -923,7 +923,7 @@ def _make_context_workload(name: str, lines: int, secret_line: int, secret: str)
         ),
         program_prompt=(
             "You have a tool that reads text already present in your context. "
-            'Reply with only one JSON object, no prose or fences: '
+            "Reply with only one JSON object, no prose or fences: "
             '{"processor":"pure.func","op":"text_stats","inputs":{"text":"$CONTEXT"}}. '
             "The provided document is the value of $CONTEXT. "
             "Find SECRET and end with ANSWER: <secret>.\n\n" + document()
@@ -936,7 +936,7 @@ def _make_context_workload(name: str, lines: int, secret_line: int, secret: str)
         parse_answer=_parse_secret_answer,
         verify_answer=lambda v: v == secret,
         trace=trace,
-        description=f"{len(document())//1000}k-char needle-in-haystack (context scaling: {name})",
+        description=f"{len(document()) // 1000}k-char needle-in-haystack (context scaling: {name})",
         config={"timeout_ms": 120_000},
         baselines=(
             "lmpu.sync",
@@ -962,13 +962,10 @@ _CONTEXT_128K = _make_context_workload("context_128k", 128000, 64000, "CTX128K-S
 
 # --- Job duration scaling workloads (V3.3) ---------------------------------
 
+
 def _make_sleep_workload(name: str, seconds: int) -> WorkloadSpec:
     """Factory for sleep workloads of different durations."""
-    program = (
-        "import json, time\n"
-        f"time.sleep({seconds})\n"
-        f'print(json.dumps({{"slept": {seconds}}}))'
-    )
+    program = f'import json, time\ntime.sleep({seconds})\nprint(json.dumps({{"slept": {seconds}}}))'
 
     def verify(result: object) -> bool:
         return isinstance(result, dict) and float(result.get("slept", 0)) >= seconds - 0.5
@@ -1028,14 +1025,17 @@ _SLEEP_300S = _make_sleep_workload("sleep_300s", 300)
 
 # --- Batch scaling workloads (V3.4) ----------------------------------------
 
+
 def _make_batch_workload(name: str, count: int) -> WorkloadSpec:
     """Factory for batch workloads with varying job counts."""
     items = []
     for i in range(count):
-        items.append({
-            "op": "bigint_mul",
-            "inputs": {"a": str(10 + i), "b": str(20 + i)},
-        })
+        items.append(
+            {
+                "op": "bigint_mul",
+                "inputs": {"a": str(10 + i), "b": str(20 + i)},
+            }
+        )
 
     def verify(result: object) -> bool:
         if not isinstance(result, dict):
