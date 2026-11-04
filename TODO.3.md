@@ -661,11 +661,15 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete).**
+**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete; Batch 4 infrastructure complete).**
 Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 8k-context `best_case` (confirmed in current run, 3 trials/arm). Batch 3 (L3)
 negative controls and capability arm implemented and verified on CPU mechanism
-baselines.
+baselines. Batch 4 (L4) scaling workloads and energy infrastructure implemented:
+- Context scaling: context_1k/8k/32k/128k workloads
+- Job-duration scaling: sleep_1s/3s/30s/300s workloads  
+- Batch scaling: batch_1/16/64/256/1024 workloads
+- Energy: NVML (GPU) and RAPL (CPU) samplers in EnergySampler; idle validation via EnergyProbe
 
 ### Batch 1 result summary
 
@@ -723,19 +727,19 @@ baselines.
 - [ ] V2.8 Program-composition probe
 
 ### V3 — Scale and break-even
-- [ ] V3.1 Context scaling
-- [ ] V3.2 Model scaling
-- [ ] V3.3 Job-duration scaling
-- [ ] V3.4 Batch scaling
+- [~] V3.1 Context scaling — workloads implemented (context_1k/8k/32k/128k), experiments pending
+- [ ] V3.2 Model scaling — needs second model (Qwen2.5-1.5B)
+- [~] V3.3 Job-duration scaling — workloads implemented (sleep_1s/3s/30s/300s), experiments pending
+- [~] V3.4 Batch scaling — workloads implemented (batch_1/16/64/256/1024), experiments pending
 - [ ] V3.5 Concurrency
 - [ ] V3.6 Decision boundary
 - [ ] V3.7 Cold vs steady state
 
 ### V4 — Energy and cost
-- [ ] V4.1 Per-phase GPU energy
-- [ ] V4.2 CPU energy or documented gap
+- [~] V4.1 Per-phase GPU energy — NVML infrastructure in place (metrics.py, energy.py), experiments pending
+- [~] V4.2 CPU energy or documented gap — RAPL infrastructure in EnergySampler, experiments pending
 - [ ] V4.3 Total cost model
-- [ ] V4.4 Idle validation
+- [x] V4.4 Idle validation — EnergyProbe.measure_idle implemented
 - [ ] V4.5 Cost sensitivity
 
 ### V5 — Robustness
@@ -773,13 +777,13 @@ baselines.
 
 ## 11. Immediate next actions
 
-*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). Batch 3 complete. V1.6 negative controls implemented and verified on CPU. V1.9 capability arm implemented and verified on CPU. In order:*
+*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). Batch 3 complete. V1.6 negative controls implemented and verified on CPU. V1.9 capability arm implemented and verified on CPU. Batch 4 infrastructure complete. In order:*
 
 1. **Batch 2 — model planner calibration (L2).** V2.1: **COMPLETED** — calibrated 0.8B and 2B at budgets 128/256/512/1024. **Result: 100% parse failure at all budgets for both models.** Free-text generation cannot produce valid JSON with nested structures (program contains `json.dumps({"bytes": ...})` with unescaped quotes). Parser cannot reliably reconstruct program due to newline escaping ambiguity in bytes literals.
 2. **V2.2 — Constrained control channel.** **PARTIAL** — lm-format-enforcer constrained decoding works standalone (generates valid JSON matching gold program) but fails integration with Qwen3.5 multimodal model architecture (tensor size mismatch in logits processor). **Kill criterion met: gain not material for current model.** Fallback: use oracle planner for L1/L2 results; model planner requires compatible model or custom logits processor.
    - **Fallback model swap:** Qwen2.5-1.5B-Instruct (pure causal LM, available) or other non-multimodal model for constrained decoding test. If constrained decoding works on pure transformer, re-evaluate V2.2.
 3. **Run model-planner best case (L2).** Deferred — use oracle planner for decisive experiment; model planner calibration shows free-text non-viable without constrained decoding that works with target model.
-4. **Batch 4 — scaling and energy (L4).** V3.1-V3.7 and V4.1-V4.5. Build per-phase instrumentation once; reuse the same raw dataset for all reports.
+4. **Batch 4 — scaling and energy experiments (L4).** V3.1-V3.7 and V4.1-V4.5. Workloads and instrumentation ready; run scaling experiments (context, duration, batch, concurrency) and energy measurements.
 5. **Do not run full matrix yet** — V2.3+ only after L2 passes.
 6. **P2 (plan graph)** — implement executor or cut with dated pre-registration revision; V1.10 records it explicitly as unimplemented.
 

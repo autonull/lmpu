@@ -24,6 +24,22 @@ def test_workload_set_is_registered() -> None:
         "small_result",
         "short_job",
         "capability",
+        # Context scaling (V3.1)
+        "context_1k",
+        "context_8k",
+        "context_32k",
+        "context_128k",
+        # Job duration scaling (V3.3)
+        "sleep_1s",
+        "sleep_3s",
+        "sleep_30s",
+        "sleep_300s",
+        # Batch scaling (V3.4)
+        "batch_1",
+        "batch_16",
+        "batch_64",
+        "batch_256",
+        "batch_1024",
     }
     assert get_workload("matmul").inputs == {"size": 512, "seed": 7}
     assert get_workload("large_context").baselines[0] == "lmpu.sync"
@@ -40,6 +56,16 @@ def test_workload_set_is_registered() -> None:
     # Capability
     assert get_workload("capability").inputs["text"] is not None
     assert len(get_workload("capability").inputs["text"]) > 100_000
+    # Context scaling
+    assert get_workload("context_1k").inputs["text"] is not None
+    assert get_workload("context_128k").inputs["text"] is not None
+    assert len(get_workload("context_1k").inputs["text"]) < len(get_workload("context_128k").inputs["text"])
+    # Job duration scaling
+    assert get_workload("sleep_1s").inputs["program"].count("sleep(1)") == 1
+    assert get_workload("sleep_300s").inputs["program"].count("sleep(300)") == 1
+    # Batch scaling
+    assert get_workload("batch_1").native is not None
+    assert get_workload("batch_1024").native is not None
 
 
 def test_large_context_and_matmul_helpers_are_deterministic() -> None:

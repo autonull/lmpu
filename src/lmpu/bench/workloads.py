@@ -457,14 +457,13 @@ _BATCH = WorkloadSpec(
     ),
     program_prompt=(
         "You have a tool that accepts a batch of operations. Reply with only one "
-        "JSON object: "
-        '{"processor":"pure.func","op":"bigint_add","batch":{"items":[...]}}.'
+        'JSON object: '
+        '{"processor":"pure.func","op":"bigint_add","inputs":{"items":[...]}}.'
     ),
     program={
         "processor": "pure.func",
         "op": "bigint_add",
-        "inputs": {},
-        "batch": {"items": list(_BATCH_ITEMS)},
+        "inputs": {"items": list(_BATCH_ITEMS)},
     },
     parse_answer=_parse_integer_answer,
     verify_answer=lambda value: value == str(len(_BATCH_ITEMS)),
@@ -878,6 +877,229 @@ _CAPABILITY = WorkloadSpec(
 )
 
 
+# --- Context scaling workloads (V3.1) --------------------------------------
+
+def _make_context_workload(name: str, lines: int, secret_line: int, secret: str) -> WorkloadSpec:
+    """Factory for context-scaling text_stats workloads."""
+    @lru_cache(maxsize=1)
+    def document() -> str:
+        dlines = []
+        for i in range(lines):
+            dlines.append(
+                f"record {i:05d}: node=worker-{i % 97:02d} "
+                f"temperature={-20 + i % 60} pressure={900 + i % 120} "
+                f"payload={'x' * 120}"
+            )
+        dlines.insert(secret_line, f"SECRET: {secret}")
+        return "\n".join(dlines)
+
+    def native() -> dict[str, Any]:
+        text = document()
+        secret_match = re.search(r"SECRET:\s*([A-Za-z0-9-]+)", text)
+        return {
+            "chars": len(text),
+            "words": len(text.split()),
+            "checksum": hashlib.sha256(text.encode()).hexdigest()[:16],
+            "secret": secret_match.group(1) if secret_match else None,
+        }
+
+    def verify(result: object) -> bool:
+        return isinstance(result, dict) and result.get("secret") == secret
+
+    def trace() -> str:
+        return document() + f"\nTRACE text_stats\nRESULT {secret}"
+
+    return WorkloadSpec(
+        name=name,
+        processor="pure.func",
+        op="text_stats",
+        inputs={"text": document()},
+        verify=verify,
+        answer=secret,
+        prompt=(
+            f"Read the document below and find the value after SECRET:. "
+            f'Return a final line "ANSWER: <secret>".\n\n{document()}'
+        ),
+        program_prompt=(
+            "You have a tool that reads text already present in your context. "
+            'Reply with only one JSON object, no prose or fences: '
+            '{"processor":"pure.func","op":"text_stats","inputs":{"text":"$CONTEXT"}}. '
+            "The provided document is the value of $CONTEXT. "
+            "Find SECRET and end with ANSWER: <secret>.\n\n" + document()
+        ),
+        program={
+            "processor": "pure.func",
+            "op": "text_stats",
+            "inputs": {"text": "$CONTEXT"},
+        },
+        parse_answer=_parse_secret_answer,
+        verify_answer=lambda v: v == secret,
+        trace=trace,
+        description=f"{len(document())//1000}k-char needle-in-haystack (context scaling: {name})",
+        config={"timeout_ms": 120_000},
+        baselines=(
+            "lmpu.sync",
+            "direct_cot",
+            "trace_token",
+            "sync_tool_full_result",
+            "async_poll_programmatic",
+            "async_poll_model",
+            "session_reopen",
+            "app_agent",
+            "engine_native",
+            "native",
+        ),
+        native=native,
+    )
+
+
+_CONTEXT_1K = _make_context_workload("context_1k", 1000, 500, "CTX1K-SECRET-ALPHA")
+_CONTEXT_8K = _make_context_workload("context_8k", 8000, 4000, "CTX8K-SECRET-BRAVO")
+_CONTEXT_32K = _make_context_workload("context_32k", 32000, 16000, "CTX32K-SECRET-CHARLIE")
+_CONTEXT_128K = _make_context_workload("context_128k", 128000, 64000, "CTX128K-SECRET-DELTA")
+
+
+# --- Job duration scaling workloads (V3.3) ---------------------------------
+
+def _make_sleep_workload(name: str, seconds: int) -> WorkloadSpec:
+    """Factory for sleep workloads of different durations."""
+    program = (
+        "import json, time\n"
+        f"time.sleep({seconds})\n"
+        f'print(json.dumps({{"slept": {seconds}}}))'
+    )
+
+    def verify(result: object) -> bool:
+        return isinstance(result, dict) and float(result.get("slept", 0)) >= seconds - 0.5
+
+    def native() -> dict[str, int]:
+        time.sleep(seconds)
+        return {"slept": seconds}
+
+    return WorkloadSpec(
+        name=name,
+        processor="python.vm",
+        op="run_program",
+        inputs={"program": program},
+        verify=verify,
+        answer=str(seconds),
+        prompt=(
+            f"A tool must wait {seconds} second{'s' if seconds != 1 else ''}. "
+            f'Show the call, then a final line "ANSWER: {seconds}".'
+        ),
+        program_prompt=(
+            "You have a Python tool. Reply with only one JSON object, no prose or fences: "
+            '{"processor":"python.vm","op":"run_program","inputs":{"program":"..."}}. '
+            f"The program must sleep {seconds} second{'s' if seconds != 1 else ''} and print its slept duration."
+        ),
+        program={
+            "processor": "python.vm",
+            "op": "run_program",
+            "inputs": {"program": program},
+        },
+        parse_answer=_parse_integer_answer,
+        verify_answer=lambda v: v == str(seconds),
+        trace=lambda: f"TRACE {name}\nWAIT {seconds}\nRESULT {seconds}",
+        description=f"{seconds}s sleeping Python job (duration scaling: {name})",
+        config={"timeout_ms": max(60_000, (seconds + 10) * 1000)},
+        baselines=(
+            "lmpu.sync",
+            "lmpu.sleep",
+            "direct_cot",
+            "trace_token",
+            "sync_tool_full_result",
+            "async_poll_programmatic",
+            "async_poll_model",
+            "session_reopen",
+            "app_agent",
+            "engine_native",
+            "native",
+        ),
+        native=native,
+    )
+
+
+_SLEEP_1S = _make_sleep_workload("sleep_1s", 1)
+_SLEEP_3S = _make_sleep_workload("sleep_3s", 3)
+_SLEEP_30S = _make_sleep_workload("sleep_30s", 30)
+_SLEEP_300S = _make_sleep_workload("sleep_300s", 300)
+
+
+# --- Batch scaling workloads (V3.4) ----------------------------------------
+
+def _make_batch_workload(name: str, count: int) -> WorkloadSpec:
+    """Factory for batch workloads with varying job counts."""
+    items = []
+    for i in range(count):
+        items.append({
+            "op": "bigint_mul",
+            "inputs": {"a": str(10 + i), "b": str(20 + i)},
+        })
+
+    def verify(result: object) -> bool:
+        if not isinstance(result, dict):
+            return False
+        results = result.get("results", [])
+        return len(results) == count and all(r is not None for r in results)
+
+    def native() -> dict[str, list]:
+        results = []
+        for i in range(count):
+            a = 10 + i
+            b = 20 + i
+            results.append({"result": str(a * b)})
+        return {"results": results}
+
+    return WorkloadSpec(
+        name=name,
+        processor="pure.func",
+        op="batch",
+        inputs={"items": items},  # batch processor expects 'items' not 'jobs'
+        verify=verify,
+        answer=str(count),
+        prompt=(
+            f"Execute {count} independent multiplications via batch tool. "
+            f'Report total count: "ANSWER: {count}".'
+        ),
+        program_prompt=(
+            "You have a batch tool. Reply with only one JSON object: "
+            '{"processor":"pure.func","op":"batch","inputs":{"items":[...]}}. '
+            f"Include {count} multiplication jobs."
+        ),
+        program={
+            "processor": "pure.func",
+            "op": "batch",
+            "inputs": {"items": items},
+        },
+        parse_answer=_parse_integer_answer,
+        verify_answer=lambda v: v == str(count),
+        trace=lambda: f"TRACE {name}\nBATCH {count}\nRESULT {count}",
+        description=f"Batch of {count} independent multiplications (batch scaling: {name})",
+        config={"timeout_ms": 60_000 + count * 1000},
+        baselines=(
+            "lmpu.sync",
+            "lmpu.batch",
+            "direct_cot",
+            "trace_token",
+            "sync_tool_full_result",
+            "async_poll_programmatic",
+            "async_poll_model",
+            "session_reopen",
+            "app_agent",
+            "engine_native",
+            "native",
+        ),
+        native=native,
+    )
+
+
+_BATCH_1 = _make_batch_workload("batch_1", 1)
+_BATCH_16 = _make_batch_workload("batch_16", 16)
+_BATCH_64 = _make_batch_workload("batch_64", 64)
+_BATCH_256 = _make_batch_workload("batch_256", 256)
+_BATCH_1024 = _make_batch_workload("batch_1024", 1024)
+
+
 _WORKLOADS = {
     "bigint_mul": _BIGINT_MUL,
     "matmul": _MATMUL,
@@ -890,6 +1112,22 @@ _WORKLOADS = {
     "small_result": _SMALL_RESULT,
     "short_job": _SHORT_JOB,
     "capability": _CAPABILITY,
+    # Context scaling (V3.1)
+    "context_1k": _CONTEXT_1K,
+    "context_8k": _CONTEXT_8K,
+    "context_32k": _CONTEXT_32K,
+    "context_128k": _CONTEXT_128K,
+    # Job duration scaling (V3.3)
+    "sleep_1s": _SLEEP_1S,
+    "sleep_3s": _SLEEP_3S,
+    "sleep_30s": _SLEEP_30S,
+    "sleep_300s": _SLEEP_300S,
+    # Batch scaling (V3.4)
+    "batch_1": _BATCH_1,
+    "batch_16": _BATCH_16,
+    "batch_64": _BATCH_64,
+    "batch_256": _BATCH_256,
+    "batch_1024": _BATCH_1024,
 }
 
 _ALIASES = {

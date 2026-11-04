@@ -8,6 +8,7 @@ reporting, and benchmark harnesses.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,10 +37,11 @@ class EnergySample:
 
 
 class EnergySampler:
-    """Optional NVML-backed energy accumulator.
+    """Optional NVML/RAPL-backed energy accumulator.
 
     ``available`` is false when NVML or a GPU handle is missing; callers must
     treat a zero sample as "not measured" and report the limitation.
+    CPU energy via RAPL is tracked separately and may be unavailable.
     """
 
     def __init__(self) -> None:
@@ -47,7 +49,11 @@ class EnergySampler:
         self._handle: Any = None
         self._last_power_w: float | None = None
         self._last_mono: float | None = None
+        self._rapl_fd: int | None = None
+        self._rapl_path: str | None = None
+        self._last_cpu_joules: float | None = None
 
+        # NVML (GPU)
         try:
             import pynvml
 
@@ -58,9 +64,54 @@ class EnergySampler:
             self._handle = None
             self._pynvml = None
 
+        # RAPL (CPU) - try to open energy_uj for package-0
+        self._init_rapl()
+
+    def _init_rapl(self) -> None:
+        """Initialize RAPL energy counter for CPU package."""
+        # Common RAPL paths
+        paths = [
+            "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
+            "/sys/class/powercap/rapl/intel-rapl:0/energy_uj",
+        ]
+        for path in paths:
+            try:
+                with open(path, "r") as f:
+                    f.read()  # test readability
+                self._rapl_path = path
+                self._rapl_fd = os.open(path, os.O_RDONLY)
+                self._last_cpu_joules = self._read_rapl_uj() / 1_000_000.0
+                return
+            except Exception:
+                continue
+        # AMD RAPL
+        try:
+            path = "/sys/class/powercap/amd-rapl/rapl:0/energy_uj"
+            with open(path, "r") as f:
+                f.read()
+            self._rapl_path = path
+            self._rapl_fd = os.open(path, os.O_RDONLY)
+            self._last_cpu_joules = self._read_rapl_uj() / 1_000_000.0
+        except Exception:
+            self._last_cpu_joules = None
+
+    def _read_rapl_uj(self) -> int | None:
+        if self._rapl_fd is None:
+            return None
+        try:
+            os.lseek(self._rapl_fd, 0, os.SEEK_SET)
+            data = os.read(self._rapl_fd, 32)
+            return int(data.strip())
+        except Exception:
+            return None
+
     @property
     def available(self) -> bool:
         return self._handle is not None
+
+    @property
+    def cpu_available(self) -> bool:
+        return self._rapl_fd is not None
 
     def _power_watts(self) -> float | None:
         if not self.available:
@@ -74,13 +125,26 @@ class EnergySampler:
     def sample(self) -> EnergySample:
         """Return energy accumulated since the previous call."""
         now = time.monotonic()
+        gpu_joules = 0.0
+        cpu_joules = 0.0
+
+        # GPU energy via NVML
         power = self._power_watts()
-        joules = 0.0
         if power is not None and self._last_power_w is not None and self._last_mono is not None:
-            joules = power * (now - self._last_mono)
+            gpu_joules = power * (now - self._last_mono)
         self._last_power_w = power
         self._last_mono = now
-        return EnergySample(gpu_joules=joules)
+
+        # CPU energy via RAPL
+        if self.cpu_available and self._last_cpu_joules is not None:
+            current = self._read_rapl_uj()
+            if current is not None:
+                cpu_joules = (current / 1_000_000.0) - self._last_cpu_joules
+                if cpu_joules < 0:  # counter wrap
+                    cpu_joules = 0.0
+                self._last_cpu_joules = current / 1_000_000.0
+
+        return EnergySample(gpu_joules=gpu_joules, cpu_joules=cpu_joules)
 
     def close(self) -> None:
         if self._pynvml is not None:
@@ -90,6 +154,14 @@ class EnergySampler:
                 pass
         self._pynvml = None
         self._handle = None
+        if self._rapl_fd is not None:
+            try:
+                os.close(self._rapl_fd)
+            except Exception:
+                pass
+        self._rapl_fd = None
+        self._rapl_path = None
+        self._last_cpu_joules = None
 
 
 @dataclass
