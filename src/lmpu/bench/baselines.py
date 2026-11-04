@@ -162,6 +162,87 @@ def _program_from_text(text: str) -> dict[str, Any] | None:
     return payload
 
 
+def _schema_for_workload(processor: str, op: str) -> dict[str, Any]:
+    """Generate JSON schema for constrained decoding based on workload processor/op."""
+    if processor == "pure.func":
+        # Define input schemas for each pure.func op
+        # Use loose schemas for constrained decoding speed; exact values validated later
+        input_schemas = {
+            "bigint_mul": {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+                "required": ["a", "b"],
+            },
+            "bigint_add": {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+                "required": ["a", "b"],
+            },
+            "matmul": {
+                "type": "object",
+                "properties": {"size": {"type": "integer"}, "seed": {"type": "integer"}},
+                "required": ["size", "seed"],
+            },
+            "text_stats": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+            "batch": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "op": {"type": "string"},
+                                "inputs": {"type": "object"},
+                            },
+                            "required": ["op", "inputs"],
+                        },
+                    }
+                },
+                "required": ["items"],
+            },
+        }
+        inputs_schema = input_schemas.get(op, {"type": "object"})
+        return {
+            "type": "object",
+            "properties": {
+                "processor": {"type": "string", "enum": [processor]},
+                "op": {"type": "string", "enum": [op]},
+                "inputs": inputs_schema,
+            },
+            "required": ["processor", "op", "inputs"],
+        }
+    elif processor == "python.vm":
+        return {
+            "type": "object",
+            "properties": {
+                "processor": {"type": "string", "enum": ["python.vm"]},
+                "op": {"type": "string", "enum": ["run_program"]},
+                "inputs": {
+                    "type": "object",
+                    "properties": {"program": {"type": "string"}},
+                    "required": ["program"],
+                },
+            },
+            "required": ["processor", "op", "inputs"],
+        }
+    else:
+        # Fallback: allow any processor/op
+        return {
+            "type": "object",
+            "properties": {
+                "processor": {"type": "string"},
+                "op": {"type": "string"},
+                "inputs": {"type": "object"},
+            },
+            "required": ["processor", "op", "inputs"],
+        }
+
+
 def _extract_program_code(text: str) -> str | None:
     """Extract Python program code from model response that has malformed JSON."""
     # The model outputs something like:
@@ -1278,21 +1359,10 @@ class BaselineRunner:
             engine = self._host.engine
             if engine._model is not None and engine._tokenizer is not None:
                 import torch
-                schema = {
-                    "type": "object",
-                    "properties": {
-                        "processor": {"type": "string", "enum": ["python.vm"]},
-                        "op": {"type": "string", "enum": ["run_program"]},
-                        "inputs": {
-                            "type": "object",
-                            "properties": {
-                                "program": {"type": "string"}
-                            },
-                            "required": ["program"]
-                        }
-                    },
-                    "required": ["processor", "op", "inputs"]
-                }
+                # Dynamic schema based on workload's processor and op
+                proc = context.workload.processor
+                op = context.workload.op
+                schema = _schema_for_workload(proc, op)
                 from lmformatenforcer import JsonSchemaParser
                 from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
                 parser = JsonSchemaParser(schema)

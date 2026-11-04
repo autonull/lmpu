@@ -12,7 +12,11 @@ from .metrics import EnergySampler, MetricsCollector, get_metrics_collector
 
 
 class HFEngine(HostEngine):
-    """Hugging Face reference engine with an incremental manual decode loop."""
+    """Hugging Face reference engine with an incremental manual decode loop.
+
+    Supports both multimodal models (Qwen3.5: AutoModelForImageTextToText)
+    and pure causal LMs (Qwen2.5, etc.: AutoModelForCausalLM).
+    """
 
     def __init__(
         self,
@@ -26,12 +30,14 @@ class HFEngine(HostEngine):
         session_id: str | None = None,
         metrics: MetricsCollector | None = None,
         energy_sampler: EnergySampler | None = None,
+        model_class: str | None = None,  # "causal" | "multimodal" | None (auto)
     ):
         self.model_name = model_name
         self.device = device
         self.dtype = getattr(torch, dtype) if isinstance(dtype, str) else dtype
         self.trust_remote_code = trust_remote_code
         self.max_context = max_context
+        self._model_class = model_class
 
         self._model = model
         self._tokenizer = tokenizer
@@ -47,15 +53,26 @@ class HFEngine(HostEngine):
         if self._initialized:
             return
 
-        from transformers import AutoModelForImageTextToText, AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
 
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
             trust_remote_code=self.trust_remote_code,
         )
 
-        # Qwen3.5 is multimodal; AutoModelForCausalLM maps to the wrong class.
-        self._model = AutoModelForImageTextToText.from_pretrained(
+        # Determine model class
+        if self._model_class == "causal":
+            model_loader = AutoModelForCausalLM
+        elif self._model_class == "multimodal":
+            model_loader = AutoModelForImageTextToText
+        else:
+            # Auto-detect: Qwen3.5 is multimodal, others assume causal
+            if "Qwen3.5" in self.model_name or "Qwen2.5-VL" in self.model_name:
+                model_loader = AutoModelForImageTextToText
+            else:
+                model_loader = AutoModelForCausalLM
+
+        self._model = model_loader.from_pretrained(
             self.model_name,
             dtype=self.dtype,
             trust_remote_code=self.trust_remote_code,
