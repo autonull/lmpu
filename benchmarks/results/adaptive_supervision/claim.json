@@ -1,0 +1,37 @@
+{
+  "claim": "O1",
+  "description": "Adaptive supervision beats fixed criterion under drift at constant context",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/adaptive_supervision.py",
+  "measurement": "200k records, 20 shards, drift at shard 10",
+  "details": {
+    "oracle_f1_overall": 0.9763893255892301,
+    "one_shot_f1_overall": 0.711746006441423,
+    "adaptive_f1_overall": 0.9763893255892301,
+    "pre_drift": {
+      "oracle": 0.9766241072734605,
+      "one_shot": 0.9249628480777827,
+      "adaptive": 0.9766241072734605
+    },
+    "post_drift": {
+      "oracle": 0.9761545439049998,
+      "one_shot": 0.4985291648050635,
+      "adaptive": 0.9761545439049998
+    },
+    "recovery_rate_post_drift": 1.0,
+    "one_shot_f1_drop_post_drift": 0.4776253790999363,
+    "adaptive_decisions_per_shard": 3.0,
+    "token_cv": 0.0022580830006857216,
+    "host_tokens": {
+      "oracle": 9020,
+      "one_shot": 9030,
+      "adaptive": 20696
+    },
+    "criteria": {
+      "recovery_ge_90pct": true,
+      "oneshot_drop_ge_20_f1": true,
+      "decisions_le_5": true,
+      "tokens_flat_cv_lt_15pct": true
+    }
+  }
+}
