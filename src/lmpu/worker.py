@@ -82,7 +82,8 @@ class Worker:
         loop = asyncio.get_event_loop()
 
         # Use a simpler approach: create readers/writers directly
-        self._stdin_reader = asyncio.StreamReader()
+        # Increase limit to handle large job inputs (default 64KB is too small)
+        self._stdin_reader = asyncio.StreamReader(limit=10 * 1024 * 1024)  # 10 MB
         self._stdin_protocol = asyncio.StreamReaderProtocol(self._stdin_reader)
 
         # Connect stdin (binary)

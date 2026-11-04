@@ -588,6 +588,296 @@ _BEST_CASE = WorkloadSpec(
 )
 
 
+# --- trivial_arithmetic (negative control) ---------------------------------
+
+_TRIVIAL_A = 1
+_TRIVIAL_B = 1
+_TRIVIAL_EXPECTED = str(_TRIVIAL_A + _TRIVIAL_B)
+
+
+def _verify_trivial_arithmetic(result: object) -> bool:
+    return isinstance(result, dict) and result.get("result") == _TRIVIAL_EXPECTED
+
+
+def _verify_trivial_answer(value: object) -> bool:
+    return value == _TRIVIAL_EXPECTED
+
+
+def _trace_trivial_arithmetic() -> str:
+    return f"TRACE trivial_arithmetic\nADD {_TRIVIAL_A} {_TRIVIAL_B}\nRESULT {_TRIVIAL_EXPECTED}"
+
+
+def _native_trivial_arithmetic() -> dict[str, str]:
+    return {"result": _TRIVIAL_EXPECTED}
+
+
+_TRIVIAL_ARITHMETIC = WorkloadSpec(
+    name="trivial_arithmetic",
+    processor="pure.func",
+    op="bigint_add",
+    inputs={"a": _TRIVIAL_A, "b": _TRIVIAL_B},
+    verify=_verify_trivial_arithmetic,
+    answer=_TRIVIAL_EXPECTED,
+    prompt=(
+        f"Compute {_TRIVIAL_A} + {_TRIVIAL_B} exactly. Show concise work, then a final line "
+        f'of the form "ANSWER: <integer>".'
+    ),
+    program_prompt=(
+        "You have a tool. Reply with only one JSON object, no prose or fences: "
+        '{"processor":"pure.func","op":"bigint_add","inputs":{"a":"<a>","b":"<b>"}}. '
+        f"Task: add {_TRIVIAL_A} and {_TRIVIAL_B}."
+    ),
+    program={
+        "processor": "pure.func",
+        "op": "bigint_add",
+        "inputs": {"a": _TRIVIAL_A, "b": _TRIVIAL_B},
+    },
+    parse_answer=_parse_integer_answer,
+    verify_answer=_verify_trivial_answer,
+    trace=_trace_trivial_arithmetic,
+    description="Trivial 1+1 arithmetic (negative control: LMPU must not claim advantage)",
+    baselines=(
+        "lmpu.sync",
+        "direct_cot",
+        "trace_token",
+        "sync_tool_full_result",
+        "async_poll_programmatic",
+        "async_poll_model",
+        "session_reopen",
+        "app_agent",
+        "engine_native",
+        "native",
+    ),
+    native=_native_trivial_arithmetic,
+)
+
+
+# --- small_result (negative control: 1 KiB result) -------------------------
+
+_SMALL_RESULT_BYTES = 1024
+_SMALL_RESULT_PROGRAM = (
+    "import json\n"
+    f"data = 'x' * {_SMALL_RESULT_BYTES}\n"
+    f'print(json.dumps({{"bytes": len(data), "data": data}}))'
+)
+
+
+def _verify_small_result(result: object) -> bool:
+    return (
+        isinstance(result, dict)
+        and int(result.get("bytes", 0)) == _SMALL_RESULT_BYTES
+        and len(result.get("data", "")) == _SMALL_RESULT_BYTES
+    )
+
+
+def _trace_small_result() -> str:
+    return f"TRACE small_result\nALLOC {_SMALL_RESULT_BYTES}\nRESULT {_SMALL_RESULT_BYTES}"
+
+
+def _native_small_result() -> dict[str, Any]:
+    data = "x" * _SMALL_RESULT_BYTES
+    return {"bytes": _SMALL_RESULT_BYTES, "data": data}
+
+
+_SMALL_RESULT = WorkloadSpec(
+    name="small_result",
+    processor="python.vm",
+    op="run_program",
+    inputs={"program": _SMALL_RESULT_PROGRAM},
+    verify=_verify_small_result,
+    answer=str(_SMALL_RESULT_BYTES),
+    prompt=(
+        "A tool returns a 1 KiB buffer. Call the tool and report the byte count."
+    ),
+    program_prompt=(
+        "You have a Python tool. Reply with only one JSON object, no prose or fences: "
+        '{"processor":"python.vm","op":"run_program","inputs":{"program":"..."}}. '
+        "The program must generate a 1 KiB buffer and print its size and content."
+    ),
+    program={
+        "processor": "python.vm",
+        "op": "run_program",
+        "inputs": {"program": _SMALL_RESULT_PROGRAM},
+    },
+    parse_answer=_parse_integer_answer,
+    verify_answer=lambda value: value == str(_SMALL_RESULT_BYTES),
+    trace=_trace_small_result,
+    description="1 KiB result buffer (negative control: bounded ingestion not advantageous)",
+    config={"timeout_ms": 60_000},
+    baselines=(
+        "lmpu.sync",
+        "direct_cot",
+        "trace_token",
+        "sync_tool_full_result",
+        "async_poll_programmatic",
+        "async_poll_model",
+        "session_reopen",
+        "app_agent",
+        "engine_native",
+        "native",
+    ),
+    native=_native_small_result,
+)
+
+
+# --- short_job (negative control: 1 s job) ---------------------------------
+
+_SHORT_JOB_SECONDS = 1
+_SHORT_JOB_PROGRAM = (
+    "import json, time\n"
+    f"time.sleep({_SHORT_JOB_SECONDS})\n"
+    f"print(json.dumps({{'slept': {_SHORT_JOB_SECONDS}}}))"
+)
+
+
+def _verify_short_job(result: object) -> bool:
+    return isinstance(result, dict) and float(result.get("slept", 0)) >= _SHORT_JOB_SECONDS - 0.5
+
+
+def _verify_short_job_answer(value: object) -> bool:
+    return value == str(_SHORT_JOB_SECONDS)
+
+
+def _trace_short_job() -> str:
+    return f"TRACE short_job\nWAIT {_SHORT_JOB_SECONDS}\nRESULT {_SHORT_JOB_SECONDS}"
+
+
+def _native_short_job() -> dict[str, int]:
+    time.sleep(_SHORT_JOB_SECONDS)
+    return {"slept": _SHORT_JOB_SECONDS}
+
+
+_SHORT_JOB = WorkloadSpec(
+    name="short_job",
+    processor="python.vm",
+    op="run_program",
+    inputs={"program": _SHORT_JOB_PROGRAM},
+    verify=_verify_short_job,
+    answer=str(_SHORT_JOB_SECONDS),
+    prompt=(
+        f"A tool must wait {_SHORT_JOB_SECONDS} second. Show the call, then a final "
+        f'line "ANSWER: {_SHORT_JOB_SECONDS}".'
+    ),
+    program_prompt=(
+        "You have a Python tool. Reply with only one JSON object, no prose or fences: "
+        '{"processor":"python.vm","op":"run_program","inputs":{"program":"..."}}. '
+        f"The program must sleep {_SHORT_JOB_SECONDS} second and print its slept duration."
+    ),
+    program={
+        "processor": "python.vm",
+        "op": "run_program",
+        "inputs": {"program": _SHORT_JOB_PROGRAM},
+    },
+    parse_answer=_parse_integer_answer,
+    verify_answer=_verify_short_job_answer,
+    trace=_trace_short_job,
+    description="1-second sleeping Python job (negative control: park overhead dominates)",
+    config={"timeout_ms": 30_000},
+    baselines=(
+        "lmpu.sync",
+        "lmpu.sleep",
+        "direct_cot",
+        "trace_token",
+        "sync_tool_full_result",
+        "async_poll_programmatic",
+        "async_poll_model",
+        "session_reopen",
+        "app_agent",
+        "engine_native",
+        "native",
+    ),
+    native=_native_short_job,
+)
+
+
+# --- capability (context-infeasible task) ----------------------------------
+
+_CAPABILITY_SECRET = "LMPU-CAPABILITY-VERDICT-2026"
+# ~150k chars = ~37k tokens (exceeds 32k context), but worker can handle it
+_CAPABILITY_DOCUMENT_LINES = 1000
+
+
+@lru_cache(maxsize=1)
+def _capability_document() -> str:
+    lines = []
+    for index in range(_CAPABILITY_DOCUMENT_LINES):
+        lines.append(
+            f"record {index:05d}: node=worker-{index % 97:02d} "
+            f"temperature={-20 + index % 60} pressure={900 + index % 120} "
+            f"payload={'x' * 120}"
+        )
+    # Insert secret at a known position (line 500)
+    lines.insert(500, f"SECRET: {_CAPABILITY_SECRET}")
+    return "\n".join(lines)
+
+
+def _capability_expected() -> dict[str, Any]:
+    text = _capability_document()
+    secret_match = re.search(r"SECRET:\s*([A-Za-z0-9-]+)", text)
+    return {
+        "chars": len(text),
+        "words": len(text.split()),
+        "checksum": hashlib.sha256(text.encode()).hexdigest()[:16],
+        "secret": secret_match.group(1) if secret_match else None,
+    }
+
+
+def _verify_capability(result: object) -> bool:
+    return isinstance(result, dict) and result.get("secret") == _CAPABILITY_SECRET
+
+
+def _trace_capability() -> str:
+    return _capability_document() + f"\nTRACE text_stats\nRESULT {_CAPABILITY_SECRET}"
+
+
+_CAPABILITY = WorkloadSpec(
+    name="capability",
+    processor="pure.func",
+    op="text_stats",
+    inputs={"text": _capability_document()},
+    verify=_verify_capability,
+    answer=_CAPABILITY_SECRET,
+    prompt=(
+        "Read the document below and find the value after SECRET:. "
+        'Return a final line "ANSWER: <secret>".\n\n' + _capability_document()
+    ),
+    program_prompt=(
+        "You have a tool that reads text already present in your context. "
+        "Reply with only one JSON object, no prose or fences: "
+        '{"processor":"pure.func","op":"text_stats","inputs":{"text":"$CONTEXT"}}. '
+        "The provided document is the value of $CONTEXT. "
+        f"Find SECRET and end with ANSWER: <secret>.\n\n{_capability_document()}"
+    ),
+    program={
+        "processor": "pure.func",
+        "op": "text_stats",
+        "inputs": {"text": "$CONTEXT"},
+    },
+    parse_answer=_parse_secret_answer,
+    verify_answer=lambda value: value == _CAPABILITY_SECRET,
+    trace=_trace_capability,
+    description=(
+        f"~80k-token needle-in-haystack (exceeds 32k host context). "
+        "Two app_agent variants: (a) full ingest (must fail), (b) app-side reducer (competitive baseline). "
+        "LMPU solves via worker-side reduction (P1)."
+    ),
+    config={"timeout_ms": 120_000},
+    baselines=(
+        "lmpu.sync",
+        "direct_cot",
+        "trace_token",
+        "sync_tool_full_result",
+        "async_poll_programmatic",
+        "async_poll_model",
+        "session_reopen",
+        "app_agent",
+        "engine_native",
+        "native",
+    ),
+    native=_capability_expected,
+)
+
+
 _WORKLOADS = {
     "bigint_mul": _BIGINT_MUL,
     "matmul": _MATMUL,
@@ -596,6 +886,10 @@ _WORKLOADS = {
     "large_result": _LARGE_RESULT,
     "batch": _BATCH,
     "best_case": _BEST_CASE,
+    "trivial_arithmetic": _TRIVIAL_ARITHMETIC,
+    "small_result": _SMALL_RESULT,
+    "short_job": _SHORT_JOB,
+    "capability": _CAPABILITY,
 }
 
 _ALIASES = {

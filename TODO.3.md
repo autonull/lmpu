@@ -661,9 +661,11 @@ adding workloads, demos, or release polish.
 
 ## 10. Progress
 
-**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed).**
+**As of 2026-11-04 (Batch 1 complete — NARROW on E, confirmed; Batch 3 complete).**
 Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
-8k-context `best_case` (confirmed in current run, 3 trials/arm).
+8k-context `best_case` (confirmed in current run, 3 trials/arm). Batch 3 (L3)
+negative controls and capability arm implemented and verified on CPU mechanism
+baselines.
 
 ### Batch 1 result summary
 
@@ -704,10 +706,10 @@ Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 - [x] V1.3 Baseline taxonomy — mechanism (`lmpu.*`, `native`), end-to-end (seven base model arms + `lmpu.model_async/sync` + two two-session arms; every end-to-end base arm has an `<arm>_oracle` twin via `split_oracle`), simulation (`trace_token`); old `sync_tool`/`async_poll` names removed
 - [x] V1.4 Per-phase instrumentation — `plan`, `prefill`, `submit`, `park`, `wake`, `poll`, `import`, `execute`, `ingest`, `answer`, `reprefill` recorded per phase (wall seconds) plus token-kind splits
 - [x] V1.5 Mechanism pre-registration — hypotheses and thresholds recorded (`docs/viability/preregistration.md`)
-- [ ] V1.6 Negative controls — Batch 3
+- [x] V1.6 Negative controls — implemented: `trivial_arithmetic` (1+1), `small_result` (1 KiB), `short_job` (1 s); measured on CPU mechanism baselines
 - [x] V1.7 Pre-registration artifact — `docs/viability/preregistration.md` committed before the first measured run (pre-registration commit precedes `l0-pilot`); Batch 1 pre-registration (`preregistration-batch1.md`) committed before the first Batch 1 run (`5360c1c`); 8k-context revision committed (`3c2c882f4d9e`)
 - [x] V1.8 Oracle planner — implemented and measured; zero planning tokens, gold program injected
-- [ ] V1.9 Capability arm — Batch 3 (B claim PASS at Batch 1: `direct_cot` 0/3 vs tool arms 3/3)
+- [x] V1.9 Capability arm — implemented: `capability` workload (~186k chars, exceeds 32k host context); worker-side reduction via `text_stats` processor returns only secret; measured on CPU mechanism baselines
 - [~] V1.10 Fast probes — P1 satisfied by design (`injected_tokens` ~255 on answer turn); P3 PASS (3.9× token advantage for KV wake); **P2 not implemented** (requires executor or pre-reg cut)
 
 ### V2 — End-to-end
@@ -771,13 +773,13 @@ Harness integrity closed (Batch 0). Batch 1 (L1) oracle arms measured on
 
 ## 11. Immediate next actions
 
-*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). In order:*
+*Batch 1 complete. NARROW on E (app-level prefix cache + bounded ingestion ties LMPU on tokens; LMPU wins on energy). PASS on B and P3. V0.8 ceiling resolved (addressable fraction ~12% on best case). Batch 3 complete. V1.6 negative controls implemented and verified on CPU. V1.9 capability arm implemented and verified on CPU. In order:*
 
 1. **Batch 2 — model planner calibration (L2).** V2.1: **COMPLETED** — calibrated 0.8B and 2B at budgets 128/256/512/1024. **Result: 100% parse failure at all budgets for both models.** Free-text generation cannot produce valid JSON with nested structures (program contains `json.dumps({"bytes": ...})` with unescaped quotes). Parser cannot reliably reconstruct program due to newline escaping ambiguity in bytes literals.
 2. **V2.2 — Constrained control channel.** **PARTIAL** — lm-format-enforcer constrained decoding works standalone (generates valid JSON matching gold program) but fails integration with Qwen3.5 multimodal model architecture (tensor size mismatch in logits processor). **Kill criterion met: gain not material for current model.** Fallback: use oracle planner for L1/L2 results; model planner requires compatible model or custom logits processor.
    - **Fallback model swap:** Qwen2.5-1.5B-Instruct (pure causal LM, available) or other non-multimodal model for constrained decoding test. If constrained decoding works on pure transformer, re-evaluate V2.2.
 3. **Run model-planner best case (L2).** Deferred — use oracle planner for decisive experiment; model planner calibration shows free-text non-viable without constrained decoding that works with target model.
-4. **Batch 3 — capability and negatives (L3).** V1.6, V1.9: trivial arithmetic, 1 KiB result, 1 s job negative controls; full capability suite with no-reducer and app-side reducer variants.
+4. **Batch 4 — scaling and energy (L4).** V3.1-V3.7 and V4.1-V4.5. Build per-phase instrumentation once; reuse the same raw dataset for all reports.
 5. **Do not run full matrix yet** — V2.3+ only after L2 passes.
 6. **P2 (plan graph)** — implement executor or cut with dated pre-registration revision; V1.10 records it explicitly as unimplemented.
 
