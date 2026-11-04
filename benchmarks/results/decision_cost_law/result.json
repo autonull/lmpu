@@ -1,0 +1,90 @@
+[
+  {
+    "sweep": "bytes",
+    "x_value": 1,
+    "decisions": 4,
+    "kib": 1,
+    "host_tokens": 388,
+    "wall_s": 0.4183997130021453
+  },
+  {
+    "sweep": "bytes",
+    "x_value": 64,
+    "decisions": 4,
+    "kib": 64,
+    "host_tokens": 388,
+    "wall_s": 0.04048507986590266
+  },
+  {
+    "sweep": "bytes",
+    "x_value": 1024,
+    "decisions": 4,
+    "kib": 1024,
+    "host_tokens": 388,
+    "wall_s": 0.041084771044552326
+  },
+  {
+    "sweep": "bytes",
+    "x_value": 65536,
+    "decisions": 4,
+    "kib": 65536,
+    "host_tokens": 389,
+    "wall_s": 0.13264934299513698
+  },
+  {
+    "sweep": "bytes",
+    "x_value": 262144,
+    "decisions": 4,
+    "kib": 262144,
+    "host_tokens": 389,
+    "wall_s": 0.5354509819298983
+  },
+  {
+    "sweep": "decisions",
+    "x_value": 1,
+    "decisions": 1,
+    "kib": 65536,
+    "host_tokens": 110,
+    "wall_s": 0.07225678791292012
+  },
+  {
+    "sweep": "decisions",
+    "x_value": 2,
+    "decisions": 2,
+    "kib": 65536,
+    "host_tokens": 203,
+    "wall_s": 0.06821103696711361
+  },
+  {
+    "sweep": "decisions",
+    "x_value": 4,
+    "decisions": 4,
+    "kib": 65536,
+    "host_tokens": 389,
+    "wall_s": 0.13260159292258322
+  },
+  {
+    "sweep": "decisions",
+    "x_value": 8,
+    "decisions": 8,
+    "kib": 65536,
+    "host_tokens": 761,
+    "wall_s": 0.45254420302808285
+  },
+  {
+    "sweep": "decisions",
+    "x_value": 16,
+    "decisions": 16,
+    "kib": 65536,
+    "host_tokens": 1505,
+    "wall_s": 0.07841720897704363
+  },
+  {
+    "sweep": "decisions",
+    "x_value": 32,
+    "decisions": 32,
+    "kib": 65536,
+    "host_tokens": 2993,
+    "wall_s": 0.07293973816558719
+  }
+]

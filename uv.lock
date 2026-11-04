@@ -2297,6 +2297,7 @@ vllm = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fastapi" },
     { name = "hypothesis" },
     { name = "jsonschema" },
     { name = "mypy" },
@@ -2305,6 +2306,8 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "sse-starlette", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-lmpu-bench' or extra == 'extra-4-lmpu-dashboard' or extra == 'extra-4-lmpu-decoder' or extra == 'extra-4-lmpu-host' or extra != 'extra-4-lmpu-vllm'" },
+    { name = "sse-starlette", version = "3.6.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-lmpu-vllm'" },
 ]
 
 [package.metadata]
@@ -2353,6 +2356,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fastapi", specifier = ">=0.136.3" },
     { name = "hypothesis", specifier = ">=6.100,<7" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "mypy", specifier = ">=1.11,<2" },
@@ -2361,6 +2365,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.23,<1" },
     { name = "pytest-cov", specifier = ">=5.0,<6" },
     { name = "ruff", specifier = ">=0.6,<1" },
+    { name = "sse-starlette", specifier = ">=2.4.1" },
 ]
 
 [[package]]
@@ -5326,8 +5331,8 @@ resolution-markers = [
     "python_full_version < '3.13' and platform_machine != 's390x' and sys_platform != 'darwin' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "anyio" },
-    { name = "starlette" },
+    { name = "anyio", marker = "extra == 'extra-4-lmpu-vllm'" },
+    { name = "starlette", marker = "extra == 'extra-4-lmpu-vllm'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/71/7f/3b8ec4f27833f7b8c270a3ef960b6d435e1065439847bc0fcd1e58ae898b/sse_starlette-3.6.0.tar.gz", hash = "sha256:623151d6c20dc0eebf1b3379c27faae91fff883bac7ab6665f16f46440a88b3a", size = 41174 }
 wheels = [

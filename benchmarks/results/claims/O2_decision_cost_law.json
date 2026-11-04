@@ -1,0 +1,28 @@
+{
+  "claim": "O2",
+  "description": "Decision-cost law: host_tokens ≈ a + b·decisions",
+  "result": "PASS",
+  "evidence": "benchmarks/experiments/decision_cost_law.py",
+  "measurement": "bytes sweep slope 0.0000 (flat); decisions sweep slope 93.0 tok/decision, intercept 17 tok",
+  "details": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "gpu": "RTX 3080",
+    "bytes_sweep": {
+      "fixed_decisions": 4,
+      "sizes_kib": [1, 64, 1024, 65536, 262144],
+      "host_tokens": [388, 388, 388, 389, 389],
+      "slope": 0.0000,
+      "intercept": 388.1,
+      "per_decision": [97.0, 97.0, 97.0, 97.2, 97.2]
+    },
+    "decisions_sweep": {
+      "fixed_kib": 65536,
+      "decision_counts": [1, 2, 4, 8, 16, 32],
+      "host_tokens": [110, 203, 389, 761, 1505, 2993],
+      "slope": 93.00,
+      "intercept": 17.0,
+      "per_decision": [110.0, 101.5, 97.2, 95.1, 94.1, 93.5]
+    },
+    "note": "Intercept (17 tok) is below a system prompt; slope (93 tok/decision) matches the per-job protocol cost measured in P1/P5/P7. The 1-job point (110 tok) includes one-time buffer import overhead."
+  }
+}

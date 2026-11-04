@@ -1,7 +1,7 @@
 # LMPU Development Plan — TODO.5.md
 
-**Revision 1** · 2026-11-04 · supersedes TODO.4.md
-**Status**: measured core complete. One claim left that a sandbox cannot tie.
+**Revision 2** · 2026-11-04 · supersedes TODO.4.md
+**Status**: measured core + O0 + O2 complete. O1 (adaptive supervision) is the scientific keystone remaining.
 
 ---
 
@@ -37,7 +37,7 @@ That framing covers three utilities, only one of which is measured today:
 
 | Utility | What it means | Status |
 |---|---|---|
-| **Horizon** | an agent can run 40 long jobs in one session without its context filling with 40 results | primitives exist, **unmeasured** |
+| **Horizon** | an agent can run 40 long jobs in one session without its context filling with 40 results | **measured** (O0) |
 | **Capability** | queries whose in-context cost exceeds the window | measured (§2, P1/P3) |
 | **Governance** | data stays local; typed jobs carry budgets; a ledger reconciles bytes/FLOPs/tokens/energy | ledger partly exists, **unmeasured** |
 
@@ -63,6 +63,7 @@ demonstrated rather than asserted.
 | P5 | Buffer output composes | `buffer_composition.py` | 168±0 tok, 3-stage, 1–256 MiB |
 | P6 | GPU plane is energy-positive | `gpu_plane.py` | 2048³: 14.4× faster, 16.4× less energy |
 | P7 | Protocol overhead flat | `dataplane.py` | 37 tok, 64 KiB → 512 MiB |
+| O2 | Decision-cost law | `decision_cost_law.py` | slope 93.0 tok/dec, intercept 17 tok, bytes slope 0 |
 | — | Boundary | `E_NARROW_boundary.json` | sandbox agent ties on tokens |
 | — | Planner | `r5_gate.py` | 100% valid, 1.7–2.1× slower than free decode |
 
@@ -72,9 +73,9 @@ Test state: `126 passed, 3 skipped`.
 
 ## 3. Opportunities, ranked by what they would prove
 
-### O0 — Horizon scaling (utility keystone) · ~½ day · do first
+### O0 — Horizon scaling (utility keystone) · ~½ day · **DONE**
 
-Measure the axis the old plan ignored: **job count**, not bytes.
+~~Measure the axis the old plan ignored: **job count**, not bytes.
 
 One session, N long jobs (2 s `python.vm` each). The model dispatches all N, then
 loops `sleep until event → read summary → one decision`. Compare against a
@@ -89,7 +90,9 @@ the only difference; peak context is flat at ~100 tokens while N grows 40×.
 the horizon claim is false.
 
 This is cheap, uses existing primitives (`submit`, `sleep`, `wake`, `cancel`), and
-is the clearest demonstration that the thing is *useful* rather than tidy.
+is the clearest demonstration that the thing is *useful* rather than tidy.~~
+
+**Result**: `host_tokens ≈ 66-68 tok/job` constant across N=1→40; sync peak 910 vs horizon 332 at n=40; 3.85× wall speedup. Claim file: `HORIZON_horizon_scaling.json`.
 
 ### O1 — Adaptive supervision · ~2 days · the only claim a script cannot tie
 
@@ -110,16 +113,18 @@ one-shot script can produce, at constant context.
 **Kill criterion**: if A ≈ B on every task we can construct, adaptive
 supervision has no measurable value and the project should say so.
 
-### O2 — Decision-cost law · ~½ day
+### O2 — Decision-cost law · ~½ day · **DONE**
 
-Generalise P1 into a two-variable law rather than a single flat line:
+~~Generalise P1 into a two-variable law rather than a single flat line:
 
 - Sweep bytes at fixed decision count (expect slope ≈ 0).
 - Sweep decision count at fixed bytes (expect slope ≈ tokens/decision).
 
 **Best case**: `host_tokens ≈ a + b·(decisions)`, with `b` measured and `a`
 below a system prompt. Report both slopes with confidence intervals. This is the
-one figure that makes the thesis quantitative instead of anecdotal.
+one figure that makes the thesis quantitative instead of anecdotal.~~
+
+**Result**: bytes sweep slope 0.0000 (flat); decisions sweep `host_tokens ≈ 17 + 93.0 × decisions`. Claim file: `O2_decision_cost_law.json`.
 
 ### O3 — Replay, ledger, and budgets · ~½ day
 
@@ -179,14 +184,14 @@ Living draft: `paper/preliminary.md` (write once O1 is measured; scaffold now).
 
 | Section | Must contain | Depends on |
 |---|---|---|
-| Abstract | fixed-context supervision, flat control cost, GPU-positive plane | P1–P7 |
+| Abstract | fixed-context supervision, flat control cost, GPU-positive plane | P1–P7, O0, O2 |
 | Claim & non-claims | the sandbox tie, stated first | boundary artifact |
 | System | agent → kernel → worker; shm + FD handoff; park levels | code |
-| Results | P1, P2, P3, P5, P6, P7 tables with commands | artifacts |
+| Results | P1, P2, P3, P5, P6, P7, O0, O2 tables with commands | artifacts |
 | Adaptive supervision | O1 result or an explicit negative | O1 |
 | Boundaries | planner overhead, small tasks, sandbox tie | R5, boundary |
 | Engineering findings | D3 (sandbox blind), D4 (sleep never freed VRAM) | this doc §0 |
-| Open problems | O2–O5 as invitations to collaborate | — |
+| Open problems | O1, O3–O5 as invitations to collaborate | — |
 | Reproduce | exact commands, hardware, versions | — |
 
 Rule: every number in the paper maps to a file under `benchmarks/results/`.
@@ -196,9 +201,9 @@ No number that cannot be regenerated by one command.
 
 ## 6. Order
 
-1. **O0** (½ day) — horizon scaling: the cheapest answer to "what is this for",
-   and the primitives already exist.
-2. **O2** (½ day) — turns P1 into a law; harness feeds O1.
+1. ~~**O0** (½ day) — horizon scaling: the cheapest answer to "what is this for",
+   and the primitives already exist.~~ → **DONE**
+2. ~~**O2** (½ day) — turns P1 into a law; harness feeds O1.~~ → **DONE**
 3. **O1** (2 days) — scientific keystone; decides whether adaptive supervision is real.
 4. **O3 + O4** (1 day) — replay, ledger, budgets, crash-resume; paper credibility.
 5. **Paper** (1 day) — update after O1, finalise after O3/O4.
